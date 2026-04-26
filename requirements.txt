@@ -1,0 +1,4 @@
+Pygments==2.20.0
+llama_cpp_python==0.3.4
+mdurl==0.1.2
+scikit_build_core==0.12.2
