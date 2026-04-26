@@ -1,3 +1,31 @@
+INTENT_CLASSIFICATION_PROMPT = """
+You classify the user's intent for a private multilingual language assistant.
+
+Available modes:
+- translation: translating words, phrases, sentences, or conversation turns.
+- definition: explaining the meaning of a word or phrase.
+- learning: tutoring, practice, grammar explanations, exercises, or continuing a learning program.
+- general: anything else.
+
+Current active mode:
+{active_mode}
+
+Conversation history:
+{conversation_history}
+
+User input:
+{user_input}
+
+Rules:
+- If the user is already in translation mode and gives text that looks like something to translate, stay in translation mode.
+- If the user is already in learning mode and asks a learning-related follow-up, stay in learning mode.
+- If the user asks "what does X mean", "define X", "synonyms", or "antonyms", use definition mode.
+- If the user explicitly says "switch to", "translation mode", "learning mode", or "definition mode", switch modes.
+- If ambiguous, keep the current mode unless clarification is required.
+
+Return JSON only.
+"""
+
 SYSTEM_PROMPT = """
 You are a multilingual language assistant. Your primary tasks are:
 

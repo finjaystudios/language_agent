@@ -1,9 +1,9 @@
 from rich.console import Console
 import time
 
-from llm import ask_llm, stream_llm
-from memory import ConversationMemory
-from prompts import SYSTEM_PROMPT, TASK_PROMPT, LITE_TASK_PROMPT
+from app.llm.service import ask_llm, stream_llm
+from app.memory.short_term import ConversationMemory
+from app.llm.prompts import SYSTEM_PROMPT, TASK_PROMPT, LITE_TASK_PROMPT
 
 console = Console()
 
