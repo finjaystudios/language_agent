@@ -29,7 +29,7 @@ class SessionOrchestrator:
             "learning": LearningHandler(llm_service),
         }
 
-    def handle_turn(self, user_input: str, console: Console) -> dict:
+    def handle_turn(self, user_input: str, console: Console, stream: bool = True) -> dict:
         history = self.memory.format_for_prompt()
 
         intent = self.router.classify(
@@ -48,10 +48,11 @@ class SessionOrchestrator:
                 "intent": intent.model_dump(),
             }
             self.memory.add_turn(user_input, response["response"])
+            console.print(f"[bold cyan]Agent:[/bold cyan] {response['response']}\n")
             return response
 
         handler = self.handlers.get(self.session.active_mode)
-
+        
         if handler is None:
             response = {
                 "mode": "general",
@@ -59,22 +60,35 @@ class SessionOrchestrator:
                 "intent": intent.model_dump(),
             }
             self.memory.add_turn(user_input, response["response"])
+            console.print(f"[bold cyan]Agent:[/bold cyan] {response['response']}\n")
             return response
 
-        response = handler.handle(
-            user_input=user_input,
-            session=self.session,
-            conversation_history=history,
-        )
+        if not stream:
+            response = handler.handle(
+                user_input=user_input,
+                session=self.session,
+                conversation_history=history,
+            )
 
-        # assistant_reply = ""
-        # console.print("[bold cyan]Assistant:[/bold cyan] ", end="")
+            response["intent"] = intent.model_dump()
+            self.memory.add_turn(user_input, response["response"])
+            console.print(f"[bold cyan]Agent:[/bold cyan] {response['response']}\n")
+        
+        else:
+            assistant_reply = ""
+            console.print("[bold cyan]Assistant:[/bold cyan] ", end="")
 
-        # for token in handler.handle(user_input=user_input, session=self.session, conversation_history=history):
-        #     assistant_reply += token
-        #     console.print(token, end="")
+            for token in handler.stream(user_input=user_input, session=self.session, conversation_history=history):
+                assistant_reply += token
+                console.print(token, end="")
 
-        response["intent"] = intent.model_dump()
-        self.memory.add_turn(user_input, response["response"])
+            console.print()
+            self.memory.add_turn(user_input, assistant_reply)
+
+            response = {
+                "mode": self.session.active_mode,
+                "response": assistant_reply,
+                "intent": intent.model_dump(),
+            }
 
         return response

@@ -38,16 +38,14 @@ def main():
     console.print("Type 'exit' to quit.\n")
 
     while True:
-        user_text = input("You: ").strip()
-        if user_text.lower() in {"exit", "quit"}:
+        user_input = input("You: ").strip()
+        if user_input.lower() in {"exit", "quit"}:
             break
         
         start_time = time.perf_counter()
-        result = orchestrator.handle_turn(user_text, console)
-        console.print(f"[bold cyan]Agent:[/bold cyan] {result['response']}\n")
+        _ = orchestrator.handle_turn(user_input, console, stream=True)
         end_time = time.perf_counter() - start_time
         console.print(f"time: {end_time}")
-
 
         # JSON Prompt
         # result = ask_llm(SYSTEM_PROMPT, prompt)
