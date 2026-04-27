@@ -17,6 +17,8 @@ User input:
 {user_input}
 
 Rules:
+- The first message in a conversation will start in "general" mode.
+- If the confidence is not "low" and no clarification question is required, switch to the mode selected.
 - If the user is already in translation mode and gives text that looks like something to translate, stay in translation mode.
 - If the user is already in learning mode and asks a learning-related follow-up, stay in learning mode.
 - If the user asks "what does X mean", "define X", "synonyms", or "antonyms", use definition mode.
