@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Iterator
 
 from llm.service import LLMService
 from models.prompt_schemas import SessionState
@@ -15,4 +16,13 @@ class ModeHandler(ABC):
         session: SessionState,
         conversation_history: str,
     ) -> dict:
+        pass
+
+    @abstractmethod
+    def stream(
+        self,
+        user_input: str,
+        session: SessionState,
+        conversation_history: str,
+    ) -> Iterator[str]:
         pass
