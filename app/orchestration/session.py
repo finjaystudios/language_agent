@@ -1,23 +1,35 @@
+from rich.console import Console
+from typing import Dict
+
+from llm.service import LLMService
+from memory.short_term import ConversationMemory
 from models.prompt_schemas import SessionState
-from orchestration.modes.translation import TranslationHandler
+from orchestration.modes.base import ModeHandler
 from orchestration.modes.definition import DefinitionHandler
 from orchestration.modes.learning import LearningHandler
+from orchestration.modes.translation import TranslationHandler
+from orchestration.router import IntentRouter
 
 
 class SessionOrchestrator:
-    def __init__(self, llm_service, router, memory):
+    def __init__(
+        self, 
+        llm_service: LLMService, 
+        router: IntentRouter, 
+        memory: ConversationMemory
+    ):
         self.llm_service = llm_service
         self.router = router
         self.memory = memory
         self.session = SessionState()
 
-        self.handlers = {
+        self.handlers: Dict[str, ModeHandler] = {
             "translation": TranslationHandler(llm_service),
             "definition": DefinitionHandler(llm_service),
             "learning": LearningHandler(llm_service),
         }
 
-    def handle_turn(self, user_input: str) -> dict:
+    def handle_turn(self, user_input: str, console: Console) -> dict:
         history = self.memory.format_for_prompt()
 
         intent = self.router.classify(
@@ -27,6 +39,7 @@ class SessionOrchestrator:
         )
 
         self.session = self.router.apply_intent(self.session, intent)
+        console.print(f"\n[bold cyan]Mode:[/bold cyan] {self.session.active_mode}")
 
         if intent.confidence == "low" and intent.clarification_question:
             response = {
@@ -53,6 +66,13 @@ class SessionOrchestrator:
             session=self.session,
             conversation_history=history,
         )
+
+        # assistant_reply = ""
+        # console.print("[bold cyan]Assistant:[/bold cyan] ", end="")
+
+        # for token in handler.handle(user_input=user_input, session=self.session, conversation_history=history):
+        #     assistant_reply += token
+        #     console.print(token, end="")
 
         response["intent"] = intent.model_dump()
         self.memory.add_turn(user_input, response["response"])
