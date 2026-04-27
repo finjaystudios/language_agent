@@ -1,5 +1,5 @@
 from llm.prompts import INTENT_SYSTEM_PROMPT, INTENT_TASK_PROMPT
-from llm.schemas import INTENT_SCHEMA
+from llm.schemas import INTENT_RESPONSE_SCHEMA
 from llm.service import LLMService
 from models.prompt_schemas import IntentResult, SessionState
 
@@ -23,7 +23,7 @@ class IntentRouter:
         raw = self.llm_service.ask_llm(
             system_prompt=INTENT_SYSTEM_PROMPT,
             user_prompt=prompt,
-            schema=INTENT_SCHEMA,
+            schema=INTENT_RESPONSE_SCHEMA,
         )
 
         return IntentResult(**raw)

@@ -1,7 +1,7 @@
 from typing import Iterator
 
 from llm.prompts import DEFINITION_SYSTEM_PROMPT, DEFINITION_TASK_PROMPT
-from llm.schemas import LITE_LANGUAGE_RESPONSE_SCHEMA
+from llm.schemas import DEFINITION_RESPONSE_SCHEMA
 from orchestration.modes.base import ModeHandler
 from orchestration.session import SessionState
 
@@ -21,7 +21,7 @@ class DefinitionHandler(ModeHandler):
         response = self.llm_service.ask_llm(
             system_prompt=DEFINITION_SYSTEM_PROMPT,
             user_prompt=prompt,
-            schema=LITE_LANGUAGE_RESPONSE_SCHEMA,
+            schema=DEFINITION_RESPONSE_SCHEMA,
         )
 
         return {

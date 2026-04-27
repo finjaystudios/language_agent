@@ -1,7 +1,7 @@
 from typing import Iterator
 
 from llm.prompts import TRANSLATION_SYSTEM_PROMPT, TRANSLATION_TASK_PROMPT
-from llm.schemas import LITE_LANGUAGE_RESPONSE_SCHEMA
+from llm.schemas import TRANSLATION_RESPONSE_SCHEMA
 from orchestration.modes.base import ModeHandler
 from orchestration.session import SessionState
 
@@ -22,7 +22,7 @@ class TranslationHandler(ModeHandler):
         response = self.llm_service.ask_llm(
             system_prompt=TRANSLATION_SYSTEM_PROMPT,
             user_prompt=prompt,
-            schema=LITE_LANGUAGE_RESPONSE_SCHEMA,
+            schema=TRANSLATION_RESPONSE_SCHEMA,
         )
 
         return {
