@@ -1,5 +1,6 @@
 from llm.prompts import INTENT_CLASSIFICATION_PROMPT
 from llm.schemas import INTENT_SCHEMA
+from llm.service import LLMService
 from models.prompt_schemas import IntentResult, SessionState
 
 
@@ -7,7 +8,7 @@ SYSTEM_PROMPT = "You are an intent classifier. Return only valid JSON."
 
 
 class IntentRouter:
-    def __init__(self, llm_service):
+    def __init__(self, llm_service: LLMService):
         self.llm_service = llm_service
 
     def classify(
@@ -22,7 +23,7 @@ class IntentRouter:
             user_input=user_input,
         )
 
-        raw = self.llm_service.complete_json(
+        raw = self.llm_service.ask_llm(
             system_prompt=SYSTEM_PROMPT,
             user_prompt=prompt,
             schema=INTENT_SCHEMA,
