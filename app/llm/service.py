@@ -3,20 +3,6 @@ from typing import Iterator
 
 from llama_cpp import Llama
 
-from app.llm.schemas import LANGUAGE_RESPONSE_SCHEMA, LITE_LANGUAGE_RESPONSE_SCHEMA
-from processor_selection import (
-    MODEL_PATH,
-    N_CTX,
-    assert_nvidia_gpu_visible, 
-    assert_llama_cpp_gpu_offload_supported, 
-    choose_gpu_layers,
-)
-
-
-assert_nvidia_gpu_visible()
-assert_llama_cpp_gpu_offload_supported()
-
-N_GPU_LAYERS = choose_gpu_layers(MODEL_PATH)
 
 class LLMService:
     def __init__(
