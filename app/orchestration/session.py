@@ -8,6 +8,7 @@ from orchestration.modes.base import ModeHandler
 from orchestration.modes.definition import DefinitionHandler
 from orchestration.modes.learning import LearningHandler
 from orchestration.modes.translation import TranslationHandler
+from orchestration.output_modes import ModeOutputConfig
 from orchestration.router import IntentRouter
 
 
@@ -29,7 +30,7 @@ class SessionOrchestrator:
             "learning": LearningHandler(llm_service),
         }
 
-    def handle_turn(self, user_input: str, console: Console, stream: bool = True) -> dict:
+    def handle_turn(self, user_input: str, console: Console) -> dict:
         history = self.memory.format_for_prompt()
 
         intent = self.router.classify(
@@ -63,16 +64,18 @@ class SessionOrchestrator:
             console.print(f"[bold cyan]Agent:[/bold cyan] {response['response']}\n")
             return response
 
-        if not stream:
+        output_mode = ModeOutputConfig[self.session.active_mode]
+
+        if output_mode != "stream":
             response = handler.handle(
                 user_input=user_input,
                 session=self.session,
                 conversation_history=history,
             )
 
-            response["intent"] = intent.model_dump()
-            self.memory.add_turn(user_input, response["response"])
-            console.print(f"[bold cyan]Agent:[/bold cyan] {response['response']}\n")
+            self.memory.add_turn(user_input, response.response)
+            console.print(f"[bold cyan]Answer:[/bold cyan] {response.model_dump_json()}")
+            console.print(f"[bold cyan]Assistant:[/bold cyan] {response.response}\n")
         
         else:
             assistant_reply = ""

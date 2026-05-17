@@ -43,7 +43,7 @@ def main():
             break
         
         start_time = time.perf_counter()
-        _ = orchestrator.handle_turn(user_input, console, stream=True)
+        _ = orchestrator.handle_turn(user_input, console)
         end_time = time.perf_counter() - start_time
         console.print(f"time: {end_time}")
 

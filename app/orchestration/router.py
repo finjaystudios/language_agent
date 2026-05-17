@@ -20,13 +20,13 @@ class IntentRouter:
             user_input=user_input,
         )
 
-        raw = self.llm_service.ask_llm(
+        response = self.llm_service.ask_llm(
             system_prompt=INTENT_SYSTEM_PROMPT,
             user_prompt=prompt,
             schema=INTENT_RESPONSE_SCHEMA,
         )
 
-        return IntentResult(**raw)
+        return IntentResult(**response)
 
     def apply_intent(self, session: SessionState, intent: IntentResult) -> SessionState:
         if intent.should_switch_mode and intent.mode != session.active_mode:

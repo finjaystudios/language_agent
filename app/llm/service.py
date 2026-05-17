@@ -28,7 +28,7 @@ class LLMService:
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.1,
-            max_tokens=500,
+            max_tokens=1000,
             response_format={
                 "type": "json_object",
                 "schema": schema,
