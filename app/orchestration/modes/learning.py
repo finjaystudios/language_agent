@@ -2,6 +2,7 @@ from typing import Iterator
 
 from llm.prompts import LEARNING_SYSTEM_PROMPT, LEARNING_TASK_PROMPT
 from llm.schemas import LEARNING_RESPONSE_SCHEMA
+from models.prompt_schemas import LearningResponse
 from orchestration.modes.base import ModeHandler
 from orchestration.session import SessionState
 
@@ -11,7 +12,7 @@ class LearningHandler(ModeHandler):
         user_input: str, 
         session: SessionState, 
         conversation_history: str
-    ):        
+    ) -> LearningResponse:        
         prompt = LEARNING_TASK_PROMPT.format(
             user_input=user_input,
             conversation_history=conversation_history,
@@ -24,10 +25,7 @@ class LearningHandler(ModeHandler):
             schema=LEARNING_RESPONSE_SCHEMA,
         )
 
-        return {
-            "mode": "learning",
-            "response": response["response"],
-        }
+        return LearningResponse(**response)
 
     def stream(
         self, 

@@ -2,6 +2,7 @@ from typing import Iterator
 
 from llm.prompts import DEFINITION_SYSTEM_PROMPT, DEFINITION_TASK_PROMPT
 from llm.schemas import DEFINITION_RESPONSE_SCHEMA
+from models.prompt_schemas import DefinitionResponse
 from orchestration.modes.base import ModeHandler
 from orchestration.session import SessionState
 
@@ -11,7 +12,7 @@ class DefinitionHandler(ModeHandler):
         user_input: str, 
         session: SessionState, 
         conversation_history: str
-    ):
+    ) -> DefinitionResponse:
         prompt = DEFINITION_TASK_PROMPT.format(
             user_input=user_input,
             conversation_history=conversation_history,
@@ -24,10 +25,7 @@ class DefinitionHandler(ModeHandler):
             schema=DEFINITION_RESPONSE_SCHEMA,
         )
 
-        return {
-            "mode": "definition",
-            "response": response["response"],
-        }
+        return DefinitionResponse(**response)
 
     def stream(
         self, 

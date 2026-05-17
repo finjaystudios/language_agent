@@ -2,6 +2,7 @@ from typing import Iterator
 
 from llm.prompts import TRANSLATION_SYSTEM_PROMPT, TRANSLATION_TASK_PROMPT
 from llm.schemas import TRANSLATION_RESPONSE_SCHEMA
+from models.prompt_schemas import TranslationResponse
 from orchestration.modes.base import ModeHandler
 from orchestration.session import SessionState
 
@@ -12,7 +13,7 @@ class TranslationHandler(ModeHandler):
         user_input: str, 
         session: SessionState, 
         conversation_history: str
-    ):
+    ) -> TranslationResponse:
         prompt = TRANSLATION_TASK_PROMPT.format(
             user_input=user_input,
             conversation_history=conversation_history,
@@ -25,10 +26,7 @@ class TranslationHandler(ModeHandler):
             schema=TRANSLATION_RESPONSE_SCHEMA,
         )
 
-        return {
-            "mode": "translation",
-            "response": response["response"],
-        }
+        return TranslationResponse(**response)
 
     def stream(
         self, 
