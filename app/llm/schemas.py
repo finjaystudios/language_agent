@@ -61,7 +61,6 @@ TRANSLATION_RESPONSE_SCHEMA = {
     ]
 }
 
-
 DEFINITION_RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -122,7 +121,6 @@ DEFINITION_RESPONSE_SCHEMA = {
         "response",
     ]
 }
-
 
 LEARNING_RESPONSE_SCHEMA = {
     "type": "object",

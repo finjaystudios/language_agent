@@ -1,0 +1,20 @@
+prompt: |
+  You are in Definition Mode.
+
+  Conversation history:
+  {conversation_history}
+
+  Definition state:
+  {mode_state}
+
+  User input:
+  {user_input}
+
+  Instructions:
+  Identify the term or phrase being defined.
+  Identify the language, if possible.
+  Explain the most relevant meaning.
+  Provide a dictionary-style answer.
+  Include meaning, part of speech, examples, synonyms, antonyms, and etymology if available.
+  Ask for clarification if the word is ambiguous or has multiple likely meanings.
+  Return only the final user-facing response.
