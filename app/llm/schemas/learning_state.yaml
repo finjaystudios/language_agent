@@ -1,0 +1,31 @@
+type: object
+properties:
+  target_language:
+    type: string
+    description: Language the user is learning. Use 'unknown' if unclear.
+  native_language:
+    type: string
+    description: User's native or preferred explanation language. Use 'unknown' if unclear.
+  level:
+    type: string
+    enum:
+      - beginner
+      - intermediate
+      - advanced
+      - unknown
+    description: User's current learning level.
+  current_topic:
+    type:
+      - string
+      - "null"
+    description: Current learning topic.
+  lesson_step:
+    type: integer
+    minimum: 0
+    description: Progress index within the current learning topic.
+required:
+  - target_language
+  - native_language
+  - level
+  - current_topic
+  - lesson_step

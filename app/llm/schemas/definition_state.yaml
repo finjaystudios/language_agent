@@ -1,0 +1,19 @@
+type: object
+properties:
+  current_term:
+    type:
+      - string
+      - "null"
+    description: The term or phrase currently being defined.
+  language:
+    type: string
+    description: Language of the current term. Use 'unknown' if unclear.
+  sense:
+    type:
+      - string
+      - "null"
+    description: Specific meaning or context requested for the current term.
+required:
+  - current_term
+  - language
+  - sense

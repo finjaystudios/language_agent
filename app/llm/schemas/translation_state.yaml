@@ -1,0 +1,26 @@
+type: object
+properties:
+  participant_a_language:
+    type: string
+    description: First participant or source language. Use 'unknown' if unclear.
+  participant_b_language:
+    type: string
+    description: Second participant or target language. Use 'unknown' if unclear.
+  direction:
+    type: string
+    enum:
+      - auto
+      - a_to_b
+      - b_to_a
+    description: Translation direction between participants.
+  style:
+    type: string
+    enum:
+      - single_user
+      - two_person
+    description: Whether translation is one-way or between two participants.
+required:
+  - participant_a_language
+  - participant_b_language
+  - direction
+  - style
