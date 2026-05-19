@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Iterator
+from typing import TYPE_CHECKING, AsyncIterator
 
 from data_models.mode_responses import BaseModeResponse
 from data_models.session_states import SessionState
@@ -13,7 +13,7 @@ class ModeHandler(ABC):
         self.llm_service = llm_service
 
     @abstractmethod
-    def update_session_state(
+    async def update_session_state(
         self,
         user_input: str,
         session_state: SessionState,
@@ -22,7 +22,7 @@ class ModeHandler(ABC):
         pass
 
     @abstractmethod
-    def handle(
+    async def handle(
         self,
         user_input: str,
         session_state: SessionState,
@@ -31,10 +31,10 @@ class ModeHandler(ABC):
         pass
 
     @abstractmethod
-    def stream(
+    async def stream(
         self,
         user_input: str,
         session_state: SessionState,
         conversation_history: str,
-    ) -> Iterator[str]:
+    ) -> AsyncIterator[str]:
         pass

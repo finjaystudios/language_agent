@@ -1,4 +1,4 @@
-from typing import Iterator
+from typing import AsyncIterator
 
 from data_models.mode_responses import DefinitionResponse
 from data_models.session_states import DefinitionModeState, SessionState
@@ -13,7 +13,7 @@ from orchestration.modes.base import ModeHandler
 
 
 class DefinitionHandler(ModeHandler):
-    def update_session_state(
+    async def update_session_state(
         self,
         user_input: str,
         session_state: SessionState,
@@ -25,7 +25,7 @@ class DefinitionHandler(ModeHandler):
             mode_state=session_state.definition.model_dump(),
         )
 
-        response = self.llm_service.ask_llm(
+        response = await self.llm_service.ask_llm(
             system_prompt=STATE_UPDATE_SYSTEM_PROMPT,
             user_prompt=prompt,
             schema=DEFINITION_STATE_SCHEMA,
@@ -34,7 +34,7 @@ class DefinitionHandler(ModeHandler):
         session_state.definition = DefinitionModeState(**response)
         return session_state
 
-    def handle(self, 
+    async def handle(self, 
         user_input: str, 
         session_state: SessionState, 
         conversation_history: str
@@ -45,7 +45,7 @@ class DefinitionHandler(ModeHandler):
             mode_state=session_state.definition.model_dump(),
         )
 
-        response = self.llm_service.ask_llm(
+        response = await self.llm_service.ask_llm(
             system_prompt=DEFINITION_SYSTEM_PROMPT,
             user_prompt=prompt,
             schema=DEFINITION_RESPONSE_SCHEMA,
@@ -53,19 +53,20 @@ class DefinitionHandler(ModeHandler):
 
         return DefinitionResponse(**response)
 
-    def stream(
+    async def stream(
         self, 
         user_input: str, 
         session_state: SessionState, 
         conversation_history: str
-    ) -> Iterator[str]:
+    ) -> AsyncIterator[str]:
         prompt = DEFINITION_TASK_PROMPT.format(
             user_input=user_input,
             conversation_history=conversation_history,
             mode_state=session_state.definition.model_dump(),
         )
 
-        return self.llm_service.stream_llm(
+        async for token in self.llm_service.stream_llm(
             system_prompt=DEFINITION_SYSTEM_PROMPT,
             user_prompt=prompt,
-        )
+        ):
+            yield token

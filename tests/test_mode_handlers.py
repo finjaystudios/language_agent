@@ -1,3 +1,5 @@
+import asyncio
+
 from data_models.session_states import SessionState
 from orchestration.modes.definition import DefinitionHandler
 from orchestration.modes.learning import LearningHandler
@@ -9,7 +11,7 @@ class FakeLLM:
         self.response = response
         self.calls = []
 
-    def ask_llm(self, system_prompt, user_prompt, schema):
+    async def ask_llm(self, system_prompt, user_prompt, schema):
         self.calls.append({
             "system_prompt": system_prompt,
             "user_prompt": user_prompt,
@@ -17,12 +19,16 @@ class FakeLLM:
         })
         return self.response
 
-    def stream_llm(self, system_prompt, user_prompt):
+    async def stream_llm(self, system_prompt, user_prompt):
         self.calls.append({
             "system_prompt": system_prompt,
             "user_prompt": user_prompt,
         })
         yield "bonjour"
+
+
+async def collect_async(async_iterable):
+    return [item async for item in async_iterable]
 
 
 def test_translation_update_session_state_sets_translation_mode_state():
@@ -33,7 +39,7 @@ def test_translation_update_session_state_sets_translation_mode_state():
         "style": "single_user",
     }))
 
-    result = handler.update_session_state("translate hello to French", SessionState(), "history")
+    result = asyncio.run(handler.update_session_state("translate hello to French", SessionState(), "history"))
 
     assert result.translation.participant_b_language == "French"
 
@@ -45,7 +51,7 @@ def test_definition_update_session_state_sets_current_term():
         "sense": None,
     }))
 
-    result = handler.update_session_state("define bonjour", SessionState(), "history")
+    result = asyncio.run(handler.update_session_state("define bonjour", SessionState(), "history"))
 
     assert result.definition.current_term == "bonjour"
 
@@ -59,7 +65,7 @@ def test_learning_update_session_state_sets_lesson_step():
         "lesson_step": 2,
     }))
 
-    result = handler.update_session_state("continue", SessionState(), "history")
+    result = asyncio.run(handler.update_session_state("continue", SessionState(), "history"))
 
     assert result.learning.lesson_step == 2
 
@@ -78,7 +84,7 @@ def test_definition_handle_returns_definition_response_model():
         "response": "bonjour means hello",
     }))
 
-    result = handler.handle("define bonjour", SessionState(), "history")
+    result = asyncio.run(handler.handle("define bonjour", SessionState(), "history"))
 
     assert result.response == "bonjour means hello"
 
@@ -86,6 +92,6 @@ def test_definition_handle_returns_definition_response_model():
 def test_translation_stream_returns_model_tokens():
     handler = TranslationHandler(FakeLLM({}))
 
-    result = list(handler.stream("hello", SessionState(), "history"))
+    result = asyncio.run(collect_async(handler.stream("hello", SessionState(), "history")))
 
     assert result == ["bonjour"]

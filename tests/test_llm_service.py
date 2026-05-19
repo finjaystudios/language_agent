@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import sys
 import types
@@ -30,7 +31,7 @@ def test_ask_llm_parses_structured_json_response(monkeypatch):
     service_module = import_service_with_fake_llama(monkeypatch)
     service = service_module.LLMService("model.gguf")
 
-    result = service.ask_llm("system", "user", {"type": "object"})
+    result = asyncio.run(service.ask_llm("system", "user", {"type": "object"}))
 
     assert result == {"response": "hello"}
 
@@ -39,6 +40,9 @@ def test_stream_llm_yields_only_content_tokens(monkeypatch):
     service_module = import_service_with_fake_llama(monkeypatch)
     service = service_module.LLMService("model.gguf")
 
-    result = list(service.stream_llm("system", "user"))
+    async def collect_tokens():
+        return [token async for token in service.stream_llm("system", "user")]
+
+    result = asyncio.run(collect_tokens())
 
     assert result == ["hel", "lo"]
