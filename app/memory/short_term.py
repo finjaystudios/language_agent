@@ -21,7 +21,7 @@ class ConversationMemory:
         )
 
         if len(self.turns) > self.max_turns:
-            self.turns = self.turns[-self.max_turns:]
+            self.turns = self.turns[-self.max_turns :]
 
     def format_for_prompt(self) -> str:
         if not self.turns:

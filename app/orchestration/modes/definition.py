@@ -1,12 +1,12 @@
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from data_models.mode_responses import DefinitionResponse
 from data_models.session_states import DefinitionModeState, SessionState
 from llm.prompts import (
-    STATE_UPDATE_SYSTEM_PROMPT,
     DEFINITION_STATE_UPDATE_TASK_PROMPT,
     DEFINITION_SYSTEM_PROMPT,
     DEFINITION_TASK_PROMPT,
+    STATE_UPDATE_SYSTEM_PROMPT,
 )
 from llm.schemas import DEFINITION_RESPONSE_SCHEMA, DEFINITION_STATE_SCHEMA
 from orchestration.modes.base import ModeHandler
@@ -34,10 +34,8 @@ class DefinitionHandler(ModeHandler):
         session_state.definition = DefinitionModeState(**response)
         return session_state
 
-    async def handle(self, 
-        user_input: str, 
-        session_state: SessionState, 
-        conversation_history: str
+    async def handle(
+        self, user_input: str, session_state: SessionState, conversation_history: str
     ) -> DefinitionResponse:
         prompt = DEFINITION_TASK_PROMPT.format(
             user_input=user_input,
@@ -54,10 +52,7 @@ class DefinitionHandler(ModeHandler):
         return DefinitionResponse(**response)
 
     async def stream(
-        self, 
-        user_input: str, 
-        session_state: SessionState, 
-        conversation_history: str
+        self, user_input: str, session_state: SessionState, conversation_history: str
     ) -> AsyncIterator[str]:
         prompt = DEFINITION_TASK_PROMPT.format(
             user_input=user_input,

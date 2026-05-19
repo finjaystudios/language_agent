@@ -12,7 +12,7 @@ class TranslationResponse(BaseModeResponse):
     source_language: str
     target_language: str
     translated_text: str
-    
+
 
 class DefinitionResponse(BaseModeResponse):
     mode: Literal["definition"] = "definition"

@@ -1,7 +1,6 @@
 from enum import StrEnum
 from typing import Literal
 
-
 OutputMode = Literal["stream", "ask"]
 
 

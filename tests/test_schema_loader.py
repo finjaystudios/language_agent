@@ -6,7 +6,9 @@ from llm import schema_loader
 def test_load_schema_returns_schema_mapping_from_yaml(tmp_path, monkeypatch):
     schemas_dir = tmp_path / "schemas"
     schemas_dir.mkdir()
-    (schemas_dir / "lite.yaml").write_text("type: object\nrequired:\n  - response\n", encoding="utf-8")
+    (schemas_dir / "lite.yaml").write_text(
+        "type: object\nrequired:\n  - response\n", encoding="utf-8"
+    )
     monkeypatch.setattr(schema_loader, "SCHEMAS_DIR", schemas_dir)
 
     result = schema_loader.load_schema("lite")

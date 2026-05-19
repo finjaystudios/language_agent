@@ -1,6 +1,7 @@
 import asyncio
-from rich.console import Console
 import time
+
+from rich.console import Console
 
 from llm.service import LLMService
 from memory.short_term import ConversationMemory
@@ -9,11 +10,10 @@ from orchestration.session import SessionOrchestrator
 from processor_selection import (
     MODEL_PATH,
     N_CTX,
-    assert_nvidia_gpu_visible, 
-    assert_llama_cpp_gpu_offload_supported, 
+    assert_llama_cpp_gpu_offload_supported,
+    assert_nvidia_gpu_visible,
     choose_gpu_layers,
 )
-
 
 console = Console()
 
@@ -42,7 +42,7 @@ async def main():
         user_input = (await asyncio.to_thread(input, "You: ")).strip()
         if user_input.lower() in {"exit", "quit"}:
             break
-        
+
         start_time = time.perf_counter()
         _ = await orchestrator.handle_turn(user_input, console)
         end_time = time.perf_counter() - start_time
@@ -54,7 +54,7 @@ async def main():
 
         # assistant_reply = result.get("response", "")
         # memory.add_turn(user_text, assistant_reply)
-        
+
         # console.print_json(data=result)
 
         # STREAM Prompt

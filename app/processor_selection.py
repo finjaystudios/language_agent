@@ -1,15 +1,13 @@
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404
 from pathlib import Path
-
 
 MODEL_PATH = os.getenv("MODEL_PATH", "models/qwen2.5-7B-instruct-Q4_K_M.gguf")
 N_CTX = int(os.getenv("LLM_N_CTX", "4096"))
 RESERVED_VRAM_GB = float(os.getenv("LLM_RESERVED_VRAM_GB", "1.5"))
 
-# Fallback layer counts for common Qwen2.5 models. Used only when full offload is unlikely to fit and we need a partial-offload estimate.
 QWEN_LAYER_COUNTS = {
     "0.5b": 24,
     "1.5b": 28,
@@ -18,15 +16,39 @@ QWEN_LAYER_COUNTS = {
     "14b": 48,
     "32b": 64,
 }
+NVIDIA_SMI_QUERIES = {
+    "memory.free",
+    "name,memory.total,memory.free",
+}
+"""
+Fallback layer counts for common Qwen2.5 models. Used only when full offload is unlikely to fit and we need a partial-offload estimate.
+"""
+
+
+def _nvidia_smi_path() -> str:
+    nvidia_smi_path = shutil.which("nvidia-smi")
+    if nvidia_smi_path is None:
+        raise RuntimeError(
+            "CUDA enforcement failed: 'nvidia-smi' was not found. "
+            "Install/repair the NVIDIA driver, then confirm `nvidia-smi` works."
+        )
+    return nvidia_smi_path
 
 
 def _run_nvidia_smi(query: str) -> str:
+    if query not in NVIDIA_SMI_QUERIES:
+        raise ValueError(f"Unsupported nvidia-smi query: {query}")
+
     result = subprocess.run(
-        ["nvidia-smi", f"--query-gpu={query}", "--format=csv,noheader,nounits"],
+        [
+            _nvidia_smi_path(),
+            f"--query-gpu={query}",
+            "--format=csv,noheader,nounits",
+        ],
         capture_output=True,
         text=True,
         check=False,
-    )
+    )  # nosec B603
     if result.returncode != 0:
         raise RuntimeError(
             "CUDA enforcement failed: NVIDIA GPU is not visible.\n"
@@ -45,7 +67,7 @@ def _model_size_gb(model_path: str) -> float:
     path = Path(model_path)
     if not path.exists():
         raise FileNotFoundError(f"Model file not found: {path.resolve()}")
-    return path.stat().st_size / (1024 ** 3)
+    return path.stat().st_size / (1024**3)
 
 
 def _guess_qwen_layers(model_path: str) -> int:
@@ -58,12 +80,6 @@ def _guess_qwen_layers(model_path: str) -> int:
 
 
 def assert_nvidia_gpu_visible() -> None:
-    if shutil.which("nvidia-smi") is None:
-        raise RuntimeError(
-            "CUDA enforcement failed: 'nvidia-smi' was not found. "
-            "Install/repair the NVIDIA driver, then confirm `nvidia-smi` works."
-        )
-
     gpu_info = _run_nvidia_smi("name,memory.total,memory.free")
     print(f"CUDA GPU detected: {gpu_info}")
 
@@ -80,12 +96,14 @@ def assert_llama_cpp_gpu_offload_supported() -> None:
 
     if not llama_supports_gpu_offload():
         raise RuntimeError(
-            "CUDA enforcement failed: llama-cpp-python was installed without GPU offload support.\n"
-            "Install a CUDA wheel, for example:\n"
-            "  pip uninstall -y llama-cpp-python\n"
-            "  pip cache purge\n"
-            "  pip install llama-cpp-python --index-url "
-            "https://abetlen.github.io/llama-cpp-python/whl/cu124"
+            """
+            CUDA enforcement failed: llama-cpp-python was installed without GPU offload support.\n
+            Install a CUDA wheel, for example:\n
+              pip uninstall -y llama-cpp-python\n
+              pip cache purge\n
+              pip install llama-cpp-python --index-url
+            https://abetlen.github.io/llama-cpp-python/whl/cu124
+            """
         )
 
 
@@ -110,8 +128,9 @@ def choose_gpu_layers(model_path: str) -> int:
 
     if model_gb <= budget_gb:
         print(
-            f"VRAM tuner: full GPU offload selected "
-            f"(model={model_gb:.2f}GB, free={free_gb:.2f}GB, reserve={RESERVED_VRAM_GB:.2f}GB)."
+            f"""
+            VRAM tuner: full GPU offload selected
+            (model={model_gb:.2f}GB, free={free_gb:.2f}GB, reserve={RESERVED_VRAM_GB:.2f}GB)."""
         )
         return -1
 

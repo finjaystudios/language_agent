@@ -4,7 +4,6 @@ from pathlib import Path
 
 import yaml
 
-
 SCHEMAS_DIR = Path(__file__).parent / "schemas"
 
 
