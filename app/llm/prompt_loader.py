@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import yaml
+
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
@@ -13,23 +15,12 @@ def load_prompt(prompt_name: str) -> str:
     if not path.exists():
         raise FileNotFoundError(f"Prompt file not found: {path}")
 
-    return _load_prompt_yaml(path)
+    prompt_data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(prompt_data, dict):
+        raise ValueError(f"Prompt file must contain a YAML mapping: {path}")
 
+    prompt = prompt_data.get("prompt")
+    if not isinstance(prompt, str):
+        raise ValueError(f"Prompt file must contain a string `prompt` value: {path}")
 
-def _load_prompt_yaml(path: Path) -> str:
-    """Load the single `prompt` block from a simple YAML prompt file."""
-    lines = path.read_text(encoding="utf-8").splitlines()
-
-    if not lines or lines[0].strip() != "prompt: |":
-        raise ValueError(f"Prompt file must start with 'prompt: |': {path}")
-
-    prompt_lines = []
-    for line in lines[1:]:
-        if line.startswith("  "):
-            prompt_lines.append(line[2:])
-        elif not line:
-            prompt_lines.append("")
-        else:
-            raise ValueError(f"Unexpected YAML content in prompt file: {path}")
-
-    return "\n".join(prompt_lines).strip() + "\n"
+    return prompt
