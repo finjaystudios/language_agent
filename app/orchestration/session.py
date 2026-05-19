@@ -1,8 +1,6 @@
-from rich.console import Console
-from typing import Dict
+from typing import TYPE_CHECKING, Dict
 
 from data_models.session_states import SessionState
-from llm.service import LLMService
 from memory.short_term import ConversationMemory
 from orchestration.modes.base import ModeHandler
 from orchestration.modes.definition import DefinitionHandler
@@ -11,11 +9,15 @@ from orchestration.modes.translation import TranslationHandler
 from orchestration.output_modes import ModeOutputConfig
 from orchestration.router import IntentRouter
 
+if TYPE_CHECKING:
+    from llm.service import LLMService
+    from rich.console import Console
+
 
 class SessionOrchestrator:
     def __init__(
         self, 
-        llm_service: LLMService, 
+        llm_service: "LLMService",
         router: IntentRouter, 
         memory: ConversationMemory
     ):
@@ -30,7 +32,7 @@ class SessionOrchestrator:
             "learning": LearningHandler(llm_service),
         }
 
-    def handle_turn(self, user_input: str, console: Console) -> dict:
+    def handle_turn(self, user_input: str, console: "Console") -> dict:
         history = self.memory.format_for_prompt()
 
         intent = self.router.classify(

@@ -1,12 +1,16 @@
+from typing import TYPE_CHECKING
+
 from data_models.intent_result import IntentResult
 from data_models.session_states import SessionState
 from llm.prompts import INTENT_SYSTEM_PROMPT, INTENT_TASK_PROMPT
 from llm.schemas import INTENT_RESPONSE_SCHEMA
-from llm.service import LLMService
+
+if TYPE_CHECKING:
+    from llm.service import LLMService
 
 
 class IntentRouter:
-    def __init__(self, llm_service: LLMService):
+    def __init__(self, llm_service: "LLMService"):
         self.llm_service = llm_service
 
     def classify(
