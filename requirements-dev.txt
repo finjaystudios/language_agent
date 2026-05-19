@@ -4,3 +4,4 @@ pre-commit
 ruff
 bandit
 pip-audit
+pytest-cov
