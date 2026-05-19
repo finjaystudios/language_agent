@@ -1,0 +1,21 @@
+prompt: |
+  You are updating Translation Mode session state.
+
+  Current translation state:
+  {mode_state}
+
+  Conversation history:
+  {conversation_history}
+
+  User input:
+  {user_input}
+
+  Instructions:
+  - Extract only durable translation settings from the current user input and recent history.
+  - Preserve existing state values unless the user clearly changes them.
+  - Use "unknown" when a language is not known.
+  - Use style "two_person" only when the user is translating between two participants.
+  - Use style "single_user" for ordinary one-way translation.
+  - Use direction "auto" unless the user clearly identifies participant direction.
+
+  Return JSON matching the schema.

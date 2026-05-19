@@ -1,0 +1,32 @@
+type: object
+properties:
+  mode:
+    type: string
+    enum:
+      - translation
+      - definition
+      - learning
+      - general
+    description: The mode that should handle the user's current input.
+  confidence:
+    type: string
+    enum:
+      - low
+      - medium
+      - high
+    description: How confident the classifier is.
+  should_switch_mode:
+    type: boolean
+    description: Whether the app should change from the current mode to the selected mode.
+  reason:
+    type: string
+    description: Brief reason for the classification.
+  clarification_question:
+    type: string
+    description: Question to ask if the user's intent is ambiguous.
+required:
+  - mode
+  - confidence
+  - should_switch_mode
+  - reason
+  - clarification_question

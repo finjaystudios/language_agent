@@ -31,11 +31,11 @@ class ConversationMemory:
 
         for index, turn in enumerate(self.turns, start=1):
             formatted_turns.append(
-f"""
-Turn {index}
-User: {turn.user_input}
-Assistant: {turn.assistant_reply}
-""".strip()
+                f"""
+                Turn {index}
+                User: {turn.user_input}
+                Assistant: {turn.assistant_reply}
+                """.strip()
             )
 
         return "\n\n".join(formatted_turns)

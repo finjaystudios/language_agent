@@ -1,0 +1,21 @@
+prompt: |
+  You are updating Definition Mode session state.
+
+  Current definition state:
+  {mode_state}
+
+  Conversation history:
+  {conversation_history}
+
+  User input:
+  {user_input}
+
+  Instructions:
+  Identify the term or phrase the user wants defined.
+  Identify the language if it is explicit or strongly implied.
+  Identify the requested sense only when the user specifies context or a meaning.
+  Preserve existing state values when the current input is a follow-up about the same term.
+  Use null for current_term or sense when they are not known.
+  Use "unknown" when the language is not known.
+
+  Return JSON matching the schema.

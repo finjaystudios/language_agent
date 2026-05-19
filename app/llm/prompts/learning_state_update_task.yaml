@@ -1,0 +1,22 @@
+prompt: |
+  You are updating Learning Mode session state.
+
+  Current learning state:
+  {mode_state}
+
+  Conversation history:
+  {conversation_history}
+
+  User input:
+  {user_input}
+
+  Instructions:
+  Extract durable learning context from the current user input and recent history.
+  Preserve existing values unless the user clearly changes their target language, native language, level, or topic.
+  Set current_topic to the active grammar, vocabulary, pronunciation, culture, or practice topic.
+  Increment lesson_step by 1 when the user continues the same learning topic.
+  Reset lesson_step to 0 when the user starts a new learning topic.
+  Use "unknown" when target language, native language, or level is not known.
+  Use null when current_topic is not known.
+
+  Return JSON matching the schema.

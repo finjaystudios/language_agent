@@ -177,3 +177,4 @@ pyrightconfig.json
 
 # Additions Outside Generic Template
 models/
+.vscode/

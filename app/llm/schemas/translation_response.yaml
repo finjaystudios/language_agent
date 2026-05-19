@@ -1,0 +1,19 @@
+type: object
+properties:
+  source_language:
+    type: string
+    description: Detected or provided source language. Use 'unknown' if unclear.
+  target_language:
+    type: string
+    description: Target language used for the translation. Use 'unknown' if unclear.
+  translated_text:
+    type: string
+    description: The translated text only, without filler words or labels.
+  response:
+    type: string
+    description: The user-facing response. For translation mode, this should usually equal translated_text.
+required:
+  - source_language
+  - target_language
+  - translated_text
+  - response
