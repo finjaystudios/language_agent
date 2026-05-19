@@ -1,4 +1,4 @@
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from data_models.mode_responses import TranslationResponse
 from data_models.session_states import SessionState, TranslationModeState
@@ -35,10 +35,7 @@ class TranslationHandler(ModeHandler):
         return session_state
 
     async def handle(
-        self, 
-        user_input: str, 
-        session_state: SessionState, 
-        conversation_history: str
+        self, user_input: str, session_state: SessionState, conversation_history: str
     ) -> TranslationResponse:
         prompt = TRANSLATION_TASK_PROMPT.format(
             user_input=user_input,
@@ -55,10 +52,7 @@ class TranslationHandler(ModeHandler):
         return TranslationResponse(**response)
 
     async def stream(
-        self, 
-        user_input: str, 
-        session_state: SessionState, 
-        conversation_history: str
+        self, user_input: str, session_state: SessionState, conversation_history: str
     ) -> AsyncIterator[str]:
         prompt = TRANSLATION_TASK_PROMPT.format(
             user_input=user_input,

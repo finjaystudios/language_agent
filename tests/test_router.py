@@ -14,15 +14,21 @@ class FakeLLM:
 
 
 def test_classify_returns_intent_result_from_llm_response():
-    router = IntentRouter(FakeLLM({
-        "mode": "translation",
-        "confidence": "high",
-        "should_switch_mode": True,
-        "reason": "User asked to translate.",
-        "clarification_question": "",
-    }))
+    router = IntentRouter(
+        FakeLLM(
+            {
+                "mode": "translation",
+                "confidence": "high",
+                "should_switch_mode": True,
+                "reason": "User asked to translate.",
+                "clarification_question": "",
+            }
+        )
+    )
 
-    result = asyncio.run(router.classify("translate hello", SessionState(), "No previous conversation."))
+    result = asyncio.run(
+        router.classify("translate hello", SessionState(), "No previous conversation.")
+    )
 
     assert result.mode == "translation"
 

@@ -14,7 +14,9 @@ def reload_processor_selection(monkeypatch, **env):
 
 
 def test_model_path_comes_from_environment(monkeypatch):
-    processor_selection = reload_processor_selection(monkeypatch, MODEL_PATH="models/custom.gguf")
+    processor_selection = reload_processor_selection(
+        monkeypatch, MODEL_PATH="models/custom.gguf"
+    )
 
     assert processor_selection.MODEL_PATH == "models/custom.gguf"
 

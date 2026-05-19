@@ -1,6 +1,5 @@
 from llm.schema_loader import load_schema
 
-
 INTENT_RESPONSE_SCHEMA = load_schema("intent_response")
 TRANSLATION_RESPONSE_SCHEMA = load_schema("translation_response")
 TRANSLATION_STATE_SCHEMA = load_schema("translation_state")

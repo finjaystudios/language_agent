@@ -28,7 +28,9 @@ class FakeStreamHandler:
     def __init__(self, order):
         self.order = order
 
-    async def update_session_state(self, user_input, session_state, conversation_history):
+    async def update_session_state(
+        self, user_input, session_state, conversation_history
+    ):
         self.order.append("update")
         return session_state
 
@@ -41,7 +43,9 @@ class FakeAskHandler:
     def __init__(self, order):
         self.order = order
 
-    async def update_session_state(self, user_input, session_state, conversation_history):
+    async def update_session_state(
+        self, user_input, session_state, conversation_history
+    ):
         self.order.append("update")
         return session_state
 

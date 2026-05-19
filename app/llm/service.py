@@ -1,6 +1,7 @@
 import asyncio
 import json
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 from llama_cpp import Llama
 
@@ -40,8 +41,9 @@ class LLMService:
         content = result["choices"][0]["message"]["content"]
         return json.loads(content)
 
-
-    async def stream_llm(self, system_prompt: str, user_prompt: str) -> AsyncIterator[str]:
+    async def stream_llm(
+        self, system_prompt: str, user_prompt: str
+    ) -> AsyncIterator[str]:
         """
         Stream raw model text chunks.
         """

@@ -33,7 +33,9 @@ class IntentRouter:
 
         return IntentResult(**response)
 
-    def apply_intent(self, session_state: SessionState, intent: IntentResult) -> SessionState:
+    def apply_intent(
+        self, session_state: SessionState, intent: IntentResult
+    ) -> SessionState:
         if intent.should_switch_mode and intent.mode != session_state.active_mode:
             session_state.previous_mode = session_state.active_mode
             session_state.active_mode = intent.mode

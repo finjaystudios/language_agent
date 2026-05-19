@@ -1,6 +1,5 @@
 from llm.prompt_loader import load_prompt
 
-
 STATE_UPDATE_SYSTEM_PROMPT = load_prompt("state_update_system")
 
 INTENT_SYSTEM_PROMPT = load_prompt("intent_system")

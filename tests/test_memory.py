@@ -20,4 +20,7 @@ def test_format_for_prompt_includes_turn_numbers_and_messages():
     memory = ConversationMemory()
     memory.add_turn("hola", "hello")
 
-    assert "Turn 1\n                User: hola\n                Assistant: hello" in memory.format_for_prompt()
+    assert (
+        "Turn 1\n                User: hola\n                Assistant: hello"
+        in memory.format_for_prompt()
+    )

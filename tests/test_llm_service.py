@@ -10,13 +10,15 @@ class FakeLlama:
 
     def create_chat_completion(self, **kwargs):
         if kwargs.get("stream"):
-            return iter([
-                {"choices": [{"delta": {"content": "hel"}}]},
-                {"choices": [{"delta": {}}]},
-                {"choices": [{"delta": {"content": "lo"}}]},
-            ])
+            return iter(
+                [
+                    {"choices": [{"delta": {"content": "hel"}}]},
+                    {"choices": [{"delta": {}}]},
+                    {"choices": [{"delta": {"content": "lo"}}]},
+                ]
+            )
 
-        return {"choices": [{"message": {"content": "{\"response\": \"hello\"}"}}]}
+        return {"choices": [{"message": {"content": '{"response": "hello"}'}}]}
 
 
 def import_service_with_fake_llama(monkeypatch):
