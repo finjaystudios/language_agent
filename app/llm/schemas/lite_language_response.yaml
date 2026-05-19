@@ -1,0 +1,7 @@
+type: object
+properties:
+  response:
+    type: string
+    description: The main answer to show to the user.
+required:
+  - response

@@ -1,0 +1,67 @@
+type: object
+properties:
+  target_language:
+    type: string
+    description: Language the user is learning. Use 'unknown' if unclear.
+  native_language:
+    type: string
+    description: User's native or preferred explanation language. Use 'unknown' if unclear.
+  level:
+    type: string
+    enum:
+      - beginner
+      - intermediate
+      - advanced
+      - unknown
+    description: Estimated learner level.
+  topic:
+    type: string
+    description: Current learning topic.
+  teaching_point:
+    type: string
+    description: Main concept taught in this response.
+  examples:
+    type: array
+    description: Examples used to teach the concept.
+    items:
+      type: string
+  corrections:
+    type: array
+    description: Corrections to the user's language usage, if applicable.
+    items:
+      type: string
+  new_vocabulary:
+    type: array
+    description: New words or phrases introduced in the response.
+    items:
+      type: object
+      properties:
+        term:
+          type: string
+        language:
+          type: string
+        meaning:
+          type: string
+        example:
+          type: string
+      required:
+        - term
+        - language
+        - meaning
+        - example
+  exercise:
+    type: string
+    description: One short practice exercise for the user.
+  next_suggested_step:
+    type: string
+    description: Suggested next learning step.
+  response:
+    type: string
+    description: Markdown-formatted user-facing tutor response.
+required:
+  - target_language
+  - native_language
+  - level
+  - topic
+  - teaching_point
+  - response

@@ -1,0 +1,49 @@
+type: object
+properties:
+  term:
+    type: string
+    description: The word or phrase being defined.
+  language:
+    type: string
+    description: Language of the term. Use 'unknown' if unclear.
+  part_of_speech:
+    type: string
+    description: Grammatical category, such as noun, verb, adjective, phrase, etc.
+  pronunciation:
+    type: string
+    description: Pronunciation using IPA or simple phonetic guidance, if known.
+  meaning:
+    type: string
+    description: Clear definition of the term.
+  examples:
+    type: array
+    description: Example sentences showing the term in use.
+    items:
+      type: string
+  synonyms:
+    type: array
+    description: Words or phrases with similar meaning.
+    items:
+      type: string
+  antonyms:
+    type: array
+    description: Words or phrases with opposite meaning.
+    items:
+      type: string
+  etymology:
+    type: string
+    description: Brief origin/history of the term, if known.
+  response:
+    type: string
+    description: Markdown-formatted user-facing dictionary response.
+required:
+  - term
+  - language
+  - part_of_speech
+  - pronunciation
+  - meaning
+  - examples
+  - synonyms
+  - antonyms
+  - etymology
+  - response
