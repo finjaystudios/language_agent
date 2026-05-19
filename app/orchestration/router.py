@@ -1,7 +1,8 @@
+from data_models.intent_result import IntentResult
+from data_models.session_states import SessionState
 from llm.prompts import INTENT_SYSTEM_PROMPT, INTENT_TASK_PROMPT
 from llm.schemas import INTENT_RESPONSE_SCHEMA
 from llm.service import LLMService
-from data_models.prompt_schemas import IntentResult, SessionState
 
 
 class IntentRouter:

@@ -1,8 +1,8 @@
 from typing import Iterator
 
+from data_models.mode_responses import LearningResponse
 from llm.prompts import LEARNING_SYSTEM_PROMPT, LEARNING_TASK_PROMPT
 from llm.schemas import LEARNING_RESPONSE_SCHEMA
-from data_models.prompt_schemas import LearningResponse
 from orchestration.modes.base import ModeHandler
 from orchestration.session import SessionState
 

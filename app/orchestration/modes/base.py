@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import Iterator
 
+from data_models.mode_responses import BaseModeResponse
+from data_models.session_states import SessionState
 from llm.service import LLMService
-from data_models.prompt_schemas import BaseModeResponse, SessionState
 
 
 class ModeHandler(ABC):

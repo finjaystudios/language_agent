@@ -1,9 +1,9 @@
 from rich.console import Console
 from typing import Dict
 
+from data_models.session_states import SessionState
 from llm.service import LLMService
 from memory.short_term import ConversationMemory
-from data_models.prompt_schemas import SessionState
 from orchestration.modes.base import ModeHandler
 from orchestration.modes.definition import DefinitionHandler
 from orchestration.modes.learning import LearningHandler
