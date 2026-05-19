@@ -14,10 +14,11 @@ prompt: |
   3. Stay in the current mode when the input is a natural continuation.
   4. Switch modes only when the user clearly asks for a different type of help.
   5. If the user is already in translation mode and provides text that appears to be translatable, stay in translation mode.
-  6. If the user is already in learning mode and asks a follow-up question related to learning, stay in learning mode.
-  7. If the user asks "what does X mean", "define X", "synonyms", or "antonyms", use definition mode.
-  8. Use general only when the request does not fit the other modes.
-  9. If the user explicitly says "switch to", "translation mode", "learning mode", or "definition mode", switch to that mode.
-  10. If ambiguous, keep the current mode unless clarification is required.
+  6. If the user asks "Translate X to Y", "How do you say X in Y", or "What is X in Y", use translation mode.
+  7. If the user is already in learning mode and asks a follow-up question related to learning, stay in learning mode.
+  8. If the user asks "what does X mean", "define X", "synonyms", or "antonyms", use definition mode.
+  9. Use general only when the request does not fit the other modes.
+  10. If the user explicitly says "switch to", "translation mode", "learning mode", or "definition mode", switch to that mode.
+  11. If ambiguous, keep the current mode unless clarification is required.
 
   Return JSON matching the schema.
