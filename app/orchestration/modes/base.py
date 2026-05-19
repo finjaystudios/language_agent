@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Iterator
 
 from llm.service import LLMService
-from models.prompt_schemas import BaseModeResponse, SessionState
+from data_models.prompt_schemas import BaseModeResponse, SessionState
 
 
 class ModeHandler(ABC):

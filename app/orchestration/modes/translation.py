@@ -2,7 +2,7 @@ from typing import Iterator
 
 from llm.prompts import TRANSLATION_SYSTEM_PROMPT, TRANSLATION_TASK_PROMPT
 from llm.schemas import TRANSLATION_RESPONSE_SCHEMA
-from models.prompt_schemas import TranslationResponse
+from data_models.prompt_schemas import TranslationResponse
 from orchestration.modes.base import ModeHandler
 from orchestration.session import SessionState
 

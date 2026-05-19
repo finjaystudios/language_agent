@@ -2,7 +2,7 @@ from typing import Iterator
 
 from llm.prompts import DEFINITION_SYSTEM_PROMPT, DEFINITION_TASK_PROMPT
 from llm.schemas import DEFINITION_RESPONSE_SCHEMA
-from models.prompt_schemas import DefinitionResponse
+from data_models.prompt_schemas import DefinitionResponse
 from orchestration.modes.base import ModeHandler
 from orchestration.session import SessionState
 

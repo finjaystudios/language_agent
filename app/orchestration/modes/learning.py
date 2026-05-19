@@ -2,7 +2,7 @@ from typing import Iterator
 
 from llm.prompts import LEARNING_SYSTEM_PROMPT, LEARNING_TASK_PROMPT
 from llm.schemas import LEARNING_RESPONSE_SCHEMA
-from models.prompt_schemas import LearningResponse
+from data_models.prompt_schemas import LearningResponse
 from orchestration.modes.base import ModeHandler
 from orchestration.session import SessionState
 

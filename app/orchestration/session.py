@@ -3,7 +3,7 @@ from typing import Dict
 
 from llm.service import LLMService
 from memory.short_term import ConversationMemory
-from models.prompt_schemas import SessionState
+from data_models.prompt_schemas import SessionState
 from orchestration.modes.base import ModeHandler
 from orchestration.modes.definition import DefinitionHandler
 from orchestration.modes.learning import LearningHandler
