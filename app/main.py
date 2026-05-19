@@ -2,9 +2,9 @@ from rich.console import Console
 import time
 
 from llm.service import LLMService
+from memory.short_term import ConversationMemory
 from orchestration.router import IntentRouter
 from orchestration.session import SessionOrchestrator
-from memory.short_term import ConversationMemory
 from processor_selection import (
     MODEL_PATH,
     N_CTX,
