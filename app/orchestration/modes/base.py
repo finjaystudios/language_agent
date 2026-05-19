@@ -31,7 +31,7 @@ class ModeHandler(ABC):
         pass
 
     @abstractmethod
-    def stream(
+    async def stream(
         self,
         user_input: str,
         session_state: SessionState,
