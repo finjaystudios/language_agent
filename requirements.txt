@@ -3,6 +3,6 @@ PyYAML==6.0.2
 llama_cpp_python==0.3.4
 mdurl==0.1.2
 pydantic==2.13.4
-pytest==9.0.2
+pytest==9.0.3
 rich==14.2.0
 scikit_build_core==0.12.2

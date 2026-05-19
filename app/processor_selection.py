@@ -1,7 +1,7 @@
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404
 from pathlib import Path
 
 MODEL_PATH = os.getenv("MODEL_PATH", "models/qwen2.5-7B-instruct-Q4_K_M.gguf")
@@ -16,18 +16,39 @@ QWEN_LAYER_COUNTS = {
     "14b": 48,
     "32b": 64,
 }
+NVIDIA_SMI_QUERIES = {
+    "memory.free",
+    "name,memory.total,memory.free",
+}
 """
 Fallback layer counts for common Qwen2.5 models. Used only when full offload is unlikely to fit and we need a partial-offload estimate.
 """
 
 
+def _nvidia_smi_path() -> str:
+    nvidia_smi_path = shutil.which("nvidia-smi")
+    if nvidia_smi_path is None:
+        raise RuntimeError(
+            "CUDA enforcement failed: 'nvidia-smi' was not found. "
+            "Install/repair the NVIDIA driver, then confirm `nvidia-smi` works."
+        )
+    return nvidia_smi_path
+
+
 def _run_nvidia_smi(query: str) -> str:
+    if query not in NVIDIA_SMI_QUERIES:
+        raise ValueError(f"Unsupported nvidia-smi query: {query}")
+
     result = subprocess.run(
-        ["nvidia-smi", f"--query-gpu={query}", "--format=csv,noheader,nounits"],
+        [
+            _nvidia_smi_path(),
+            f"--query-gpu={query}",
+            "--format=csv,noheader,nounits",
+        ],
         capture_output=True,
         text=True,
         check=False,
-    )
+    )  # nosec B603
     if result.returncode != 0:
         raise RuntimeError(
             "CUDA enforcement failed: NVIDIA GPU is not visible.\n"
@@ -59,12 +80,6 @@ def _guess_qwen_layers(model_path: str) -> int:
 
 
 def assert_nvidia_gpu_visible() -> None:
-    if shutil.which("nvidia-smi") is None:
-        raise RuntimeError(
-            "CUDA enforcement failed: 'nvidia-smi' was not found. "
-            "Install/repair the NVIDIA driver, then confirm `nvidia-smi` works."
-        )
-
     gpu_info = _run_nvidia_smi("name,memory.total,memory.free")
     print(f"CUDA GPU detected: {gpu_info}")
 

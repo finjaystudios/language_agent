@@ -40,3 +40,12 @@ def test_model_size_raises_for_missing_model_file(monkeypatch):
         processor_selection._model_size_gb("missing-model.gguf")
 
     assert "Model file not found" in str(error.value)
+
+
+def test_nvidia_smi_rejects_unsupported_query(monkeypatch):
+    processor_selection = reload_processor_selection(monkeypatch)
+
+    with pytest.raises(ValueError) as error:
+        processor_selection._run_nvidia_smi("driver_version")
+
+    assert "Unsupported nvidia-smi query" in str(error.value)
