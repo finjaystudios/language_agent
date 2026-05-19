@@ -12,11 +12,11 @@ class IntentRouter:
     def classify(
         self,
         user_input: str,
-        session: SessionState,
+        session_state: SessionState,
         conversation_history: str,
     ) -> IntentResult:
         prompt = INTENT_TASK_PROMPT.format(
-            active_mode=session.active_mode,
+            active_mode=session_state.active_mode,
             conversation_history=conversation_history,
             user_input=user_input,
         )
@@ -29,9 +29,9 @@ class IntentRouter:
 
         return IntentResult(**response)
 
-    def apply_intent(self, session: SessionState, intent: IntentResult) -> SessionState:
-        if intent.should_switch_mode and intent.mode != session.active_mode:
-            session.previous_mode = session.active_mode
-            session.active_mode = intent.mode
+    def apply_intent(self, session_state: SessionState, intent: IntentResult) -> SessionState:
+        if intent.should_switch_mode and intent.mode != session_state.active_mode:
+            session_state.previous_mode = session_state.active_mode
+            session_state.active_mode = intent.mode
 
-        return session
+        return session_state

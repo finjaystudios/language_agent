@@ -22,7 +22,7 @@ class SessionOrchestrator:
         self.llm_service = llm_service
         self.router = router
         self.memory = memory
-        self.session = SessionState()
+        self.session_state = SessionState()
 
         self.handlers: Dict[str, ModeHandler] = {
             "translation": TranslationHandler(llm_service),
@@ -35,16 +35,16 @@ class SessionOrchestrator:
 
         intent = self.router.classify(
             user_input=user_input,
-            session=self.session,
+            session_state=self.session_state,
             conversation_history=history,
         )
 
-        self.session = self.router.apply_intent(self.session, intent)
-        console.print(f"\n[bold cyan]Mode:[/bold cyan] {self.session.active_mode}")
+        self.session_state = self.router.apply_intent(self.session_state, intent)
+        console.print(f"\n[bold cyan]Mode:[/bold cyan] {self.session_state.active_mode}")
 
         if intent.confidence == "low" and intent.clarification_question:
             response = {
-                "mode": self.session.active_mode,
+                "mode": self.session_state.active_mode,
                 "response": intent.clarification_question,
                 "intent": intent.model_dump(),
             }
@@ -52,7 +52,7 @@ class SessionOrchestrator:
             console.print(f"[bold cyan]Agent:[/bold cyan] {response['response']}\n")
             return response
 
-        handler = self.handlers.get(self.session.active_mode)
+        handler = self.handlers.get(self.session_state.active_mode)
         
         if handler is None:
             response = {
@@ -64,12 +64,18 @@ class SessionOrchestrator:
             console.print(f"[bold cyan]Agent:[/bold cyan] {response['response']}\n")
             return response
 
-        output_mode = ModeOutputConfig[self.session.active_mode]
+        self.session_state = handler.update_session_state(
+            user_input=user_input,
+            session_state=self.session_state,
+            conversation_history=history,
+        )
+
+        output_mode = ModeOutputConfig[self.session_state.active_mode]
 
         if output_mode != "stream":
             response = handler.handle(
                 user_input=user_input,
-                session=self.session,
+                session_state=self.session_state,
                 conversation_history=history,
             )
 
@@ -81,7 +87,7 @@ class SessionOrchestrator:
             assistant_reply = ""
             console.print("[bold cyan]Assistant:[/bold cyan] ", end="")
 
-            for token in handler.stream(user_input=user_input, session=self.session, conversation_history=history):
+            for token in handler.stream(user_input=user_input, session_state=self.session_state, conversation_history=history):
                 assistant_reply += token
                 console.print(token, end="")
 
@@ -89,7 +95,7 @@ class SessionOrchestrator:
             self.memory.add_turn(user_input, assistant_reply)
 
             response = {
-                "mode": self.session.active_mode,
+                "mode": self.session_state.active_mode,
                 "response": assistant_reply,
                 "intent": intent.model_dump(),
             }
