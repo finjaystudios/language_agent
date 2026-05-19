@@ -1,5 +1,6 @@
+import asyncio
 import json
-from typing import Iterator
+from typing import Any, AsyncIterator
 
 from llama_cpp import Llama
 
@@ -21,8 +22,9 @@ class LLMService:
             verbose=False,
         )
 
-    def ask_llm(self, system_prompt: str, user_prompt: str, schema: dict) -> dict:
-        result = self.llm.create_chat_completion(
+    async def ask_llm(self, system_prompt: str, user_prompt: str, schema: dict) -> dict:
+        result = await asyncio.to_thread(
+            self.llm.create_chat_completion,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -39,22 +41,45 @@ class LLMService:
         return json.loads(content)
 
 
-    def stream_llm(self, system_prompt: str, user_prompt: str) -> Iterator[str]:
+    async def stream_llm(self, system_prompt: str, user_prompt: str) -> AsyncIterator[str]:
         """
         Stream raw model text chunks.
         """
-        stream = self.llm.create_chat_completion(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.1,
-            max_tokens=500,
-            stream=True,
-        )
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+        done = object()
 
-        for chunk in stream:
-            delta = chunk["choices"][0].get("delta", {})
-            token = delta.get("content")
-            if token:
-                yield token
+        def collect_tokens() -> None:
+            try:
+                stream = self.llm.create_chat_completion(
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=0.1,
+                    max_tokens=500,
+                    stream=True,
+                )
+
+                for chunk in stream:
+                    delta = chunk["choices"][0].get("delta", {})
+                    token = delta.get("content")
+                    if token:
+                        loop.call_soon_threadsafe(queue.put_nowait, token)
+            except Exception as error:
+                loop.call_soon_threadsafe(queue.put_nowait, error)
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, done)
+
+        worker = asyncio.create_task(asyncio.to_thread(collect_tokens))
+
+        while True:
+            item = await queue.get()
+            if item is done:
+                break
+            if isinstance(item, Exception):
+                await worker
+                raise item
+            yield item
+
+        await worker

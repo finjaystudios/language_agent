@@ -1,3 +1,5 @@
+import asyncio
+
 from data_models.intent_result import IntentResult
 from data_models.session_states import SessionState
 from orchestration.router import IntentRouter
@@ -7,7 +9,7 @@ class FakeLLM:
     def __init__(self, response):
         self.response = response
 
-    def ask_llm(self, system_prompt, user_prompt, schema):
+    async def ask_llm(self, system_prompt, user_prompt, schema):
         return self.response
 
 
@@ -20,7 +22,7 @@ def test_classify_returns_intent_result_from_llm_response():
         "clarification_question": "",
     }))
 
-    result = router.classify("translate hello", SessionState(), "No previous conversation.")
+    result = asyncio.run(router.classify("translate hello", SessionState(), "No previous conversation."))
 
     assert result.mode == "translation"
 

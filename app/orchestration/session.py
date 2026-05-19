@@ -32,10 +32,10 @@ class SessionOrchestrator:
             "learning": LearningHandler(llm_service),
         }
 
-    def handle_turn(self, user_input: str, console: "Console") -> dict:
+    async def handle_turn(self, user_input: str, console: "Console") -> dict:
         history = self.memory.format_for_prompt()
 
-        intent = self.router.classify(
+        intent = await self.router.classify(
             user_input=user_input,
             session_state=self.session_state,
             conversation_history=history,
@@ -66,7 +66,7 @@ class SessionOrchestrator:
             console.print(f"[bold cyan]Agent:[/bold cyan] {response['response']}\n")
             return response
 
-        self.session_state = handler.update_session_state(
+        self.session_state = await handler.update_session_state(
             user_input=user_input,
             session_state=self.session_state,
             conversation_history=history,
@@ -75,7 +75,7 @@ class SessionOrchestrator:
         output_mode = ModeOutputConfig[self.session_state.active_mode]
 
         if output_mode != "stream":
-            response = handler.handle(
+            response = await handler.handle(
                 user_input=user_input,
                 session_state=self.session_state,
                 conversation_history=history,
@@ -89,7 +89,7 @@ class SessionOrchestrator:
             assistant_reply = ""
             console.print("[bold cyan]Assistant:[/bold cyan] ", end="")
 
-            for token in handler.stream(user_input=user_input, session_state=self.session_state, conversation_history=history):
+            async for token in handler.stream(user_input=user_input, session_state=self.session_state, conversation_history=history):
                 assistant_reply += token
                 console.print(token, end="")
 

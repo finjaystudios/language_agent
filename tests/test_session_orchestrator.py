@@ -1,3 +1,5 @@
+import asyncio
+
 from data_models.intent_result import IntentResult
 from data_models.mode_responses import DefinitionResponse
 from memory.short_term import ConversationMemory
@@ -13,7 +15,7 @@ class FakeRouter:
     def __init__(self, intent):
         self.intent = intent
 
-    def classify(self, user_input, session_state, conversation_history):
+    async def classify(self, user_input, session_state, conversation_history):
         return self.intent
 
     def apply_intent(self, session_state, intent):
@@ -26,11 +28,11 @@ class FakeStreamHandler:
     def __init__(self, order):
         self.order = order
 
-    def update_session_state(self, user_input, session_state, conversation_history):
+    async def update_session_state(self, user_input, session_state, conversation_history):
         self.order.append("update")
         return session_state
 
-    def stream(self, user_input, session_state, conversation_history):
+    async def stream(self, user_input, session_state, conversation_history):
         self.order.append("stream")
         yield "hola"
 
@@ -39,11 +41,11 @@ class FakeAskHandler:
     def __init__(self, order):
         self.order = order
 
-    def update_session_state(self, user_input, session_state, conversation_history):
+    async def update_session_state(self, user_input, session_state, conversation_history):
         self.order.append("update")
         return session_state
 
-    def handle(self, user_input, session_state, conversation_history):
+    async def handle(self, user_input, session_state, conversation_history):
         self.order.append("handle")
         return DefinitionResponse(
             term="bonjour",
@@ -65,7 +67,7 @@ def test_handle_turn_returns_clarification_without_calling_mode_handler():
     )
     orchestrator = SessionOrchestrator(None, FakeRouter(intent), ConversationMemory())
 
-    result = orchestrator.handle_turn("translate this", FakeConsole())
+    result = asyncio.run(orchestrator.handle_turn("translate this", FakeConsole()))
 
     assert result["response"] == "Which language?"
 
@@ -79,7 +81,7 @@ def test_handle_turn_returns_general_fallback_for_unsupported_mode():
     )
     orchestrator = SessionOrchestrator(None, FakeRouter(intent), ConversationMemory())
 
-    result = orchestrator.handle_turn("hello", FakeConsole())
+    result = asyncio.run(orchestrator.handle_turn("hello", FakeConsole()))
 
     assert result["mode"] == "general"
 
@@ -95,7 +97,7 @@ def test_handle_turn_updates_session_state_before_streaming_response():
     orchestrator = SessionOrchestrator(None, FakeRouter(intent), ConversationMemory())
     orchestrator.handlers = {"translation": FakeStreamHandler(order)}
 
-    orchestrator.handle_turn("translate hello", FakeConsole())
+    asyncio.run(orchestrator.handle_turn("translate hello", FakeConsole()))
 
     assert order == ["update", "stream"]
 
@@ -111,7 +113,7 @@ def test_handle_turn_updates_session_state_before_ask_response():
     orchestrator = SessionOrchestrator(None, FakeRouter(intent), ConversationMemory())
     orchestrator.handlers = {"definition": FakeAskHandler(order)}
 
-    orchestrator.handle_turn("define bonjour", FakeConsole())
+    asyncio.run(orchestrator.handle_turn("define bonjour", FakeConsole()))
 
     assert order == ["update", "handle"]
 
@@ -127,6 +129,6 @@ def test_handle_turn_stores_streamed_assistant_reply_in_memory():
     orchestrator = SessionOrchestrator(None, FakeRouter(intent), memory)
     orchestrator.handlers = {"translation": FakeStreamHandler([])}
 
-    orchestrator.handle_turn("translate hello", FakeConsole())
+    asyncio.run(orchestrator.handle_turn("translate hello", FakeConsole()))
 
     assert memory.turns[0].assistant_reply == "hola"

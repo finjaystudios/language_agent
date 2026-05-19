@@ -13,7 +13,7 @@ class IntentRouter:
     def __init__(self, llm_service: "LLMService"):
         self.llm_service = llm_service
 
-    def classify(
+    async def classify(
         self,
         user_input: str,
         session_state: SessionState,
@@ -25,7 +25,7 @@ class IntentRouter:
             user_input=user_input,
         )
 
-        response = self.llm_service.ask_llm(
+        response = await self.llm_service.ask_llm(
             system_prompt=INTENT_SYSTEM_PROMPT,
             user_prompt=prompt,
             schema=INTENT_RESPONSE_SCHEMA,

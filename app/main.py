@@ -1,3 +1,4 @@
+import asyncio
 from rich.console import Console
 import time
 
@@ -17,7 +18,7 @@ from processor_selection import (
 console = Console()
 
 
-def main():
+async def main():
     assert_nvidia_gpu_visible()
     assert_llama_cpp_gpu_offload_supported()
 
@@ -38,12 +39,12 @@ def main():
     console.print("Type 'exit' to quit.\n")
 
     while True:
-        user_input = input("You: ").strip()
+        user_input = (await asyncio.to_thread(input, "You: ")).strip()
         if user_input.lower() in {"exit", "quit"}:
             break
         
         start_time = time.perf_counter()
-        _ = orchestrator.handle_turn(user_input, console)
+        _ = await orchestrator.handle_turn(user_input, console)
         end_time = time.perf_counter() - start_time
         console.print(f"time: {end_time}")
 
@@ -69,4 +70,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
