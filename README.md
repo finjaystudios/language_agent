@@ -3,7 +3,7 @@
 Run the backend locally:
 
 ```powershell
-python -m uvicorn app.api.main:app --reload
+python -m uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 The local model path must be configured before calling chat endpoints:
@@ -110,6 +110,56 @@ Expected status codes:
 - Chat endpoints initialise the local model lazily on first use.
 - Streaming is currently supported for modes configured as streaming in the existing agent (`translation` and `learning`).
 - If an LLM failure occurs after an SSE response has started, the API emits a sanitized SSE error event instead of changing the HTTP status code.
+
+## Chainlit Web UI
+
+The Web UI lives in `webui/` as a separate Chainlit application. It is designed
+to be deployed independently from the FastAPI backend and must communicate with
+the backend only over HTTP. The Web UI does not import backend internals, call
+the LLM directly, or load the local GGUF model.
+
+Install the Web UI dependencies:
+
+```powershell
+pip install -r webui/requirements.txt
+```
+
+Run the Chainlit app locally:
+
+```powershell
+$env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
+Push-Location webui
+chainlit run app.py --host 127.0.0.1 --port 8001
+Pop-Location
+```
+
+Open the Web UI at:
+
+- `http://127.0.0.1:8001`
+
+The initial UI shows a welcome message and a placeholder response. Backend chat
+integration will be added over HTTP in a later step.
+
+### Run Backend and Web UI Together
+
+Terminal 1:
+
+```powershell
+$env:LLM_MODEL_PATH = "models/qwen2.5-7B-instruct-Q4_K_M.gguf"
+python -m uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Terminal 2:
+
+```powershell
+$env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
+Push-Location webui
+chainlit run app.py --host 127.0.0.1 --port 8001
+Pop-Location
+```
+
+The backend and Web UI intentionally use different ports because they are
+separate applications and will later be deployed as separate containers.
 
 ## Docker
 
