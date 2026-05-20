@@ -1,4 +1,4 @@
-from llm.schema_loader import load_schema
+from app.llm.schema_loader import load_schema
 
 INTENT_RESPONSE_SCHEMA = load_schema("intent_response")
 TRANSLATION_RESPONSE_SCHEMA = load_schema("translation_response")

@@ -1,4 +1,4 @@
-from memory.short_term import ConversationMemory
+from app.memory.short_term import ConversationMemory
 
 
 def test_format_for_prompt_returns_no_previous_conversation_when_empty():

@@ -1,0 +1,34 @@
+meta {
+  name: Invalid Chat Body
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/chat
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+}
+
+body:json {
+  {
+    "mode": "definition"
+  }
+}
+
+tests {
+  test("returns HTTP 422", function () {
+    expect(res.getStatus()).to.equal(422);
+  });
+
+  test("returns validation details", function () {
+    const body = res.getBody();
+    expect(body.error).to.equal("validation_error");
+    expect(body.details.errors).to.be.an("array");
+  });
+}

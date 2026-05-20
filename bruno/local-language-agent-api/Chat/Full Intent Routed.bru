@@ -1,0 +1,38 @@
+meta {
+  name: Full Intent Routed
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/chat
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+}
+
+body:json {
+  {
+    "message": "What does bonjour mean?",
+    "metadata": {
+      "session_id": "bruno-intent-routed"
+    }
+  }
+}
+
+tests {
+  test("returns HTTP 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("returns an agent response selected by intent routing", function () {
+    const body = res.getBody();
+    expect(body.mode).to.be.oneOf(["translation", "definition", "learning", "general"]);
+    expect(body.response).to.be.a("string").and.not.empty;
+    expect(body.intent).to.be.an("object");
+  });
+}

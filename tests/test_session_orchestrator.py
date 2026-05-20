@@ -1,9 +1,9 @@
 import asyncio
 
-from data_models.intent_result import IntentResult
-from data_models.mode_responses import DefinitionResponse
-from memory.short_term import ConversationMemory
-from orchestration.session import SessionOrchestrator
+from app.data_models.intent_result import IntentResult
+from app.data_models.mode_responses import DefinitionResponse
+from app.memory.short_term import ConversationMemory
+from app.orchestration.session import SessionOrchestrator
 
 
 class FakeConsole:

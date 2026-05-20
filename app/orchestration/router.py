@@ -1,12 +1,15 @@
+import logging
 from typing import TYPE_CHECKING
 
-from data_models.intent_result import IntentResult
-from data_models.session_states import SessionState
-from llm.prompts import INTENT_SYSTEM_PROMPT, INTENT_TASK_PROMPT
-from llm.schemas import INTENT_RESPONSE_SCHEMA
+from app.data_models.intent_result import IntentResult
+from app.data_models.session_states import SessionState
+from app.llm.prompts import INTENT_SYSTEM_PROMPT, INTENT_TASK_PROMPT
+from app.llm.schemas import INTENT_RESPONSE_SCHEMA
 
 if TYPE_CHECKING:
-    from llm.service import LLMService
+    from app.llm.service import LLMService
+
+logger = logging.getLogger(__name__)
 
 
 class IntentRouter:
@@ -19,6 +22,12 @@ class IntentRouter:
         session_state: SessionState,
         conversation_history: str,
     ) -> IntentResult:
+        logger.info(
+            "intent_router_classify_start active_mode=%s history_length=%d message_length=%d",
+            session_state.active_mode,
+            len(conversation_history),
+            len(user_input),
+        )
         prompt = INTENT_TASK_PROMPT.format(
             active_mode=session_state.active_mode,
             conversation_history=conversation_history,
@@ -31,13 +40,27 @@ class IntentRouter:
             schema=INTENT_RESPONSE_SCHEMA,
         )
 
-        return IntentResult(**response)
+        intent = IntentResult(**response)
+        logger.info(
+            "intent_router_classify_complete mode=%s confidence=%s should_switch=%s",
+            intent.mode,
+            intent.confidence,
+            intent.should_switch_mode,
+        )
+        return intent
 
     def apply_intent(
         self, session_state: SessionState, intent: IntentResult
     ) -> SessionState:
         if intent.should_switch_mode and intent.mode != session_state.active_mode:
+            logger.info(
+                "intent_router_switch_mode from_mode=%s to_mode=%s",
+                session_state.active_mode,
+                intent.mode,
+            )
             session_state.previous_mode = session_state.active_mode
             session_state.active_mode = intent.mode
+        else:
+            logger.info("intent_router_keep_mode mode=%s", session_state.active_mode)
 
         return session_state

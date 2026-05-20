@@ -1,0 +1,28 @@
+meta {
+  name: Service Metadata
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+tests {
+  test("returns HTTP 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("returns service metadata", function () {
+    const body = res.getBody();
+    expect(body.service).to.equal("local-language-agent");
+    expect(body.version).to.be.a("string");
+    expect(body.status).to.equal("ok");
+  });
+}

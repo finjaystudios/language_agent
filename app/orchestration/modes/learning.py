@@ -1,15 +1,15 @@
 from collections.abc import AsyncIterator
 
-from data_models.mode_responses import LearningResponse
-from data_models.session_states import LearningModeState, SessionState
-from llm.prompts import (
+from app.data_models.mode_responses import LearningResponse
+from app.data_models.session_states import LearningModeState, SessionState
+from app.llm.prompts import (
     LEARNING_STATE_UPDATE_TASK_PROMPT,
     LEARNING_SYSTEM_PROMPT,
     LEARNING_TASK_PROMPT,
     STATE_UPDATE_SYSTEM_PROMPT,
 )
-from llm.schemas import LEARNING_RESPONSE_SCHEMA, LEARNING_STATE_SCHEMA
-from orchestration.modes.base import ModeHandler
+from app.llm.schemas import LEARNING_RESPONSE_SCHEMA, LEARNING_STATE_SCHEMA
+from app.orchestration.modes.base import ModeHandler
 
 
 class LearningHandler(ModeHandler):

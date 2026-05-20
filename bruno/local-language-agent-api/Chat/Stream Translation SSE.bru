@@ -1,0 +1,40 @@
+meta {
+  name: Stream Translation SSE
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/chat/stream
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Accept: text/event-stream
+}
+
+body:json {
+  {
+    "message": "Translate this sentence to isiXhosa: Good morning",
+    "mode": "translation",
+    "stream": true,
+    "metadata": {
+      "session_id": "bruno-stream-translation"
+    }
+  }
+}
+
+tests {
+  test("returns HTTP 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("returns server-sent events", function () {
+    const body = res.getBody();
+    expect(body).to.be.a("string");
+    expect(body).to.include("data:");
+    expect(body).to.include("\"done\"");
+  });
+}

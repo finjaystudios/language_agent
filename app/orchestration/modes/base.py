@@ -2,11 +2,11 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
 
-from data_models.mode_responses import BaseModeResponse
-from data_models.session_states import SessionState
+from app.data_models.mode_responses import BaseModeResponse
+from app.data_models.session_states import SessionState
 
 if TYPE_CHECKING:
-    from llm.service import LLMService
+    from app.llm.service import LLMService
 
 
 class ModeHandler(ABC):
