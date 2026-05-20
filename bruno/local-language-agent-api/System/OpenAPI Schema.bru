@@ -1,0 +1,27 @@
+meta {
+  name: OpenAPI Schema
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/openapi.json
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+tests {
+  test("returns HTTP 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("includes chat endpoints", function () {
+    const body = res.getBody();
+    expect(body.paths).to.have.property("/api/chat");
+    expect(body.paths).to.have.property("/api/chat/stream");
+  });
+}

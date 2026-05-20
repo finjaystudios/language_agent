@@ -21,3 +21,14 @@ data: {"mode": "translation", "token": "..."}
 
 data: {"mode": "translation", "done": true}
 ```
+
+## Bruno API client
+
+Git-tracked Bruno collections live in `bruno/local-language-agent-api`.
+
+Open that folder in Bruno and select the `Local` environment, or run it with the
+Bruno CLI:
+
+```powershell
+bru run bruno/local-language-agent-api --env Local
+```

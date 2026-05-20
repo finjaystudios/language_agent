@@ -1,0 +1,40 @@
+meta {
+  name: Stream Learning SSE
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/chat/stream
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Accept: text/event-stream
+}
+
+body:json {
+  {
+    "message": "Teach me a beginner isiXhosa greeting",
+    "mode": "learning",
+    "stream": true,
+    "metadata": {
+      "session_id": "bruno-stream-learning"
+    }
+  }
+}
+
+tests {
+  test("returns HTTP 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("returns server-sent events", function () {
+    const body = res.getBody();
+    expect(body).to.be.a("string");
+    expect(body).to.include("data:");
+    expect(body).to.include("\"done\"");
+  });
+}

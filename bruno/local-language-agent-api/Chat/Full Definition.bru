@@ -1,0 +1,39 @@
+meta {
+  name: Full Definition
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/chat
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+}
+
+body:json {
+  {
+    "message": "Define recursion in simple terms",
+    "mode": "definition",
+    "metadata": {
+      "session_id": "bruno-definition"
+    }
+  }
+}
+
+tests {
+  test("returns HTTP 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("returns a definition response shape", function () {
+    const body = res.getBody();
+    expect(body.mode).to.equal("definition");
+    expect(body.response).to.be.a("string").and.not.empty;
+    expect(body.metadata.session_id).to.equal("bruno-definition");
+  });
+}

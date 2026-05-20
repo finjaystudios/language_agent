@@ -1,0 +1,39 @@
+meta {
+  name: Full Translation
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/chat
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+}
+
+body:json {
+  {
+    "message": "Translate this sentence to isiXhosa: Good morning",
+    "mode": "translation",
+    "metadata": {
+      "session_id": "bruno-translation"
+    }
+  }
+}
+
+tests {
+  test("returns HTTP 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("returns a translation response shape", function () {
+    const body = res.getBody();
+    expect(body.mode).to.equal("translation");
+    expect(body.response).to.be.a("string").and.not.empty;
+    expect(body.metadata.session_id).to.equal("bruno-translation");
+  });
+}
