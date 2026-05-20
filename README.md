@@ -113,6 +113,14 @@ Expected status codes:
 
 ## Docker
 
+### Prerequisites
+
+- Docker with BuildKit enabled.
+- NVIDIA GPU, working host NVIDIA drivers, and Docker GPU support such as
+  NVIDIA Container Toolkit.
+- A local GGUF model file stored outside the image, for example in `models/`.
+- Environment values based on `.env.example`, especially `LLM_MODEL_PATH`.
+
 Build the FastAPI backend image:
 
 ```powershell
@@ -203,6 +211,34 @@ Docker health status can be inspected with:
 docker ps
 docker inspect --format='{{json .State.Health}}' <container-id>
 ```
+
+Application logs are written to stdout/stderr and can be viewed with:
+
+```powershell
+docker logs <container-id>
+```
+
+### Docker implementation summary
+
+- The image uses `python:3.11-slim` and installs only backend runtime
+  dependencies.
+- BuildKit cache mounts are used for apt and pip downloads to speed up rebuilds.
+- The CUDA `llama_cpp_python==0.3.4` wheel is installed from the cu124 index.
+- Local models, virtual environments, caches, tests, Bruno files, and editor
+  settings are excluded from the Docker build context.
+- The container exposes port `8000` and runs `uvicorn app.api.main:app` without
+  reload.
+- Docker `HEALTHCHECK` calls `GET /health`, which does not load the LLM.
+
+### Docker known limitations
+
+- CPU-only execution is not supported by this Docker setup.
+- The container expects compatible NVIDIA GPU runtime support on the host.
+- The LLM model is not included in the image and must be mounted at runtime.
+- The app fails LLM initialisation if `LLM_MODEL_PATH` is missing or points to a
+  file that is not mounted inside the container.
+- Chat endpoints load the model lazily on first use, so the first model-backed
+  request can take significantly longer than `/health`.
 
 ## Bruno API client
 

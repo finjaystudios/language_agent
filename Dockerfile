@@ -4,6 +4,7 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     APP_HOST=0.0.0.0 \
     APP_PORT=8000 \
     LOG_LEVEL=INFO \
@@ -30,18 +31,18 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     python -m pip install --upgrade pip \
     && grep -v '^llama_cpp_python==' requirements.txt > /tmp/requirements-api.txt \
-    && python -m pip install -r /tmp/requirements-api.txt \
-    && python -m pip install \
+    && python -m pip install --no-compile -r /tmp/requirements-api.txt \
+    && python -m pip install --no-compile \
         "nvidia-cuda-runtime-cu12==$NVIDIA_CUDA_RUNTIME_VERSION" \
         "nvidia-cublas-cu12==$NVIDIA_CUBLAS_VERSION" \
-    && python -m pip install --no-deps --index-url "$LLAMA_CPP_PYTHON_INDEX_URL" llama_cpp_python==0.3.4 \
+    && python -m pip install --no-compile --no-deps --index-url "$LLAMA_CPP_PYTHON_INDEX_URL" llama_cpp_python==0.3.4 \
     && rm -rf /tmp/requirements-api.txt
 
 COPY app ./app
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.getenv(\"APP_PORT\", \"8000\")}/health', timeout=3).read()"
 
 CMD ["sh", "-c", "python -m uvicorn app.api.main:app --host \"$APP_HOST\" --port \"$APP_PORT\""]

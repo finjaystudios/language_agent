@@ -1,6 +1,8 @@
 .git
 .github
 .env
+.env.*
+!.env.example
 .coverage
 .dockerignore
 .pip-audit-cache
@@ -16,6 +18,8 @@ __pycache__
 .tox
 .nox
 .vscode
+.idea
+.codex
 bruno
 tests
 models
@@ -32,3 +36,5 @@ htmlcov
 dist
 build
 *.egg-info
+*.sqlite
+*.sqlite3
