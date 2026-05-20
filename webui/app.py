@@ -1,11 +1,12 @@
-import os
-
 import chainlit as cl
 from chainlit.input_widget import Select
 
-FASTAPI_BASE_URL = os.getenv("FASTAPI_BASE_URL", "http://localhost:8000")
+from client import BackendClientError, BackendConfig, FastAPIClient
+from renderer import render_chat_response
+
 SESSION_MODE_KEY = "selected_mode"
 MODE_AUTO = "auto"
+STREAMING_MODES = {"translation", "learning"}
 MODE_OPTIONS = {
     MODE_AUTO: "Auto / intent routed",
     "translation": "Translation",
@@ -31,6 +32,15 @@ def api_mode_value(mode: str | None = None) -> str | None:
     if selected_mode == MODE_AUTO:
         return None
     return selected_mode
+
+
+def get_backend_client() -> FastAPIClient:
+    return FastAPIClient(BackendConfig.from_env())
+
+
+def should_stream(mode: str | None) -> bool:
+    config = BackendConfig.from_env()
+    return config.streaming_enabled and mode in STREAMING_MODES
 
 
 def mode_actions() -> list[cl.Action]:
@@ -63,27 +73,28 @@ async def send_mode_settings(initial: str = MODE_AUTO) -> None:
     ).send()
 
 
-def build_planned_payload(user_message: str) -> dict[str, object]:
-    return {
-        "message": user_message,
-        "mode": api_mode_value(),
-        "metadata": {"client": "chainlit-webui"},
-    }
-
-
 @cl.on_chat_start
 async def on_chat_start() -> None:
     cl.user_session.set(SESSION_MODE_KEY, MODE_AUTO)
+    client = get_backend_client()
+    backend_status = "not checked"
+    try:
+        health = await client.health()
+        backend_status = str(health.get("status", "unknown"))
+    except BackendClientError as error:
+        backend_status = f"offline or unavailable: {error}"
+
     await send_mode_settings()
     await cl.Message(
         content=(
             "Welcome to the Local Language Agent.\n\n"
-            "Use this chat to prepare language-agent requests for translation, "
-            "definition, learning, or automatic intent routing.\n\n"
-            f"Backend target: `{FASTAPI_BASE_URL}`\n\n"
-            "Select a response mode, then send a message. For now the UI returns "
-            "a temporary scaffold response; the FastAPI HTTP client will be added "
-            "in a later step."
+            "Use this chat for translation, definitions, language learning, "
+            "general responses, or automatic intent routing.\n\n"
+            f"Backend target: `{client.config.base_url}`\n"
+            f"Backend health: `{backend_status}`\n\n"
+            "Select a response mode, then send a message. Translation and "
+            "Learning use streaming when enabled; other modes use the full "
+            "response endpoint."
         ),
         actions=mode_actions(),
     ).send()
@@ -129,31 +140,84 @@ async def on_message(message: cl.Message) -> None:
         return
 
     selected_mode = get_selected_mode()
-    planned_payload = build_planned_payload(user_text)
+    api_mode = api_mode_value(selected_mode)
+    client = get_backend_client()
 
     response = cl.Message(
         content=(
-            f"Preparing a **{mode_label(selected_mode)}** response...\n\n"
-            "The backend HTTP client is not implemented yet."
+            f"Sending request to `{client.config.base_url}` using "
+            f"**{mode_label(selected_mode)}** mode..."
         )
     )
     await response.send()
 
-    response.content = (
-        "Temporary Web UI scaffold response.\n\n"
-        f"- Selected mode: **{mode_label(selected_mode)}**\n"
-        f"- FastAPI endpoint planned: `{FASTAPI_BASE_URL}/api/chat`\n"
-        f"- API mode value to send later: `{planned_payload['mode']}`\n\n"
-        "No LLM call was made from the Web UI. No backend service code was "
-        "imported. In the next integration step, this message will be replaced "
-        "with the HTTP response from the FastAPI backend."
-    )
+    try:
+        if should_stream(api_mode):
+            await stream_backend_response(client, response, user_text, api_mode)
+        else:
+            await send_full_backend_response(client, response, user_text, api_mode)
+    except BackendClientError as error:
+        response.content = f"Backend request failed: {error}"
+        await response.update()
+
+
+async def send_full_backend_response(
+    client: FastAPIClient,
+    response: cl.Message,
+    user_text: str,
+    api_mode: str | None,
+) -> None:
+    result = await client.chat_full(user_text, api_mode)
+    assistant_text = render_chat_response(result)
+    if not assistant_text:
+        raise BackendClientError("Backend response did not include assistant text.")
+
+    response.content = assistant_text
+    response.metadata = {
+        "mode": result.get("mode"),
+        "response_type": "full",
+    }
     await response.update()
 
-    await cl.Message(
-        author="Error placeholder",
-        content=(
-            "If the later backend request fails, connection and API errors will "
-            "be displayed here without exposing backend stack traces."
-        ),
-    ).send()
+
+async def stream_backend_response(
+    client: FastAPIClient,
+    response: cl.Message,
+    user_text: str,
+    api_mode: str | None,
+) -> None:
+    response.content = ""
+    streamed_text = ""
+    received_token = False
+    response_mode = api_mode
+
+    try:
+        async for event in client.chat_stream(user_text, api_mode):
+            response_mode = str(event.get("mode", response_mode or ""))
+
+            error_message = event.get("message") if event.get("error") else None
+            if isinstance(error_message, str):
+                raise BackendClientError(error_message)
+
+            token = event.get("token")
+            if isinstance(token, str) and token:
+                received_token = True
+                streamed_text += token
+                await response.stream_token(token)
+
+            if event.get("done") is True:
+                break
+    except BackendClientError:
+        if received_token:
+            raise
+        await send_full_backend_response(client, response, user_text, api_mode)
+        return
+
+    if not streamed_text:
+        raise BackendClientError("Backend stream completed without response text.")
+
+    response.metadata = {
+        "mode": response_mode,
+        "response_type": "stream",
+    }
+    await response.update()

@@ -137,8 +137,11 @@ Open the Web UI at:
 
 - `http://127.0.0.1:8001`
 
-The initial UI shows a welcome message and a placeholder response. Backend chat
-integration will be added over HTTP in a later step.
+The UI shows a welcome message, checks backend health, and sends chat requests
+over HTTP from the Chainlit server to the FastAPI backend. Translation and
+Learning modes use the backend streaming endpoint when
+`WEBUI_STREAMING_ENABLED=true`; Auto, Definition, and General use the full
+response endpoint.
 
 ### Run Backend and Web UI Together
 
