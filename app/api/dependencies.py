@@ -16,6 +16,4 @@ def get_agent_service() -> AgentService:
         return service
     except Exception as error:
         logger.exception("agent_service_dependency_resolve_failed")
-        raise LLMServiceError(
-            "Failed to initialise the local language model."
-        ) from error
+        raise LLMServiceError(str(error)) from error

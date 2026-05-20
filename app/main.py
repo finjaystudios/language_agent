@@ -16,11 +16,13 @@ from app.memory.short_term import ConversationMemory  # noqa: E402
 from app.orchestration.router import IntentRouter  # noqa: E402
 from app.orchestration.session import SessionOrchestrator  # noqa: E402
 from app.processor_selection import (  # noqa: E402
-    MODEL_PATH,
     N_CTX,
+    N_THREADS,
     assert_llama_cpp_gpu_offload_supported,
+    assert_model_file_exists,
     assert_nvidia_gpu_visible,
     choose_gpu_layers,
+    require_model_path,
 )
 
 console = Console()
@@ -30,6 +32,8 @@ logger = logging.getLogger(__name__)
 async def main():
     configure_logging()
     logger.info("cli_start")
+    model_path = require_model_path()
+    assert_model_file_exists(model_path)
     logger.info("cli_gpu_visibility_check_start")
     assert_nvidia_gpu_visible()
     logger.info("cli_gpu_visibility_check_complete")
@@ -38,13 +42,13 @@ async def main():
     logger.info("cli_llama_cpp_gpu_offload_check_complete")
 
     logger.info("cli_gpu_layer_selection_start")
-    n_gpu_layers = choose_gpu_layers(MODEL_PATH)
+    n_gpu_layers = choose_gpu_layers(model_path)
     logger.info("cli_gpu_layer_selection_complete n_gpu_layers=%s", n_gpu_layers)
     logger.info("cli_llm_service_initialization_start")
     llm_service = LLMService(
-        model_path=MODEL_PATH,
+        model_path=model_path,
         n_ctx=N_CTX,
-        n_threads=4,
+        n_threads=N_THREADS,
         n_gpu_layers=n_gpu_layers,
     )
     logger.info("cli_llm_service_initialization_complete")

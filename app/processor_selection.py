@@ -4,8 +4,18 @@ import shutil
 import subprocess  # nosec B404
 from pathlib import Path
 
-MODEL_PATH = os.getenv("MODEL_PATH", "models/qwen2.5-7B-instruct-Q4_K_M.gguf")
-N_CTX = int(os.getenv("LLM_N_CTX", "4096"))
+
+def _env_first(*names: str) -> str | None:
+    for name in names:
+        value = os.getenv(name)
+        if value:
+            return value
+    return None
+
+
+MODEL_PATH = _env_first("LLM_MODEL_PATH", "MODEL_PATH")
+N_CTX = int(_env_first("LLM_CONTEXT_SIZE", "LLM_N_CTX") or "4096")
+N_THREADS = int(os.getenv("LLM_THREADS", "4"))
 RESERVED_VRAM_GB = float(os.getenv("LLM_RESERVED_VRAM_GB", "1.5"))
 
 QWEN_LAYER_COUNTS = {
@@ -70,12 +80,31 @@ def _model_size_gb(model_path: str) -> float:
     return path.stat().st_size / (1024**3)
 
 
+def require_model_path() -> str:
+    if MODEL_PATH is None:
+        raise RuntimeError(
+            "LLM model path is not configured. Set LLM_MODEL_PATH to the mounted "
+            "model file path, for example LLM_MODEL_PATH=/models/model.gguf."
+        )
+    return MODEL_PATH
+
+
+def assert_model_file_exists(model_path: str) -> None:
+    path = Path(model_path)
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"LLM model file was not found at '{model_path}'. Mount the local "
+            "model directory into the container and set LLM_MODEL_PATH to the "
+            "file path inside the container."
+        )
+
+
 def _guess_qwen_layers(model_path: str) -> int:
     name = Path(model_path).name.lower()
     for size, layers in QWEN_LAYER_COUNTS.items():
         if re.search(rf"(^|[-_]){re.escape(size)}([-_]|$)", name):
             return layers
-    # Conservative fallback. If this is wrong, set LLM_GPU_LAYERS manually.
+    # Conservative fallback. If this is wrong, set LLM_N_GPU_LAYERS manually.
     return 28
 
 
@@ -113,10 +142,10 @@ def choose_gpu_layers(model_path: str) -> int:
 
     - Returns -1 when full offload should fit.
     - Otherwise estimates a partial layer count.
-    - Override with LLM_GPU_LAYERS, e.g. PowerShell:
-        $env:LLM_GPU_LAYERS="20"
+    - Override with LLM_N_GPU_LAYERS, e.g. PowerShell:
+        $env:LLM_N_GPU_LAYERS="20"
     """
-    override = os.getenv("LLM_GPU_LAYERS")
+    override = _env_first("LLM_N_GPU_LAYERS", "LLM_GPU_LAYERS")
     if override is not None:
         return int(override)
 

@@ -41,17 +41,22 @@ class AgentService:
     def from_local_model(cls) -> "AgentService":
         from app.llm.service import LLMService
         from app.processor_selection import (
-            MODEL_PATH,
             N_CTX,
+            N_THREADS,
             assert_llama_cpp_gpu_offload_supported,
+            assert_model_file_exists,
             assert_nvidia_gpu_visible,
             choose_gpu_layers,
+            require_model_path,
         )
 
+        model_path = require_model_path()
+        assert_model_file_exists(model_path)
         logger.info(
-            "agent_service_from_local_model_start model_path=%s n_ctx=%s",
-            MODEL_PATH,
+            "agent_service_from_local_model_start model_path=%s n_ctx=%s n_threads=%s",
+            model_path,
             N_CTX,
+            N_THREADS,
         )
         logger.info("gpu_visibility_check_start")
         assert_nvidia_gpu_visible()
@@ -61,13 +66,13 @@ class AgentService:
         logger.info("llama_cpp_gpu_offload_check_complete")
 
         logger.info("gpu_layer_selection_start")
-        n_gpu_layers = choose_gpu_layers(MODEL_PATH)
+        n_gpu_layers = choose_gpu_layers(model_path)
         logger.info("gpu_layer_selection_complete n_gpu_layers=%s", n_gpu_layers)
         logger.info("llm_service_initialization_start")
         llm_service = LLMService(
-            model_path=MODEL_PATH,
+            model_path=model_path,
             n_ctx=N_CTX,
-            n_threads=4,
+            n_threads=N_THREADS,
             n_gpu_layers=n_gpu_layers,
         )
         logger.info("llm_service_initialization_complete")

@@ -106,7 +106,7 @@ def test_agent_dependency_wraps_initialisation_failure(monkeypatch):
         try:
             get_agent_service()
         except LLMServiceError as error:
-            assert "initialise" in str(error)
+            assert "GPU not available" in str(error)
         else:
             raise AssertionError("Expected LLMServiceError")
     finally:
