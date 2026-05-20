@@ -1,8 +1,12 @@
+import logging
+
 from fastapi import HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.api.models import ErrorResponse
+
+logger = logging.getLogger(__name__)
 
 
 class APIError(Exception):
@@ -51,6 +55,12 @@ def _validation_status_code(exc: RequestValidationError) -> int:
 
 
 async def api_error_handler(request: Request, exc: APIError) -> JSONResponse:
+    logger.warning(
+        "api_error status_code=%d error=%s message=%s",
+        exc.status_code,
+        exc.error,
+        exc.message,
+    )
     return error_response(
         status_code=exc.status_code,
         error=exc.error,
@@ -61,6 +71,7 @@ async def api_error_handler(request: Request, exc: APIError) -> JSONResponse:
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     message = exc.detail if isinstance(exc.detail, str) else "HTTP request failed."
+    logger.warning("http_error status_code=%d message=%s", exc.status_code, message)
     return error_response(
         status_code=exc.status_code,
         error="http_error",
@@ -72,6 +83,11 @@ async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     status_code = _validation_status_code(exc)
+    logger.warning(
+        "validation_error status_code=%d error_count=%d",
+        status_code,
+        len(exc.errors()),
+    )
     return error_response(
         status_code=status_code,
         error="validation_error",
@@ -83,6 +99,7 @@ async def validation_exception_handler(
 async def unexpected_exception_handler(
     request: Request, exc: Exception
 ) -> JSONResponse:
+    logger.exception("unexpected_internal_error")
     return error_response(
         status_code=500,
         error="internal_error",

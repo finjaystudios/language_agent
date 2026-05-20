@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 import pytest
 from app.api.errors import LLMServiceError, UnsupportedModeError
@@ -113,6 +114,30 @@ def test_chat_full_uses_supplied_mode_without_intent_classification():
     assert response.metadata.session_id == "session-1"
     assert handler.calls == ["update", "handle"]
     assert service.memory.turns[0].assistant_reply == response.response
+
+
+def test_chat_full_logs_major_stages(caplog):
+    intent = IntentResult(
+        mode="general",
+        confidence="high",
+        should_switch_mode=False,
+        reason="Should not be used when mode is supplied.",
+    )
+    service = make_service(intent)
+    service.handlers = {"definition": FakeDefinitionHandler()}
+
+    with caplog.at_level(logging.INFO, logger="app.services.agent_service"):
+        asyncio.run(
+            service.chat_full(
+                ChatRequest(message="Define recursion", mode="definition")
+            )
+        )
+
+    messages = [record.message for record in caplog.records]
+    assert any("chat_full_start" in message for message in messages)
+    assert any("intent_resolution_skipped" in message for message in messages)
+    assert any("chat_full_handler_complete" in message for message in messages)
+    assert any("chat_full_complete" in message for message in messages)
 
 
 def test_chat_full_uses_intent_routing_when_mode_is_omitted():

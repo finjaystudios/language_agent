@@ -6,6 +6,18 @@ Run the backend locally:
 python -m uvicorn app.api.main:app --reload
 ```
 
+Set logging verbosity with `LOG_LEVEL`:
+
+```powershell
+$env:LOG_LEVEL = "DEBUG"
+python -m uvicorn app.api.main:app --reload
+```
+
+The application logs major stages such as model initialisation, intent routing,
+mode selection, state updates, full-response generation, and streaming progress.
+Logs intentionally include metadata such as mode, session id, message length, and
+token counts rather than full user prompts.
+
 OpenAPI docs are available at:
 
 - `http://127.0.0.1:8000/docs`

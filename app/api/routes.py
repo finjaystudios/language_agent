@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -8,6 +9,7 @@ from app.api.models import ChatRequest, ChatResponse, ErrorResponse, StreamChatR
 from app.services.agent_service import AgentService
 
 router = APIRouter(prefix="/api", tags=["chat"])
+logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -34,7 +36,15 @@ async def chat_full(
     request: ChatRequest,
     agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ) -> ChatResponse:
-    return await agent_service.chat_full(request)
+    logger.info(
+        "api_chat_full_request mode=%s message_length=%d session_id=%s",
+        request.mode,
+        len(request.message),
+        request.metadata.session_id if request.metadata else None,
+    )
+    response = await agent_service.chat_full(request)
+    logger.info("api_chat_full_response mode=%s", response.mode)
+    return response
 
 
 @router.post(
@@ -65,5 +75,12 @@ async def chat_stream(
     request: StreamChatRequest,
     agent_service: Annotated[AgentService, Depends(get_agent_service)],
 ) -> StreamingResponse:
+    logger.info(
+        "api_chat_stream_request mode=%s message_length=%d session_id=%s",
+        request.mode,
+        len(request.message),
+        request.metadata.session_id if request.metadata else None,
+    )
     event_stream = await agent_service.chat_stream(request)
+    logger.info("api_chat_stream_response_started")
     return StreamingResponse(event_stream, media_type="text/event-stream")
