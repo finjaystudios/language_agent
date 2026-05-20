@@ -1,8 +1,8 @@
 import asyncio
 
-from data_models.intent_result import IntentResult
-from data_models.session_states import SessionState
-from orchestration.router import IntentRouter
+from app.data_models.intent_result import IntentResult
+from app.data_models.session_states import SessionState
+from app.orchestration.router import IntentRouter
 
 
 class FakeLLM:

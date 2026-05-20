@@ -1,7 +1,5 @@
 import pytest
-from pydantic import ValidationError
-
-from api.models import (
+from app.api.models import (
     ApiMode,
     ChatRequest,
     ChatResponse,
@@ -9,7 +7,8 @@ from api.models import (
     IntentClassificationRequest,
     StreamChatRequest,
 )
-from data_models.intent_result import IntentResult
+from app.data_models.intent_result import IntentResult
+from pydantic import ValidationError
 
 
 def test_chat_request_accepts_supported_mode_and_metadata():

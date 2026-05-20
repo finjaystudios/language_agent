@@ -1,6 +1,5 @@
 import pytest
-
-from llm import schema_loader
+from app.llm import schema_loader
 
 
 def test_load_schema_returns_schema_mapping_from_yaml(tmp_path, monkeypatch):
