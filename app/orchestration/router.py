@@ -1,12 +1,12 @@
 from typing import TYPE_CHECKING
 
-from data_models.intent_result import IntentResult
-from data_models.session_states import SessionState
-from llm.prompts import INTENT_SYSTEM_PROMPT, INTENT_TASK_PROMPT
-from llm.schemas import INTENT_RESPONSE_SCHEMA
+from app.data_models.intent_result import IntentResult
+from app.data_models.session_states import SessionState
+from app.llm.prompts import INTENT_SYSTEM_PROMPT, INTENT_TASK_PROMPT
+from app.llm.schemas import INTENT_RESPONSE_SCHEMA
 
 if TYPE_CHECKING:
-    from llm.service import LLMService
+    from app.llm.service import LLMService
 
 
 class IntentRouter:

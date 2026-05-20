@@ -1,15 +1,15 @@
 from collections.abc import AsyncIterator
 
-from data_models.mode_responses import DefinitionResponse
-from data_models.session_states import DefinitionModeState, SessionState
-from llm.prompts import (
+from app.data_models.mode_responses import DefinitionResponse
+from app.data_models.session_states import DefinitionModeState, SessionState
+from app.llm.prompts import (
     DEFINITION_STATE_UPDATE_TASK_PROMPT,
     DEFINITION_SYSTEM_PROMPT,
     DEFINITION_TASK_PROMPT,
     STATE_UPDATE_SYSTEM_PROMPT,
 )
-from llm.schemas import DEFINITION_RESPONSE_SCHEMA, DEFINITION_STATE_SCHEMA
-from orchestration.modes.base import ModeHandler
+from app.llm.schemas import DEFINITION_RESPONSE_SCHEMA, DEFINITION_STATE_SCHEMA
+from app.orchestration.modes.base import ModeHandler
 
 
 class DefinitionHandler(ModeHandler):

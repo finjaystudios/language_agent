@@ -1,4 +1,4 @@
-from llm.prompt_loader import load_prompt
+from app.llm.prompt_loader import load_prompt
 
 STATE_UPDATE_SYSTEM_PROMPT = load_prompt("state_update_system")
 

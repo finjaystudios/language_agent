@@ -9,8 +9,8 @@ def reload_processor_selection(monkeypatch, **env):
         monkeypatch.delenv(key, raising=False)
     for key, value in env.items():
         monkeypatch.setenv(key, value)
-    sys.modules.pop("processor_selection", None)
-    return importlib.import_module("processor_selection")
+    sys.modules.pop("app.processor_selection", None)
+    return importlib.import_module("app.processor_selection")
 
 
 def test_model_path_comes_from_environment(monkeypatch):

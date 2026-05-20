@@ -1,15 +1,15 @@
 from collections.abc import AsyncIterator
 
-from data_models.mode_responses import TranslationResponse
-from data_models.session_states import SessionState, TranslationModeState
-from llm.prompts import (
+from app.data_models.mode_responses import TranslationResponse
+from app.data_models.session_states import SessionState, TranslationModeState
+from app.llm.prompts import (
     STATE_UPDATE_SYSTEM_PROMPT,
     TRANSLATION_STATE_UPDATE_TASK_PROMPT,
     TRANSLATION_SYSTEM_PROMPT,
     TRANSLATION_TASK_PROMPT,
 )
-from llm.schemas import TRANSLATION_RESPONSE_SCHEMA, TRANSLATION_STATE_SCHEMA
-from orchestration.modes.base import ModeHandler
+from app.llm.schemas import TRANSLATION_RESPONSE_SCHEMA, TRANSLATION_STATE_SCHEMA
+from app.orchestration.modes.base import ModeHandler
 
 
 class TranslationHandler(ModeHandler):

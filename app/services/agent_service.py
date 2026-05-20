@@ -1,13 +1,13 @@
-from api.models import ApiMode, ChatRequest, ChatResponse, ResponseMetadata
-from data_models.intent_result import IntentResult
-from data_models.mode_responses import BaseModeResponse
-from data_models.session_states import SessionState
-from memory.short_term import ConversationMemory
-from orchestration.modes.base import ModeHandler
-from orchestration.modes.definition import DefinitionHandler
-from orchestration.modes.learning import LearningHandler
-from orchestration.modes.translation import TranslationHandler
-from orchestration.router import IntentRouter
+from app.api.models import ApiMode, ChatRequest, ChatResponse, ResponseMetadata
+from app.data_models.intent_result import IntentResult
+from app.data_models.mode_responses import BaseModeResponse
+from app.data_models.session_states import SessionState
+from app.memory.short_term import ConversationMemory
+from app.orchestration.modes.base import ModeHandler
+from app.orchestration.modes.definition import DefinitionHandler
+from app.orchestration.modes.learning import LearningHandler
+from app.orchestration.modes.translation import TranslationHandler
+from app.orchestration.router import IntentRouter
 
 GENERAL_RESPONSE = "I can help with translation, definitions, or language learning. Which would you like?"
 
@@ -31,8 +31,8 @@ class AgentService:
 
     @classmethod
     def from_local_model(cls) -> "AgentService":
-        from llm.service import LLMService
-        from processor_selection import (
+        from app.llm.service import LLMService
+        from app.processor_selection import (
             MODEL_PATH,
             N_CTX,
             assert_llama_cpp_gpu_offload_supported,

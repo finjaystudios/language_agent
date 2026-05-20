@@ -1,13 +1,19 @@
 import asyncio
+import sys
 import time
+from pathlib import Path
 
 from rich.console import Console
 
-from llm.service import LLMService
-from memory.short_term import ConversationMemory
-from orchestration.router import IntentRouter
-from orchestration.session import SessionOrchestrator
-from processor_selection import (
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if __package__ in {None, ""} and str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from app.llm.service import LLMService  # noqa: E402
+from app.memory.short_term import ConversationMemory  # noqa: E402
+from app.orchestration.router import IntentRouter  # noqa: E402
+from app.orchestration.session import SessionOrchestrator  # noqa: E402
+from app.processor_selection import (  # noqa: E402
     MODEL_PATH,
     N_CTX,
     assert_llama_cpp_gpu_offload_supported,

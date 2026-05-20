@@ -1,18 +1,18 @@
 from typing import TYPE_CHECKING
 
-from data_models.session_states import SessionState
-from memory.short_term import ConversationMemory
-from orchestration.modes.base import ModeHandler
-from orchestration.modes.definition import DefinitionHandler
-from orchestration.modes.learning import LearningHandler
-from orchestration.modes.translation import TranslationHandler
-from orchestration.output_modes import ModeOutputConfig
-from orchestration.router import IntentRouter
+from app.data_models.session_states import SessionState
+from app.memory.short_term import ConversationMemory
+from app.orchestration.modes.base import ModeHandler
+from app.orchestration.modes.definition import DefinitionHandler
+from app.orchestration.modes.learning import LearningHandler
+from app.orchestration.modes.translation import TranslationHandler
+from app.orchestration.output_modes import ModeOutputConfig
+from app.orchestration.router import IntentRouter
 
 if TYPE_CHECKING:
     from rich.console import Console
 
-    from llm.service import LLMService
+    from app.llm.service import LLMService
 
 
 class SessionOrchestrator:

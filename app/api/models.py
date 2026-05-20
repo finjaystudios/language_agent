@@ -3,8 +3,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from data_models.intent_result import IntentResult
-from data_models.mode_responses import (
+from app.data_models.intent_result import IntentResult
+from app.data_models.mode_responses import (
     DefinitionResponse,
     LearningResponse,
     TranslationResponse,

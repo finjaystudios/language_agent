@@ -25,8 +25,8 @@ def import_service_with_fake_llama(monkeypatch):
     fake_module = types.ModuleType("llama_cpp")
     fake_module.Llama = FakeLlama
     monkeypatch.setitem(sys.modules, "llama_cpp", fake_module)
-    sys.modules.pop("llm.service", None)
-    return importlib.import_module("llm.service")
+    sys.modules.pop("app.llm.service", None)
+    return importlib.import_module("app.llm.service")
 
 
 def test_ask_llm_parses_structured_json_response(monkeypatch):

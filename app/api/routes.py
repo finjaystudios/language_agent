@@ -2,9 +2,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from api.dependencies import get_agent_service
-from api.models import ChatRequest, ChatResponse, ErrorResponse
-from services.agent_service import AgentService
+from app.api.dependencies import get_agent_service
+from app.api.models import ChatRequest, ChatResponse, ErrorResponse
+from app.services.agent_service import AgentService
 
 router = APIRouter(prefix="/api", tags=["chat"])
 

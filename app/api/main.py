@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from api.routes import router as api_router
+from app.api.routes import router as api_router
 
 SERVICE_NAME = "local-language-agent"
 SERVICE_VERSION = "0.1.0"
