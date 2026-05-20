@@ -119,16 +119,26 @@ Build the FastAPI backend image:
 docker build -t local-language-agent-api .
 ```
 
+The Dockerfile includes a container health check that calls `GET /health`.
+That endpoint is intentionally lightweight and does not initialise, load, or
+query the local LLM model. Chat endpoints initialise the model lazily on first
+use, so a healthy container only means the HTTP API process is reachable.
+
 The image does not include local GGUF/model files. Mount the model directory at
 runtime and point `LLM_MODEL_PATH` at the file path inside the container:
 
 ```powershell
 docker run --rm --gpus all -p 8000:8000 `
   --env-file .env.example `
-  -e LLM_MODEL_PATH=/models/model.gguf `
+  -e LLM_MODEL_PATH=/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf `
   -v ${PWD}/models:/models `
   local-language-agent-api
 ```
+
+Use `.env.example` as the template for local container settings. If you use a
+VSCode-oriented `.env` with `APP_HOST=127.0.0.1`, override it with
+`-e APP_HOST=0.0.0.0` for Docker so the published port is reachable from the
+host.
 
 GPU execution requires a host NVIDIA GPU, working NVIDIA drivers, Docker GPU
 support such as NVIDIA Container Toolkit, and a CUDA-compatible
@@ -152,13 +162,59 @@ If `LLM_MODEL_PATH` is missing, or if the mounted file does not exist, the app
 fails during LLM initialisation with a configuration error. It does not download
 models or fall back to an unrelated local path.
 
+### Container validation
+
+From another terminal, verify the exposed API:
+
+```powershell
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/
+```
+
+Then test the model-backed endpoints after confirming GPU access and the mounted
+model path:
+
+```powershell
+$fullBody = @{
+  message = "Define recursion in simple terms"
+  mode = "definition"
+} | ConvertTo-Json -Compress
+Invoke-RestMethod `
+  -Uri http://127.0.0.1:8000/api/chat `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $fullBody
+
+$streamBody = @{
+  message = "Translate this sentence to isiXhosa: Good morning"
+  mode = "translation"
+} | ConvertTo-Json -Compress
+Invoke-WebRequest `
+  -UseBasicParsing `
+  -Uri http://127.0.0.1:8000/api/chat/stream `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $streamBody
+```
+
+Docker health status can be inspected with:
+
+```powershell
+docker ps
+docker inspect --format='{{json .State.Health}}' <container-id>
+```
+
 ## Bruno API client
 
 Git-tracked Bruno collections live in `bruno/local-language-agent-api`.
 
-Open that folder in Bruno and select the `Local` environment, or run it with the
-Bruno CLI:
+Open that folder in Bruno and select either the `Local` or `Docker`
+environment. Both target `http://127.0.0.1:8000`, so the same requests validate
+the local uvicorn app and the Dockerized app as long as the container publishes
+port `8000`.
+
+Run the collection against the Dockerized API with:
 
 ```powershell
-bru run bruno/local-language-agent-api --env Local
+bru run bruno/local-language-agent-api --env Docker
 ```
