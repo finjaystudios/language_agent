@@ -14,5 +14,13 @@ chainlit run app.py --host 127.0.0.1 --port 8001
 Pop-Location
 ```
 
-The initial app only displays a welcome message and a placeholder response. It
-does not import backend internals, call the LLM directly, or load a GGUF model.
+The current app provides a conversation scaffold with:
+
+- a startup welcome message
+- response mode settings for Auto, Translation, Definition, Learning, and General
+- quick mode action buttons
+- placeholder assistant responses showing the planned HTTP payload shape
+- an error display placeholder for the later backend client
+
+It does not import backend internals, call the LLM directly, or load a GGUF
+model.
