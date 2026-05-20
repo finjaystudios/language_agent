@@ -1,5 +1,6 @@
 .git
 .github
+.env
 .coverage
 .dockerignore
 .pip-audit-cache

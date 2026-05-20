@@ -8,8 +8,11 @@ def reload_processor_selection(monkeypatch, **env):
     for key in (
         "LLM_MODEL_PATH",
         "MODEL_PATH",
+        "LLM_CONTEXT_SIZE",
         "LLM_N_CTX",
+        "LLM_THREADS",
         "LLM_RESERVED_VRAM_GB",
+        "LLM_N_GPU_LAYERS",
         "LLM_GPU_LAYERS",
     ):
         monkeypatch.delenv(key, raising=False)
@@ -45,16 +48,62 @@ def test_llm_model_path_takes_precedence(monkeypatch):
     assert processor_selection.MODEL_PATH == "models/container.gguf"
 
 
+def test_model_path_is_required(monkeypatch):
+    processor_selection = reload_processor_selection(monkeypatch)
+
+    with pytest.raises(RuntimeError) as error:
+        processor_selection.require_model_path()
+
+    assert "Set LLM_MODEL_PATH" in str(error.value)
+
+
+def test_model_file_must_exist(monkeypatch):
+    processor_selection = reload_processor_selection(monkeypatch)
+
+    with pytest.raises(FileNotFoundError) as error:
+        processor_selection.assert_model_file_exists("missing-model.gguf")
+
+    assert "Mount the local model directory" in str(error.value)
+
+
+def test_model_file_exists_accepts_file(monkeypatch, tmp_path):
+    model = tmp_path / "model.gguf"
+    model.write_bytes(b"model")
+    processor_selection = reload_processor_selection(monkeypatch)
+
+    processor_selection.assert_model_file_exists(str(model))
+
+
 def test_n_ctx_comes_from_environment(monkeypatch):
-    processor_selection = reload_processor_selection(monkeypatch, LLM_N_CTX="8192")
+    processor_selection = reload_processor_selection(
+        monkeypatch, LLM_CONTEXT_SIZE="8192"
+    )
 
     assert processor_selection.N_CTX == 8192
 
 
+def test_n_ctx_keeps_legacy_environment_fallback(monkeypatch):
+    processor_selection = reload_processor_selection(monkeypatch, LLM_N_CTX="2048")
+
+    assert processor_selection.N_CTX == 2048
+
+
+def test_n_threads_comes_from_environment(monkeypatch):
+    processor_selection = reload_processor_selection(monkeypatch, LLM_THREADS="8")
+
+    assert processor_selection.N_THREADS == 8
+
+
 def test_choose_gpu_layers_uses_environment_override(monkeypatch):
-    processor_selection = reload_processor_selection(monkeypatch, LLM_GPU_LAYERS="12")
+    processor_selection = reload_processor_selection(monkeypatch, LLM_N_GPU_LAYERS="12")
 
     assert processor_selection.choose_gpu_layers("missing-model.gguf") == 12
+
+
+def test_choose_gpu_layers_keeps_legacy_environment_override(monkeypatch):
+    processor_selection = reload_processor_selection(monkeypatch, LLM_GPU_LAYERS="10")
+
+    assert processor_selection.choose_gpu_layers("missing-model.gguf") == 10
 
 
 def test_model_size_raises_for_missing_model_file(monkeypatch):

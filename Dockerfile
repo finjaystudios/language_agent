@@ -2,7 +2,13 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    APP_HOST=0.0.0.0 \
+    APP_PORT=8000 \
+    LOG_LEVEL=INFO \
     LLM_MODEL_PATH=/models/model.gguf \
+    LLM_CONTEXT_SIZE=4096 \
+    LLM_N_GPU_LAYERS=-1 \
+    LLM_THREADS=4 \
     LD_LIBRARY_PATH=/usr/local/lib/python3.11/site-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib
 
 WORKDIR /app
@@ -29,4 +35,4 @@ COPY app ./app
 
 EXPOSE 8000
 
-CMD ["python", "-m", "uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "python -m uvicorn app.api.main:app --host \"$APP_HOST\" --port \"$APP_PORT\""]
