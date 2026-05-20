@@ -1,3 +1,6 @@
+import json
+from collections.abc import AsyncIterator
+
 from app.api.models import ApiMode, ChatRequest, ChatResponse, ResponseMetadata
 from app.data_models.intent_result import IntentResult
 from app.data_models.mode_responses import BaseModeResponse
@@ -7,9 +10,16 @@ from app.orchestration.modes.base import ModeHandler
 from app.orchestration.modes.definition import DefinitionHandler
 from app.orchestration.modes.learning import LearningHandler
 from app.orchestration.modes.translation import TranslationHandler
+from app.orchestration.output_modes import ModeOutputConfig
 from app.orchestration.router import IntentRouter
 
 GENERAL_RESPONSE = "I can help with translation, definitions, or language learning. Which would you like?"
+
+
+class UnsupportedStreamingModeError(ValueError):
+    def __init__(self, mode: str):
+        self.mode = mode
+        super().__init__(f"Mode '{mode}' does not support streaming responses.")
 
 
 class AgentService:
@@ -100,6 +110,36 @@ class AgentService:
             metadata=metadata,
         )
 
+    async def chat_stream(self, request: ChatRequest) -> AsyncIterator[str]:
+        history = self.memory.format_for_prompt()
+        intent = await self._resolve_intent(request=request, history=history)
+        self.session_state = self.router.apply_intent(self.session_state, intent)
+
+        if intent.confidence == "low" and intent.clarification_question:
+            return self._stream_static_response(
+                message=request.message,
+                mode=self.session_state.active_mode,
+                response=intent.clarification_question,
+            )
+
+        handler = self.handlers.get(self.session_state.active_mode)
+        if (
+            handler is None
+            or ModeOutputConfig[self.session_state.active_mode] != "stream"
+        ):
+            raise UnsupportedStreamingModeError(self.session_state.active_mode)
+
+        self.session_state = await handler.update_session_state(
+            user_input=request.message,
+            session_state=self.session_state,
+            conversation_history=history,
+        )
+        return self._stream_handler_response(
+            handler=handler,
+            request=request,
+            history=history,
+        )
+
     async def _resolve_intent(self, request: ChatRequest, history: str) -> IntentResult:
         if request.mode is not None:
             return IntentResult(
@@ -129,3 +169,39 @@ class AgentService:
             data=mode_response.model_dump(),
             metadata=metadata,
         )
+
+    async def _stream_static_response(
+        self,
+        message: str,
+        mode: str,
+        response: str,
+    ) -> AsyncIterator[str]:
+        self.memory.add_turn(message, response)
+        yield self._sse_data({"mode": mode, "token": response})
+        yield self._sse_data({"mode": mode, "done": True})
+
+    async def _stream_handler_response(
+        self,
+        handler: ModeHandler,
+        request: ChatRequest,
+        history: str,
+    ) -> AsyncIterator[str]:
+        assistant_reply = ""
+        async for token in handler.stream(
+            user_input=request.message,
+            session_state=self.session_state,
+            conversation_history=history,
+        ):
+            assistant_reply += token
+            yield self._sse_data(
+                {
+                    "mode": self.session_state.active_mode,
+                    "token": token,
+                }
+            )
+
+        self.memory.add_turn(request.message, assistant_reply)
+        yield self._sse_data({"mode": self.session_state.active_mode, "done": True})
+
+    def _sse_data(self, payload: dict) -> str:
+        return f"data: {json.dumps(payload)}\n\n"

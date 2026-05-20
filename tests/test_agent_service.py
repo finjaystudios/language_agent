@@ -1,10 +1,12 @@
 import asyncio
 
-from app.api.models import ChatRequest
+import pytest
+from app.api.models import ChatRequest, StreamChatRequest
 from app.data_models.intent_result import IntentResult
 from app.data_models.mode_responses import DefinitionResponse, TranslationResponse
 from app.memory.short_term import ConversationMemory
-from app.services.agent_service import AgentService
+from app.services.agent_service import AgentService, UnsupportedStreamingModeError
+from pydantic import ValidationError
 
 
 class FakeRouter:
@@ -155,3 +157,56 @@ def test_chat_full_returns_clarification_without_calling_handler():
     assert response.mode == "definition"
     assert response.response == "Which term should I define?"
     assert handler.calls == []
+
+
+def test_chat_stream_yields_sse_tokens_and_done_event():
+    intent = IntentResult(
+        mode="general",
+        confidence="high",
+        should_switch_mode=False,
+        reason="Should not be used when mode is supplied.",
+    )
+    service = make_service(intent)
+    handler = FakeTranslationHandler()
+    service.handlers = {"translation": handler}
+
+    async def collect_events():
+        stream = await service.chat_stream(
+            StreamChatRequest(message="Translate hello", mode="translation")
+        )
+        return [event async for event in stream]
+
+    events = asyncio.run(collect_events())
+
+    assert events == [
+        'data: {"mode": "translation", "token": "bonjour"}\n\n',
+        'data: {"mode": "translation", "done": true}\n\n',
+    ]
+    assert handler.calls == ["update", "stream"]
+    assert service.memory.turns[0].assistant_reply == "bonjour"
+
+
+def test_chat_stream_rejects_non_streaming_mode():
+    intent = IntentResult(
+        mode="general",
+        confidence="high",
+        should_switch_mode=False,
+        reason="Should not be used when mode is supplied.",
+    )
+    service = make_service(intent)
+    service.handlers = {"definition": FakeDefinitionHandler()}
+
+    async def stream_definition():
+        await service.chat_stream(
+            StreamChatRequest(message="Define recursion", mode="definition")
+        )
+
+    with pytest.raises(UnsupportedStreamingModeError) as error:
+        asyncio.run(stream_definition())
+
+    assert "definition" in str(error.value)
+
+
+def test_stream_chat_request_rejects_invalid_body():
+    with pytest.raises(ValidationError):
+        StreamChatRequest(message="", mode="translation")
