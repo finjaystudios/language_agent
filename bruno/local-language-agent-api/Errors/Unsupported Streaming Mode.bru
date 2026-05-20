@@ -30,6 +30,7 @@ tests {
 
   test("explains unsupported streaming mode", function () {
     const body = res.getBody();
-    expect(body.detail).to.include("definition");
+    expect(body.error).to.equal("unsupported_mode");
+    expect(body.message).to.include("definition");
   });
 }

@@ -41,6 +41,8 @@ class ResponseMetadata(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    """Request body for a single non-streaming chat turn."""
+
     model_config = ConfigDict(extra="forbid")
 
     message: str = Field(
@@ -58,6 +60,8 @@ class ChatRequest(BaseModel):
 
 
 class StreamChatRequest(ChatRequest):
+    """Request body for a streaming chat turn."""
+
     stream: Literal[True] = Field(
         default=True,
         description="Marks the request as intended for a streaming response.",
@@ -99,6 +103,8 @@ ModeResponsePayload = TranslationResponse | DefinitionResponse | LearningRespons
 
 
 class ChatResponse(BaseModel):
+    """Complete response returned by the non-streaming chat endpoint."""
+
     model_config = ConfigDict(extra="forbid")
 
     mode: ApiMode = Field(description="Mode used to produce the response.")
@@ -118,6 +124,8 @@ class ChatResponse(BaseModel):
 
 
 class ErrorResponse(BaseModel):
+    """Stable error response returned by API exception handlers."""
+
     model_config = ConfigDict(extra="forbid")
 
     error: str = Field(description="Machine-readable error code.")

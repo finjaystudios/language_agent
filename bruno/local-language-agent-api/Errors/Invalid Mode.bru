@@ -1,7 +1,7 @@
 meta {
-  name: Invalid Chat Body
+  name: Invalid Mode
   type: http
-  seq: 1
+  seq: 3
 }
 
 post {
@@ -17,18 +17,19 @@ headers {
 
 body:json {
   {
-    "mode": "definition"
+    "message": "Hello",
+    "mode": "unsupported"
   }
 }
 
 tests {
-  test("returns HTTP 422", function () {
-    expect(res.getStatus()).to.equal(422);
+  test("returns HTTP 400", function () {
+    expect(res.getStatus()).to.equal(400);
   });
 
-  test("returns validation details", function () {
+  test("returns validation error shape", function () {
     const body = res.getBody();
     expect(body.error).to.equal("validation_error");
-    expect(body.details.errors).to.be.an("array");
+    expect(body.message).to.equal("Request validation failed.");
   });
 }

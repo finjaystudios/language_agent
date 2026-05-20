@@ -1,6 +1,7 @@
 import json
 from collections.abc import AsyncIterator
 
+from app.api.errors import LLMServiceError, UnsupportedModeError
 from app.api.models import ApiMode, ChatRequest, ChatResponse, ResponseMetadata
 from app.data_models.intent_result import IntentResult
 from app.data_models.mode_responses import BaseModeResponse
@@ -14,12 +15,6 @@ from app.orchestration.output_modes import ModeOutputConfig
 from app.orchestration.router import IntentRouter
 
 GENERAL_RESPONSE = "I can help with translation, definitions, or language learning. Which would you like?"
-
-
-class UnsupportedStreamingModeError(ValueError):
-    def __init__(self, mode: str):
-        self.mode = mode
-        super().__init__(f"Mode '{mode}' does not support streaming responses.")
 
 
 class AgentService:
@@ -64,81 +59,95 @@ class AgentService:
         return cls(llm_service=llm_service, router=router, memory=memory)
 
     async def chat_full(self, request: ChatRequest) -> ChatResponse:
-        history = self.memory.format_for_prompt()
-        intent = await self._resolve_intent(request=request, history=history)
-        self.session_state = self.router.apply_intent(self.session_state, intent)
+        try:
+            history = self.memory.format_for_prompt()
+            intent = await self._resolve_intent(request=request, history=history)
+            self.session_state = self.router.apply_intent(self.session_state, intent)
 
-        metadata = ResponseMetadata(
-            session_id=request.metadata.session_id if request.metadata else None
-        )
+            metadata = ResponseMetadata(
+                session_id=request.metadata.session_id if request.metadata else None
+            )
 
-        if intent.confidence == "low" and intent.clarification_question:
-            self.memory.add_turn(request.message, intent.clarification_question)
-            return ChatResponse(
-                mode=ApiMode(self.session_state.active_mode),
-                response=intent.clarification_question,
+            if intent.confidence == "low" and intent.clarification_question:
+                self.memory.add_turn(request.message, intent.clarification_question)
+                return ChatResponse(
+                    mode=ApiMode(self.session_state.active_mode),
+                    response=intent.clarification_question,
+                    intent=intent,
+                    metadata=metadata,
+                )
+
+            handler = self.handlers.get(self.session_state.active_mode)
+
+            if handler is None:
+                self.memory.add_turn(request.message, GENERAL_RESPONSE)
+                return ChatResponse(
+                    mode=ApiMode.general,
+                    response=GENERAL_RESPONSE,
+                    intent=intent,
+                    metadata=metadata,
+                )
+
+            self.session_state = await handler.update_session_state(
+                user_input=request.message,
+                session_state=self.session_state,
+                conversation_history=history,
+            )
+            mode_response = await handler.handle(
+                user_input=request.message,
+                session_state=self.session_state,
+                conversation_history=history,
+            )
+            self.memory.add_turn(request.message, mode_response.response)
+
+            return self._to_chat_response(
+                mode_response=mode_response,
                 intent=intent,
                 metadata=metadata,
             )
-
-        handler = self.handlers.get(self.session_state.active_mode)
-
-        if handler is None:
-            self.memory.add_turn(request.message, GENERAL_RESPONSE)
-            return ChatResponse(
-                mode=ApiMode.general,
-                response=GENERAL_RESPONSE,
-                intent=intent,
-                metadata=metadata,
-            )
-
-        self.session_state = await handler.update_session_state(
-            user_input=request.message,
-            session_state=self.session_state,
-            conversation_history=history,
-        )
-        mode_response = await handler.handle(
-            user_input=request.message,
-            session_state=self.session_state,
-            conversation_history=history,
-        )
-        self.memory.add_turn(request.message, mode_response.response)
-
-        return self._to_chat_response(
-            mode_response=mode_response,
-            intent=intent,
-            metadata=metadata,
-        )
+        except LLMServiceError:
+            raise
+        except Exception as error:
+            raise LLMServiceError(
+                "The language model failed while generating a response."
+            ) from error
 
     async def chat_stream(self, request: ChatRequest) -> AsyncIterator[str]:
-        history = self.memory.format_for_prompt()
-        intent = await self._resolve_intent(request=request, history=history)
-        self.session_state = self.router.apply_intent(self.session_state, intent)
+        try:
+            history = self.memory.format_for_prompt()
+            intent = await self._resolve_intent(request=request, history=history)
+            self.session_state = self.router.apply_intent(self.session_state, intent)
 
-        if intent.confidence == "low" and intent.clarification_question:
-            return self._stream_static_response(
-                message=request.message,
-                mode=self.session_state.active_mode,
-                response=intent.clarification_question,
+            if intent.confidence == "low" and intent.clarification_question:
+                return self._stream_static_response(
+                    message=request.message,
+                    mode=self.session_state.active_mode,
+                    response=intent.clarification_question,
+                )
+
+            handler = self.handlers.get(self.session_state.active_mode)
+            if (
+                handler is None
+                or ModeOutputConfig[self.session_state.active_mode] != "stream"
+            ):
+                raise UnsupportedModeError(self.session_state.active_mode)
+
+            self.session_state = await handler.update_session_state(
+                user_input=request.message,
+                session_state=self.session_state,
+                conversation_history=history,
             )
-
-        handler = self.handlers.get(self.session_state.active_mode)
-        if (
-            handler is None
-            or ModeOutputConfig[self.session_state.active_mode] != "stream"
-        ):
-            raise UnsupportedStreamingModeError(self.session_state.active_mode)
-
-        self.session_state = await handler.update_session_state(
-            user_input=request.message,
-            session_state=self.session_state,
-            conversation_history=history,
-        )
-        return self._stream_handler_response(
-            handler=handler,
-            request=request,
-            history=history,
-        )
+            return self._stream_handler_response(
+                handler=handler,
+                request=request,
+                history=history,
+            )
+        except (LLMServiceError, UnsupportedModeError):
+            raise
+        except Exception as error:
+            raise LLMServiceError(
+                "The language model failed while starting a stream."
+            ) from error
 
     async def _resolve_intent(self, request: ChatRequest, history: str) -> IntentResult:
         if request.mode is not None:
@@ -186,22 +195,31 @@ class AgentService:
         request: ChatRequest,
         history: str,
     ) -> AsyncIterator[str]:
-        assistant_reply = ""
-        async for token in handler.stream(
-            user_input=request.message,
-            session_state=self.session_state,
-            conversation_history=history,
-        ):
-            assistant_reply += token
+        try:
+            assistant_reply = ""
+            async for token in handler.stream(
+                user_input=request.message,
+                session_state=self.session_state,
+                conversation_history=history,
+            ):
+                assistant_reply += token
+                yield self._sse_data(
+                    {
+                        "mode": self.session_state.active_mode,
+                        "token": token,
+                    }
+                )
+
+            self.memory.add_turn(request.message, assistant_reply)
+            yield self._sse_data({"mode": self.session_state.active_mode, "done": True})
+        except Exception:
             yield self._sse_data(
                 {
-                    "mode": self.session_state.active_mode,
-                    "token": token,
+                    "error": "llm_service_error",
+                    "message": "The language model failed while streaming a response.",
+                    "done": True,
                 }
             )
-
-        self.memory.add_turn(request.message, assistant_reply)
-        yield self._sse_data({"mode": self.session_state.active_mode, "done": True})
 
     def _sse_data(self, payload: dict) -> str:
         return f"data: {json.dumps(payload)}\n\n"

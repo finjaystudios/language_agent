@@ -1,6 +1,7 @@
 import asyncio
 
 import pytest
+from app.api.errors import UnsupportedModeError
 from app.api.main import create_app
 from app.api.models import (
     ChatRequest,
@@ -9,8 +10,6 @@ from app.api.models import (
     StreamChatRequest,
 )
 from app.api.routes import chat_full, chat_stream
-from app.services.agent_service import UnsupportedStreamingModeError
-from fastapi import HTTPException
 
 
 class FakeAgentService:
@@ -37,7 +36,7 @@ class FakeAgentService:
 
 class FakeUnsupportedStreamService:
     async def chat_stream(self, request):
-        raise UnsupportedStreamingModeError("definition")
+        raise UnsupportedModeError("definition")
 
 
 def test_chat_full_route_delegates_to_agent_service():
@@ -84,7 +83,7 @@ def test_chat_stream_route_returns_streaming_response():
 def test_chat_stream_route_maps_unsupported_mode_to_bad_request():
     request = StreamChatRequest(message="Define recursion", mode="definition")
 
-    with pytest.raises(HTTPException) as error:
+    with pytest.raises(UnsupportedModeError) as error:
         asyncio.run(
             chat_stream(
                 request=request,
@@ -93,7 +92,7 @@ def test_chat_stream_route_maps_unsupported_mode_to_bad_request():
         )
 
     assert error.value.status_code == 400
-    assert "definition" in error.value.detail
+    assert "definition" in str(error.value)
 
 
 def test_chat_stream_endpoint_is_in_openapi_schema():

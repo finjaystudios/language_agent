@@ -1,11 +1,12 @@
 import asyncio
 
 import pytest
+from app.api.errors import LLMServiceError, UnsupportedModeError
 from app.api.models import ChatRequest, StreamChatRequest
 from app.data_models.intent_result import IntentResult
 from app.data_models.mode_responses import DefinitionResponse, TranslationResponse
 from app.memory.short_term import ConversationMemory
-from app.services.agent_service import AgentService, UnsupportedStreamingModeError
+from app.services.agent_service import AgentService
 from pydantic import ValidationError
 
 
@@ -64,6 +65,18 @@ class FakeTranslationHandler:
     async def stream(self, user_input, session_state, conversation_history):
         self.calls.append("stream")
         yield "bonjour"
+
+
+class FakeFailingDefinitionHandler(FakeDefinitionHandler):
+    async def handle(self, user_input, session_state, conversation_history):
+        raise RuntimeError("model exploded")
+
+
+class FakeFailingStreamHandler(FakeTranslationHandler):
+    async def stream(self, user_input, session_state, conversation_history):
+        self.calls.append("stream")
+        yield "bon"
+        raise RuntimeError("stream exploded")
 
 
 def make_service(intent):
@@ -201,7 +214,7 @@ def test_chat_stream_rejects_non_streaming_mode():
             StreamChatRequest(message="Define recursion", mode="definition")
         )
 
-    with pytest.raises(UnsupportedStreamingModeError) as error:
+    with pytest.raises(UnsupportedModeError) as error:
         asyncio.run(stream_definition())
 
     assert "definition" in str(error.value)
@@ -210,3 +223,48 @@ def test_chat_stream_rejects_non_streaming_mode():
 def test_stream_chat_request_rejects_invalid_body():
     with pytest.raises(ValidationError):
         StreamChatRequest(message="", mode="translation")
+
+
+def test_chat_full_wraps_llm_runtime_failure():
+    intent = IntentResult(
+        mode="general",
+        confidence="high",
+        should_switch_mode=False,
+        reason="Should not be used when mode is supplied.",
+    )
+    service = make_service(intent)
+    service.handlers = {"definition": FakeFailingDefinitionHandler()}
+
+    async def define_with_failure():
+        await service.chat_full(
+            ChatRequest(message="Define recursion", mode="definition")
+        )
+
+    with pytest.raises(LLMServiceError) as error:
+        asyncio.run(define_with_failure())
+
+    assert "generating a response" in str(error.value)
+
+
+def test_chat_stream_runtime_failure_returns_sanitized_sse_error():
+    intent = IntentResult(
+        mode="general",
+        confidence="high",
+        should_switch_mode=False,
+        reason="Should not be used when mode is supplied.",
+    )
+    service = make_service(intent)
+    service.handlers = {"translation": FakeFailingStreamHandler()}
+
+    async def collect_events():
+        stream = await service.chat_stream(
+            StreamChatRequest(message="Translate hello", mode="translation")
+        )
+        return [event async for event in stream]
+
+    events = asyncio.run(collect_events())
+
+    assert events == [
+        'data: {"mode": "translation", "token": "bon"}\n\n',
+        'data: {"error": "llm_service_error", "message": "The language model failed while streaming a response.", "done": true}\n\n',
+    ]
