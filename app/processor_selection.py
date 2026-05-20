@@ -4,7 +4,10 @@ import shutil
 import subprocess  # nosec B404
 from pathlib import Path
 
-MODEL_PATH = os.getenv("MODEL_PATH", "models/qwen2.5-7B-instruct-Q4_K_M.gguf")
+MODEL_PATH = os.getenv(
+    "LLM_MODEL_PATH",
+    os.getenv("MODEL_PATH", "models/qwen2.5-7B-instruct-Q4_K_M.gguf"),
+)
 N_CTX = int(os.getenv("LLM_N_CTX", "4096"))
 RESERVED_VRAM_GB = float(os.getenv("LLM_RESERVED_VRAM_GB", "1.5"))
 

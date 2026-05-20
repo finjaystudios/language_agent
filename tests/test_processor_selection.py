@@ -5,7 +5,13 @@ import pytest
 
 
 def reload_processor_selection(monkeypatch, **env):
-    for key in ("MODEL_PATH", "LLM_N_CTX", "LLM_RESERVED_VRAM_GB", "LLM_GPU_LAYERS"):
+    for key in (
+        "LLM_MODEL_PATH",
+        "MODEL_PATH",
+        "LLM_N_CTX",
+        "LLM_RESERVED_VRAM_GB",
+        "LLM_GPU_LAYERS",
+    ):
         monkeypatch.delenv(key, raising=False)
     for key, value in env.items():
         monkeypatch.setenv(key, value)
@@ -15,10 +21,28 @@ def reload_processor_selection(monkeypatch, **env):
 
 def test_model_path_comes_from_environment(monkeypatch):
     processor_selection = reload_processor_selection(
-        monkeypatch, MODEL_PATH="models/custom.gguf"
+        monkeypatch, LLM_MODEL_PATH="models/custom.gguf"
     )
 
     assert processor_selection.MODEL_PATH == "models/custom.gguf"
+
+
+def test_model_path_keeps_legacy_environment_fallback(monkeypatch):
+    processor_selection = reload_processor_selection(
+        monkeypatch, MODEL_PATH="models/legacy.gguf"
+    )
+
+    assert processor_selection.MODEL_PATH == "models/legacy.gguf"
+
+
+def test_llm_model_path_takes_precedence(monkeypatch):
+    processor_selection = reload_processor_selection(
+        monkeypatch,
+        LLM_MODEL_PATH="models/container.gguf",
+        MODEL_PATH="models/legacy.gguf",
+    )
+
+    assert processor_selection.MODEL_PATH == "models/container.gguf"
 
 
 def test_n_ctx_comes_from_environment(monkeypatch):
