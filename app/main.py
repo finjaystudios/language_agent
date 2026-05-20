@@ -48,26 +48,6 @@ async def main():
         end_time = time.perf_counter() - start_time
         console.print(f"time: {end_time}")
 
-        # JSON Prompt
-        # result = ask_llm(SYSTEM_PROMPT, prompt)
-        # end_time = time.perf_counter() - start_time
-
-        # assistant_reply = result.get("response", "")
-        # memory.add_turn(user_text, assistant_reply)
-
-        # console.print_json(data=result)
-
-        # STREAM Prompt
-        # assistant_reply = ""
-        # console.print("[bold cyan]Assistant:[/bold cyan] ", end="")
-
-        # for token in stream_llm(SYSTEM_PROMPT, prompt):
-        #     assistant_reply += token
-        #     console.print(token, end="")
-
-        # console.print()
-        # memory.add_turn(user_text, assistant_reply)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
