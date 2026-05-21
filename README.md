@@ -216,14 +216,15 @@ for Docker Compose validation and does not change the default deterministic test
 path:
 
 ```powershell
-$env:E2E_BASE_URL = "http://127.0.0.1:8001"
+$env:E2E_BASE_URL = "http://localhost"
 pytest tests/e2e/test_chainlit_smoke.py
 ```
 
-When `E2E_BASE_URL` points at the Compose Web UI, the test is a local
-integration check against the real FastAPI backend and mounted model. Keep using
-plain `pytest tests/e2e` for fake-backend browser coverage, including readable
-auth failures and checks that API keys are not displayed in the browser.
+When `E2E_BASE_URL` points at the Compose proxy, the test is a local integration
+check against Caddy, the real Web UI, the real FastAPI backend, and the mounted
+model. Keep using plain `pytest tests/e2e` for fake-backend browser coverage,
+including readable auth failures and checks that API keys are not displayed in
+the browser.
 
 ## Docker
 
@@ -377,10 +378,10 @@ docker logs <container-id>
 ### Docker Compose local development
 
 Use Compose to run the FastAPI backend and Chainlit Web UI as separate
-containers on one local Docker network. The backend mounts `./models` read-only
-at `/models` and requests GPU access. The Web UI does not mount the model
-directory and calls FastAPI over the internal Compose URL
-`http://fastapi:8000`.
+containers on one local Docker network, with Caddy as the preferred local entry
+point. The backend mounts `./models` read-only at `/models` and requests GPU
+access. The Web UI does not mount the model directory and calls FastAPI over the
+internal Compose URL `http://fastapi:8000`, not through Caddy.
 
 Create a local Compose env file from the template and set the model filename and
 shared API key for your machine:
@@ -400,7 +401,7 @@ Build both images:
 docker compose build
 ```
 
-Start both services:
+Start the stack:
 
 ```powershell
 docker compose up
@@ -412,18 +413,43 @@ Or rebuild and start in one command:
 docker compose up --build
 ```
 
-Open:
+Open through Caddy:
 
-- FastAPI docs: `http://127.0.0.1:8000/docs`
-- Chainlit Web UI: `http://127.0.0.1:8001`
+- Chainlit Web UI: `http://localhost/`
+- FastAPI health through the proxy: `http://localhost/api/health`
+- FastAPI protected API through the proxy: `http://localhost/api/chat`
 
-Inside Compose, the Web UI reaches FastAPI at `http://fastapi:8000`. From the
-host, use `http://127.0.0.1:8000` for FastAPI and `http://127.0.0.1:8001` for
-the Web UI.
+From another device on the same home network, replace `localhost` with the host
+machine's LAN IP address:
+
+- Web UI: `http://<host-lan-ip>/`
+- FastAPI health: `http://<host-lan-ip>/api/health`
+- FastAPI API: `http://<host-lan-ip>/api/chat`
+
+If your router DNS, local hosts files, or mDNS setup maps `agent.local` to the
+Docker host, you can use friendlier LAN URLs:
+
+- Web UI: `http://agent.local/`
+- FastAPI health: `http://agent.local/api/health`
+- FastAPI full response: `http://agent.local/api/chat`
+- FastAPI streaming alias: `http://agent.local/api/stream`
+
+Caddy does not create the `agent.local` name by itself; LAN devices must resolve
+that name to the host running Docker.
+
+Inside Compose, the Web UI still reaches FastAPI at `http://fastapi:8000`.
+Direct host ports remain published for development fallbacks:
+
+- FastAPI direct: `http://127.0.0.1:8000`
+- Chainlit direct: `http://127.0.0.1:8001`
+
+Later deployments can remove direct host exposure for FastAPI and Web UI if
+Caddy is the only required local origin.
 
 Useful log commands:
 
 ```powershell
+docker compose logs -f caddy
 docker compose logs -f webui
 docker compose logs -f fastapi
 ```
@@ -437,7 +463,7 @@ docker compose down
 Validate the Compose network path through the Web UI server:
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:8001/webui/backend-status
+Invoke-RestMethod http://localhost/webui/backend-status
 ```
 
 Protected FastAPI endpoints should still reject missing API keys:
@@ -445,11 +471,53 @@ Protected FastAPI endpoints should still reject missing API keys:
 ```powershell
 Invoke-WebRequest `
   -UseBasicParsing `
-  -Uri http://127.0.0.1:8000/api/chat `
+  -Uri http://localhost/api/chat `
   -Method Post `
   -ContentType "application/json" `
   -Body '{"message":"Define recursion in simple terms"}'
 ```
+
+Then send the same request with the configured API key. Chat requests initialise
+the local model lazily, so the first authenticated request can take longer than
+the proxy health check:
+
+```powershell
+$body = @{
+  message = "Define recursion in simple terms"
+  mode = "definition"
+} | ConvertTo-Json -Compress
+Invoke-RestMethod `
+  -Uri http://localhost/api/chat `
+  -Method Post `
+  -ContentType "application/json" `
+  -Headers @{"X-API-Key" = $env:FASTAPI_API_KEY} `
+  -Body $body
+```
+
+Streaming through Caddy uses the same `/api` path:
+
+```powershell
+$streamBody = @{
+  message = "Translate this sentence to isiXhosa: Good morning"
+  mode = "translation"
+} | ConvertTo-Json -Compress
+Invoke-WebRequest `
+  -UseBasicParsing `
+  -Uri http://localhost/api/chat/stream `
+  -Method Post `
+  -ContentType "application/json" `
+  -Headers @{"X-API-Key" = $env:FASTAPI_API_KEY} `
+  -Body $streamBody
+```
+
+Caddy access logs are written to stdout and can be followed with
+`docker compose logs -f caddy`. Request headers are removed from the Caddy
+access log so API key headers are not logged.
+
+Cloudflare Tunnel is not part of this Compose file. For future domain routing,
+run Cloudflare Tunnel outside Compose and point it at the host Caddy port, for
+example `http://localhost:80`. Cloudflare will handle public HTTPS for the
+domain; Caddy remains the local HTTP origin.
 
 ### Docker implementation summary
 
@@ -467,6 +535,8 @@ Invoke-WebRequest `
   `uvicorn app.api.main:app` without reload.
 - The Web UI container exposes port `8001` and runs Chainlit headlessly.
 - Docker health checks call FastAPI `/health` and the Chainlit root route.
+- Caddy exposes port `80`, routes `/` to Chainlit, routes `/api/*` to FastAPI,
+  and provides `/api/health` as a proxy alias for FastAPI `/health`.
 
 ### Docker known limitations
 
@@ -483,17 +553,26 @@ Invoke-WebRequest `
 - Chat endpoints load the model lazily on first use, so the first model-backed
   request can take significantly longer than `/health`.
 - The API key authenticates the calling service, not individual browser users.
-- Reverse proxy, HTTPS/TLS termination, domain deployment, and user login are
+- Cloudflare Tunnel config, public domain routing, and user login are
   intentionally outside this local Docker setup.
+- Public HTTPS is expected to be handled by Cloudflare Tunnel later; Caddy runs
+  HTTP locally for now.
+- Load balancing is not configured because the Compose stack runs one FastAPI
+  container and one Web UI container.
 
 ## Bruno API client
 
 Git-tracked Bruno collections live in `bruno/local-language-agent-api`.
 
 Open that folder in Bruno and select either the `Local` or `Docker`
-environment. Both target `http://127.0.0.1:8000`, so the same requests validate
-the local uvicorn app and the Dockerized app as long as the container publishes
-port `8000`.
+environment. For the Compose reverse proxy workflow, set the Docker
+environment `baseUrl` to `http://localhost` and keep API request paths under
+`/api/...`. Protected API requests still require `X-API-Key`.
+
+The public FastAPI health endpoint is direct at `/health`, while the Caddy
+proxy exposes it as `/api/health`. Use `http://localhost/api/health` for proxy
+health checks, or the direct FastAPI port `http://127.0.0.1:8000/health` when
+testing the backend without Caddy.
 
 The `Local` and `Docker` Bruno environments include an `apiKey` placeholder.
 Set it to the same value as `FASTAPI_API_KEY`; protected chat requests send it

@@ -1,0 +1,51 @@
+{
+	log {
+		output stdout
+		format filter {
+			wrap console
+			fields {
+				request>headers delete
+			}
+		}
+	}
+}
+
+:80 {
+	encode zstd gzip
+
+	log {
+		output stdout
+		format filter {
+			wrap console
+			fields {
+				request>headers delete
+			}
+		}
+	}
+
+	handle /api/health {
+		rewrite * /health
+		reverse_proxy fastapi:8000 {
+			header_up Host {host}
+		}
+	}
+
+	handle /api/stream {
+		rewrite * /api/chat/stream
+		reverse_proxy fastapi:8000 {
+			header_up Host {host}
+		}
+	}
+
+	handle /api/* {
+		reverse_proxy fastapi:8000 {
+			header_up Host {host}
+		}
+	}
+
+	handle {
+		reverse_proxy webui:8001 {
+			header_up Host {host}
+		}
+	}
+}
