@@ -1,8 +1,10 @@
+import asyncio
 import logging
 import os
 
 import chainlit as cl
 from chainlit.input_widget import Select
+from chainlit.server import app as chainlit_app
 
 from client import (
     BackendClientError,
@@ -14,6 +16,7 @@ from client import (
     BackendUnavailableError,
     FastAPIClient,
 )
+from modes import starter_mode_for_values
 from renderer import render_chat_response
 
 logger = logging.getLogger(__name__)
@@ -21,6 +24,8 @@ logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
+BACKEND_STATUS_ATTEMPTS = 3
+BACKEND_STATUS_RETRY_COOLDOWN_SECONDS = 1
 SESSION_MODE_KEY = "selected_mode"
 MODE_AUTO = "auto"
 STREAMING_MODES = {"translation", "learning"}
@@ -38,6 +43,68 @@ MODE_DESCRIPTIONS = {
     "learning": "Ask for language-learning help with live feedback.",
     "general": "Ask a general language-agent question with a full response.",
 }
+
+
+@chainlit_app.get("/webui/backend-status")
+async def backend_status() -> dict[str, str]:
+    client = get_backend_client()
+    last_error: BackendClientError | None = None
+    for attempt in range(1, BACKEND_STATUS_ATTEMPTS + 1):
+        try:
+            health = await client.health()
+        except BackendClientError as error:
+            last_error = error
+            logger.warning(
+                "webui_landing_backend_status_failed attempt=%d attempts=%d category=%s",
+                attempt,
+                BACKEND_STATUS_ATTEMPTS,
+                error.category,
+            )
+            if attempt < BACKEND_STATUS_ATTEMPTS:
+                await asyncio.sleep(BACKEND_STATUS_RETRY_COOLDOWN_SECONDS)
+            continue
+
+        status = str(health.get("status", "unknown"))
+        return {
+            "status": "online" if status == "ok" else "offline",
+            "target": client.config.base_url,
+            "message": "Online" if status == "ok" else "Offline",
+        }
+
+    if last_error:
+        logger.info(
+            "webui_landing_backend_status_offline attempts=%d category=%s",
+            BACKEND_STATUS_ATTEMPTS,
+            last_error.category,
+        )
+
+    return {
+        "status": "offline",
+        "target": client.config.base_url,
+        "message": "Offline",
+    }
+
+
+def prioritize_backend_status_route() -> None:
+    status_index = None
+    catch_all_index = None
+    for index, route in enumerate(chainlit_app.routes):
+        path = getattr(route, "path", "")
+        if path == "/webui/backend-status":
+            status_index = index
+        elif path == "/{full_path:path}" and catch_all_index is None:
+            catch_all_index = index
+
+    if (
+        status_index is not None
+        and catch_all_index is not None
+        and status_index > catch_all_index
+    ):
+        route = chainlit_app.routes.pop(status_index)
+        chainlit_app.routes.insert(catch_all_index, route)
+
+
+prioritize_backend_status_route()
 
 
 def get_selected_mode() -> str:
@@ -121,33 +188,8 @@ async def set_starters() -> list[cl.Starter]:
 @cl.on_chat_start
 async def on_chat_start() -> None:
     cl.user_session.set(SESSION_MODE_KEY, MODE_AUTO)
-    client = get_backend_client()
-    logger.info("webui_chat_start base_url=%s", client.config.base_url)
-    backend_status = "Not checked"
-    try:
-        health = await client.health()
-        backend_status = f"Connected ({health.get('status', 'unknown')})"
-    except BackendClientError as error:
-        backend_status = f"Unavailable - {error}"
-        logger.warning(
-            "webui_chat_start_backend_health_failed category=%s",
-            error.category,
-        )
-
+    logger.info("webui_chat_start default_mode=%s", MODE_AUTO)
     await send_mode_settings()
-    await cl.Message(
-        content=(
-            "Welcome to the Local Language Agent.\n\n"
-            "Use this chat for translation, definitions, language learning, "
-            "general responses, or automatic intent routing.\n\n"
-            f"Backend target: `{client.config.base_url}`\n"
-            f"Backend health: `{backend_status}`\n\n"
-            "Choose a response mode from the selector, or start with one of the "
-            "examples below. This chat connects to the local language service "
-            "shown above."
-        ),
-        actions=mode_actions(),
-    ).send()
 
 
 @cl.on_settings_update
@@ -191,6 +233,12 @@ async def on_message(message: cl.Message) -> None:
         ).send()
         return
 
+    starter_mode = starter_mode_for_message(message)
+    if starter_mode:
+        cl.user_session.set(SESSION_MODE_KEY, starter_mode)
+        await send_mode_settings(starter_mode)
+        logger.info("webui_starter_mode_selected mode=%s", starter_mode)
+
     selected_mode = get_selected_mode()
     api_mode = api_mode_value(selected_mode)
     client = get_backend_client()
@@ -224,6 +272,10 @@ async def on_message(message: cl.Message) -> None:
         )
         response.content = format_ui_error(error)
         await response.update()
+
+
+def starter_mode_for_message(message: cl.Message) -> str | None:
+    return starter_mode_for_values(getattr(message, "command", None), message.content)
 
 
 async def send_full_backend_response(
@@ -310,48 +362,38 @@ async def stream_backend_response(
 def format_ui_error(error: BackendClientError) -> str:
     if isinstance(error, BackendUnavailableError):
         return (
-            "**Backend unavailable**\n\n"
+            "**Service unavailable**\n\n"
             "The language service is not reachable right now. Start the local "
-            "service, then try again.\n\n"
-            f"`{error}`"
+            "service, then try again."
         )
     if isinstance(error, BackendTimeoutError):
         return (
-            "**Backend timeout**\n\n"
+            "**Service timeout**\n\n"
             "The language service took too long to answer. It may still be "
-            "loading or working on your request. Try again in a moment.\n\n"
-            f"`{error}`"
+            "loading or working on your request. Try again in a moment."
         )
     if isinstance(error, BackendHTTPError):
         if error.error_code == "unsupported_mode":
             return (
                 "**Unsupported mode**\n\n"
                 "This response mode is not available for that request. Try Auto "
-                "or choose a different mode.\n\n"
-                f"`{error}`"
+                "or choose a different mode."
             )
         return (
             "**Request failed**\n\n"
             "The language service could not complete the request. Try again, or "
-            "choose a different response mode.\n\n"
-            f"`{error}`"
+            "choose a different response mode."
         )
     if isinstance(error, BackendInvalidResponseError):
         return (
             "**Response could not be displayed**\n\n"
             "The language service answered in a format this chat could not "
-            "display. Try again.\n\n"
-            f"`{error}`"
+            "display. Try again."
         )
     if isinstance(error, BackendStreamError):
         return (
             "**Streaming error**\n\n"
             "The response was interrupted while it was being displayed. Try "
-            "again, or choose a full-response mode.\n\n"
-            f"`{error}`"
+            "again, or choose a full-response mode."
         )
-    return (
-        "**Backend request failed**\n\n"
-        "The chat could not complete the request. Try again.\n\n"
-        f"`{error}`"
-    )
+    return "**Request failed**\n\nThe chat could not complete the request. Try again."
