@@ -94,6 +94,32 @@ Then use the Web UI against the same backend URL:
 5. Stop the backend and send another message; the UI should show a clear backend
    unavailable message.
 
+### Local Browser Tests
+
+The local Playwright tests live in `tests/e2e/`. They start a fake backend and
+the Chainlit Web UI locally, so they do not require Docker or a GGUF model.
+
+Install test dependencies and browser binaries:
+
+```powershell
+pip install -r tests/e2e/requirements.txt
+python -m playwright install chromium
+```
+
+Run the browser tests:
+
+```powershell
+pytest tests/e2e
+```
+
+Run them headed:
+
+```powershell
+pytest tests/e2e --headed
+```
+
+See `tests/e2e/README.md` for single-file and single-test commands.
+
 ### Implementation Summary
 
 - `app.py` owns Chainlit callbacks, mode controls, starters, and UI messages.

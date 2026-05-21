@@ -6,6 +6,7 @@
     '[data-testid="message"]',
     ".message-content",
   ];
+  let latestStatusData = null;
 
   function hasConversationMessages() {
     return MESSAGE_SELECTORS.some((selector) => document.querySelector(selector));
@@ -67,6 +68,7 @@
     }
 
     composerHost.parentElement.insertBefore(card, composerHost);
+    if (latestStatusData) applyStatusToCard(card, latestStatusData);
     return card;
   }
 
@@ -89,8 +91,15 @@
   }
 
   function updateStatusCard(data) {
+    latestStatusData = data;
     const card = createStatusCard();
     if (!card) return;
+    applyStatusToCard(card, data);
+    setRefreshLoading(card, false);
+    syncVisibility();
+  }
+
+  function applyStatusToCard(card, data) {
     const online = data && data.status === "online";
     card.classList.toggle("lla-status-online", online);
     card.classList.toggle("lla-status-offline", !online);
@@ -100,8 +109,6 @@
     const target = card.querySelector(".lla-status-target");
     if (title) title.textContent = online ? "Language service online" : "Language service offline";
     if (target) target.textContent = `Backend target: ${data && data.target ? data.target : "not configured"}`;
-    setRefreshLoading(card, false);
-    syncVisibility();
   }
 
   function setPending() {

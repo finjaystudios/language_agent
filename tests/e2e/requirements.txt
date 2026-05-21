@@ -1,0 +1,5 @@
+-r ../../webui/requirements.txt
+pytest
+playwright
+pytest-playwright
+requests

@@ -171,6 +171,17 @@ Pop-Location
 The backend and Web UI intentionally use different ports because they are
 separate applications and will later be deployed as separate containers.
 
+### Web UI Browser Tests
+
+Local Playwright tests for the Chainlit Web UI live in `tests/e2e/`. They start
+a deterministic fake backend and do not require Docker or the GGUF model:
+
+```powershell
+pip install -r tests/e2e/requirements.txt
+python -m playwright install chromium
+pytest tests/e2e
+```
+
 ## Docker
 
 ### Prerequisites
