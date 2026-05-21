@@ -1,0 +1,145 @@
+# Reverse Proxy Architecture
+
+## Decision
+
+Caddy is the selected reverse proxy for this project.
+
+The project is a good fit for Caddy because:
+
+- Caddy uses a small, readable `Caddyfile`.
+- It fits naturally as a third Docker Compose service.
+- Reverse proxy support is built in and does not require extra modules.
+- The configuration is simpler than nginx for this local path-based routing
+  setup.
+
+## Current Services
+
+FastAPI and the Chainlit Web UI remain separate applications and separate
+containers. The reverse proxy does not merge them.
+
+| Compose service | Container port | Current internal URL | Purpose |
+| --- | ---: | --- | --- |
+| `fastapi` | `8000` | `http://fastapi:8000` | FastAPI backend API |
+| `webui` | `8001` | `http://webui:8001` | Chainlit browser UI |
+
+The Web UI is already configured with `FASTAPI_BASE_URL=http://fastapi:8000`,
+so server-side Web UI calls to FastAPI continue to use the internal Docker
+network directly. The shared API key authentication between Web UI and FastAPI
+must remain in place.
+
+## FastAPI Routes
+
+The FastAPI application currently exposes:
+
+| Method | Path | Auth | Notes |
+| --- | --- | --- | --- |
+| `GET` | `/health` | Public | Container health check and local service probe. |
+| `GET` | `/` | Public | Basic service metadata. |
+| `POST` | `/api/chat` | `X-API-Key` | Full language-agent response. |
+| `POST` | `/api/chat/stream` | `X-API-Key` | Server-Sent Events streaming response. |
+
+The chat router already uses the `/api` prefix. Caddy should preserve the
+incoming `/api/*` path when proxying to FastAPI. It should not strip `/api` and
+then re-add it, because that would risk double-prefixing or routing to the
+wrong backend path.
+
+## Intended Local Routing
+
+Path-based routing will be used.
+
+| Public local route | Caddy upstream | Result |
+| --- | --- | --- |
+| `http://localhost/` | `http://webui:8001` | Chainlit Web UI |
+| `http://<host-lan-ip>/` | `http://webui:8001` | Chainlit Web UI from another LAN device |
+| `http://localhost/api/*` | `http://fastapi:8000` | FastAPI API endpoint |
+| `http://<host-lan-ip>/api/*` | `http://fastapi:8000` | FastAPI API endpoint from another LAN device |
+
+The intended Caddy routing shape is:
+
+```caddyfile
+:80 {
+    handle /api/* {
+        reverse_proxy fastapi:8000
+    }
+
+    handle {
+        reverse_proxy webui:8001
+    }
+}
+```
+
+This preserves FastAPI paths such as `/api/chat` and `/api/chat/stream`.
+
+## Traffic Flow
+
+LAN browser to Web UI:
+
+```text
+Browser on local network -> host port exposed by Caddy -> Caddy -> webui:8001
+```
+
+LAN client to FastAPI API:
+
+```text
+Browser or API client on local network -> host port exposed by Caddy -> Caddy /api/* -> fastapi:8000
+```
+
+Web UI server-side backend calls:
+
+```text
+webui container -> Docker Compose network -> fastapi:8000
+```
+
+Future public access:
+
+```text
+Cloudflare Tunnel outside Docker Compose -> host port exposed by Caddy -> Caddy -> webui or fastapi
+```
+
+Cloudflare Tunnel is intentionally outside this Compose stack. This feature
+does not add Cloudflare services, tunnel configuration, domain routing, or
+public deployment settings to `compose.yml`.
+
+## TLS Boundary
+
+The local Docker Compose deployment can run plain HTTP for now. Caddy local TLS
+is optional and is not required for this feature unless a later local
+development requirement explicitly adds it.
+
+Public HTTPS will be handled by Cloudflare Tunnel when domain routing is
+configured outside Docker Compose. In that future shape, Cloudflare terminates
+public HTTPS and forwards traffic through the tunnel to the host port exposed by
+Caddy.
+
+## Compose Direction
+
+When the reverse proxy service is implemented, Caddy should be added as a third
+service in Docker Compose. The existing internal service addresses should remain
+valid:
+
+- FastAPI inside Compose: `http://fastapi:8000`
+- Web UI inside Compose: `http://webui:8001`
+
+Caddy will expose a host port, expected to be port `80` for local HTTP routing,
+so LAN devices can use `http://<host-lan-ip>/`. Cloudflare Tunnel will later
+target that same host-side Caddy port.
+
+## Limitations
+
+- No Cloudflare Tunnel service is added to Docker Compose.
+- No domain deployment or Cloudflare routing is implemented here.
+- No user login is added.
+- Existing FastAPI API key authentication is retained.
+- No secrets should be written into the Caddyfile, Compose file, or docs.
+- No load balancing is needed for the current single FastAPI container and
+  single Web UI container.
+- `/api/*` is the public FastAPI API route through Caddy. Other backend paths,
+  such as `/health`, remain backend service endpoints unless a future task
+  deliberately exposes them through the proxy.
+
+## Validation
+
+Before adding a Caddy service, `docker compose config` was run against the
+current Compose file and completed successfully. `docker compose ps` showed no
+currently running Compose containers, so no running stack was changed while
+preparing this architecture plan.
