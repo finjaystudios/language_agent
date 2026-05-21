@@ -4,11 +4,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
+from app.api.auth import require_api_key
 from app.api.dependencies import get_agent_service
 from app.api.models import ChatRequest, ChatResponse, ErrorResponse, StreamChatRequest
 from app.services.agent_service import AgentService
 
-router = APIRouter(prefix="/api", tags=["chat"])
+router = APIRouter(
+    prefix="/api", tags=["chat"], dependencies=[Depends(require_api_key)]
+)
 logger = logging.getLogger(__name__)
 
 
@@ -17,13 +20,14 @@ logger = logging.getLogger(__name__)
     response_model=ChatResponse,
     responses={
         400: {"model": ErrorResponse, "description": "Invalid client input."},
+        401: {"model": ErrorResponse, "description": "Missing or invalid API key."},
         422: {
             "model": ErrorResponse,
             "description": "Request schema validation failed.",
         },
         500: {
             "model": ErrorResponse,
-            "description": "LLM or internal service failure.",
+            "description": "LLM, authentication configuration, or internal service failure.",
         },
     },
     summary="Create a full language-agent response",
@@ -55,13 +59,14 @@ async def chat_full(
             "model": ErrorResponse,
             "description": "Mode does not support streaming.",
         },
+        401: {"model": ErrorResponse, "description": "Missing or invalid API key."},
         422: {
             "model": ErrorResponse,
             "description": "Request schema validation failed.",
         },
         500: {
             "model": ErrorResponse,
-            "description": "LLM or internal service failure.",
+            "description": "LLM, authentication configuration, or internal service failure.",
         },
     },
     summary="Stream a language-agent response as Server-Sent Events",
