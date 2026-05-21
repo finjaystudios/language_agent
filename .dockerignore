@@ -20,9 +20,12 @@ __pycache__
 .vscode
 .idea
 .codex
+/.chainlit
 bruno
 tests
 models
+webui/.files
+webui/.chainlit/translations
 *.gguf
 *.ggml
 *.bin

@@ -78,12 +78,38 @@ $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
 $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
+$env:DEBUG = "false"
 Push-Location webui
 chainlit run app.py --host 127.0.0.1 --port 8001
 Pop-Location
 ```
 
 Open `http://127.0.0.1:8001`.
+
+### Run Chainlit Through Docker
+
+Build the Web UI image from the repository root:
+
+```powershell
+docker build -f Dockerfile.webui -t local-language-agent-webui .
+```
+
+Run it against a FastAPI backend reachable from the container:
+
+```powershell
+docker run --rm -p 8001:8001 `
+  -e FASTAPI_BASE_URL=http://host.docker.internal:8000 `
+  -e FASTAPI_API_KEY=local-dev-change-me `
+  -e WEBUI_HOST=0.0.0.0 `
+  -e WEBUI_PORT=8001 `
+  -e DEBUG=false `
+  -e LOG_LEVEL=INFO `
+  local-language-agent-webui
+```
+
+When running Web UI and FastAPI containers on the same Docker network, set
+`FASTAPI_BASE_URL=http://fastapi:8000`. The Web UI image does not include or
+mount model files; it only calls the FastAPI backend over HTTP.
 
 ### Testing With Bruno and the Web UI
 
