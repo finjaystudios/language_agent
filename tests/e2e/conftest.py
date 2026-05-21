@@ -14,6 +14,7 @@ import requests
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WEBUI_DIR = REPO_ROOT / "webui"
+E2E_BASE_URL_ENV = "E2E_BASE_URL"
 
 
 def free_port() -> int:
@@ -121,7 +122,21 @@ def fake_backend() -> Iterator[str]:
 
 
 @pytest.fixture(scope="session")
-def chainlit_url(fake_backend: str) -> Iterator[str]:
+def external_chainlit_url() -> str | None:
+    value = os.getenv(E2E_BASE_URL_ENV, "").strip()
+    return value.rstrip("/") if value else None
+
+
+@pytest.fixture(scope="session")
+def chainlit_url(
+    request: pytest.FixtureRequest, external_chainlit_url: str | None
+) -> Iterator[str]:
+    if external_chainlit_url:
+        wait_for_http(external_chainlit_url)
+        yield external_chainlit_url
+        return
+
+    fake_backend = request.getfixturevalue("fake_backend")
     port, process = start_chainlit(fake_backend, name="chainlit-webui")
     try:
         yield f"http://127.0.0.1:{port}"
@@ -190,7 +205,30 @@ def chainlit_process_factory():
 
 
 @pytest.fixture()
-def reset_fake_backend(fake_backend: str) -> None:
+def requires_fake_backend(external_chainlit_url: str | None) -> None:
+    if external_chainlit_url:
+        pytest.skip(
+            f"This test asserts fake-backend behavior; unset {E2E_BASE_URL_ENV} "
+            "to run it against the deterministic fake backend."
+        )
+
+
+@pytest.fixture()
+def requires_managed_chainlit(external_chainlit_url: str | None) -> None:
+    if external_chainlit_url:
+        pytest.skip(
+            f"This test starts its own Chainlit process; unset {E2E_BASE_URL_ENV} "
+            "to run it against the deterministic fake backend."
+        )
+
+
+@pytest.fixture()
+def reset_fake_backend(fake_backend: str, external_chainlit_url: str | None) -> None:
+    if external_chainlit_url:
+        pytest.skip(
+            f"This test asserts fake-backend requests; unset {E2E_BASE_URL_ENV} "
+            "to run it against the deterministic fake backend."
+        )
     requests.post(f"{fake_backend}/test/reset", timeout=2)
 
 

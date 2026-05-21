@@ -1,8 +1,8 @@
 ## Chainlit Web UI
 
 The Web UI lives in `webui/` as a separate Chainlit application. It communicates
-with the FastAPI backend only over HTTP and is intended to be deployed separately
-from the backend in a later Web UI Docker feature.
+with the FastAPI backend only over HTTP and is deployed separately from the
+backend in its own Docker image.
 
 ### Install Dependencies
 
@@ -78,12 +78,61 @@ $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
 $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
+$env:DEBUG = "false"
 Push-Location webui
 chainlit run app.py --host 127.0.0.1 --port 8001
 Pop-Location
 ```
 
 Open `http://127.0.0.1:8001`.
+
+### Run Chainlit Through Docker
+
+Build the Web UI image from the repository root:
+
+```powershell
+docker build -f Dockerfile.webui -t local-language-agent-webui .
+```
+
+Run it against a FastAPI backend reachable from the container:
+
+```powershell
+docker run --rm -p 8001:8001 `
+  -e FASTAPI_BASE_URL=http://host.docker.internal:8000 `
+  -e FASTAPI_API_KEY=local-dev-change-me `
+  -e WEBUI_HOST=0.0.0.0 `
+  -e WEBUI_PORT=8001 `
+  -e DEBUG=false `
+  -e LOG_LEVEL=INFO `
+  local-language-agent-webui
+```
+
+When running Web UI and FastAPI containers on the same Docker network, set
+`FASTAPI_BASE_URL=http://fastapi:8000`. The Web UI image does not include or
+mount model files; it only calls the FastAPI backend over HTTP.
+
+The Web UI Dockerfile is `Dockerfile.webui`. The backend Dockerfile remains the
+root `Dockerfile`.
+
+### Run FastAPI and Chainlit With Compose
+
+From the repository root, copy the Compose env template and set a local shared
+API key and mounted model filename:
+
+```powershell
+Copy-Item .env.compose.example .env
+```
+
+Build and run both separate containers:
+
+```powershell
+docker compose up --build
+```
+
+Open `http://127.0.0.1:8001`. The Web UI service uses
+`FASTAPI_BASE_URL=http://fastapi:8000` inside the Compose network. Only the
+FastAPI service mounts `./models:/models:ro`; the Web UI service never mounts or
+loads model files.
 
 ### Testing With Bruno and the Web UI
 
@@ -132,6 +181,19 @@ pytest tests/e2e --headed
 
 See `tests/e2e/README.md` for single-file and single-test commands.
 
+To smoke-test a Web UI that is already running, including the Docker Compose Web
+UI, set `E2E_BASE_URL` and run the smoke test:
+
+```powershell
+$env:E2E_BASE_URL = "http://127.0.0.1:8001"
+pytest tests/e2e/test_chainlit_smoke.py
+```
+
+The full fake-backend browser suite remains the default because it is
+deterministic and does not require the real LLM. Compose-based browser checks
+use the real backend and mounted model, so treat them as local integration
+tests.
+
 ### Implementation Summary
 
 - `app.py` owns Chainlit callbacks, mode controls, starters, and UI messages.
@@ -148,11 +210,13 @@ See `tests/e2e/README.md` for single-file and single-test commands.
 
 - The Web UI does not load the LLM directly.
 - The Web UI requires the FastAPI backend to be running for model-backed chat.
+- The Web UI requires `FASTAPI_API_KEY` to match the FastAPI backend key.
 - The FastAPI backend requires the local model to be mounted/configured.
+- The FastAPI Docker setup requires GPU access for the current model runtime.
 - The Web UI and FastAPI backend are separate applications and separate
   processes.
-- Web UI Dockerization is handled by the later `Docker Container: Web UI`
-  feature.
+- Reverse proxy, HTTPS/TLS termination, domain deployment, and user login are
+  separate future features.
 - Browser-based CORS changes are not needed yet because Chainlit server-side
   code calls FastAPI directly. FastAPI supports explicit `CORS_ALLOWED_ORIGINS`
   for future browser-origin API access.

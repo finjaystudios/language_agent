@@ -211,20 +211,47 @@ python -m playwright install chromium
 pytest tests/e2e
 ```
 
+To target a Web UI that is already running, set `E2E_BASE_URL`. This is useful
+for Docker Compose validation and does not change the default deterministic test
+path:
+
+```powershell
+$env:E2E_BASE_URL = "http://127.0.0.1:8001"
+pytest tests/e2e/test_chainlit_smoke.py
+```
+
+When `E2E_BASE_URL` points at the Compose Web UI, the test is a local
+integration check against the real FastAPI backend and mounted model. Keep using
+plain `pytest tests/e2e` for fake-backend browser coverage, including readable
+auth failures and checks that API keys are not displayed in the browser.
+
 ## Docker
 
 ### Prerequisites
 
 - Docker with BuildKit enabled.
-- NVIDIA GPU, working host NVIDIA drivers, and Docker GPU support such as
-  NVIDIA Container Toolkit.
-- A local GGUF model file stored outside the image, for example in `models/`.
-- Environment values based on `.env.example`, especially `LLM_MODEL_PATH`.
+- For FastAPI only: NVIDIA GPU, working host NVIDIA drivers, and Docker GPU
+  support such as NVIDIA Container Toolkit.
+- For FastAPI only: a local GGUF model file stored outside the image, for
+  example in `models/`.
+- Environment values based on `.env.example` or `.env.compose.example`,
+  especially `FASTAPI_API_KEY` and `LLM_MODEL_PATH`.
+
+Dockerfiles:
+
+- FastAPI backend: `Dockerfile`
+- Chainlit Web UI: `Dockerfile.webui`
 
 Build the FastAPI backend image:
 
 ```powershell
 docker build -t local-language-agent-api .
+```
+
+Build the Chainlit Web UI image:
+
+```powershell
+docker build -f Dockerfile.webui -t local-language-agent-webui .
 ```
 
 The Dockerfile includes a container health check that calls `GET /health`.
@@ -254,6 +281,9 @@ support such as NVIDIA Container Toolkit, and a CUDA-compatible
 `llama-cpp-python` wheel. The Dockerfile installs `llama_cpp_python==0.3.4` from
 the cu124 wheel index by default.
 
+The Web UI image does not need GPU access and must not mount `./models`. It only
+needs network access to FastAPI and the same `FASTAPI_API_KEY` value.
+
 Container environment variables:
 
 | Variable | Default | Description |
@@ -273,6 +303,18 @@ Container environment variables:
 If `LLM_MODEL_PATH` is missing, or if the mounted file does not exist, the app
 fails during LLM initialisation with a configuration error. It does not download
 models or fall back to an unrelated local path.
+
+Web UI container environment variables:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FASTAPI_BASE_URL` | `http://fastapi:8000` | FastAPI URL called by server-side Chainlit code. |
+| `FASTAPI_API_KEY` | None | Shared backend API key. Must match FastAPI. |
+| `WEBUI_HOST` | `0.0.0.0` | Chainlit bind host inside the container. |
+| `WEBUI_PORT` | `8001` | Chainlit port inside the container. |
+| `WEBUI_REQUEST_TIMEOUT_SECONDS` | `120` | Backend request timeout. |
+| `WEBUI_STREAMING_ENABLED` | `true` | Enables streaming for supported modes. |
+| `LOG_LEVEL` | `INFO` | Web UI server logging level. |
 
 ### Container validation
 
@@ -332,30 +374,112 @@ Application logs are written to stdout/stderr and can be viewed with:
 docker logs <container-id>
 ```
 
+### Docker Compose local development
+
+Use Compose to run the FastAPI backend and Chainlit Web UI as separate
+containers on one local Docker network. The backend mounts `./models` read-only
+at `/models` and requests GPU access. The Web UI does not mount the model
+directory and calls FastAPI over the internal Compose URL
+`http://fastapi:8000`.
+
+Create a local Compose env file from the template and set the model filename and
+shared API key for your machine:
+
+```powershell
+Copy-Item .env.compose.example .env
+```
+
+Build both images:
+
+```powershell
+docker compose build
+```
+
+Start both services:
+
+```powershell
+docker compose up
+```
+
+Or rebuild and start in one command:
+
+```powershell
+docker compose up --build
+```
+
+Open:
+
+- FastAPI docs: `http://127.0.0.1:8000/docs`
+- Chainlit Web UI: `http://127.0.0.1:8001`
+
+Inside Compose, the Web UI reaches FastAPI at `http://fastapi:8000`. From the
+host, use `http://127.0.0.1:8000` for FastAPI and `http://127.0.0.1:8001` for
+the Web UI.
+
+Useful log commands:
+
+```powershell
+docker compose logs -f webui
+docker compose logs -f fastapi
+```
+
+Stop and remove the local containers:
+
+```powershell
+docker compose down
+```
+
+Validate the Compose network path through the Web UI server:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8001/webui/backend-status
+```
+
+Protected FastAPI endpoints should still reject missing API keys:
+
+```powershell
+Invoke-WebRequest `
+  -UseBasicParsing `
+  -Uri http://127.0.0.1:8000/api/chat `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{"message":"Define recursion in simple terms"}'
+```
+
 ### Docker implementation summary
 
-- The image uses `python:3.11-slim` and installs only backend runtime
-  dependencies.
+- Both images use `python:3.11-slim`.
+- The backend image installs only backend runtime dependencies.
+- The Web UI image installs only `webui/requirements.txt` dependencies and
+  copies only Web UI Python files, Chainlit config, `chainlit.md`, and public
+  assets.
 - BuildKit cache mounts are used for apt and pip downloads to speed up rebuilds.
-- The CUDA `llama_cpp_python==0.3.4` wheel is installed from the cu124 index.
+- The backend CUDA `llama_cpp_python==0.3.4` wheel is installed from the cu124
+  index.
 - Local models, virtual environments, caches, tests, Bruno files, and editor
   settings are excluded from the Docker build context.
-- The container exposes port `8000` and runs `uvicorn app.api.main:app` without
-  reload.
-- Docker `HEALTHCHECK` calls `GET /health`, which does not load the LLM.
+- The backend container exposes port `8000` and runs
+  `uvicorn app.api.main:app` without reload.
+- The Web UI container exposes port `8001` and runs Chainlit headlessly.
+- Docker health checks call FastAPI `/health` and the Chainlit root route.
 
 ### Docker known limitations
 
 - CPU-only execution is not supported by this Docker setup.
-- The container expects compatible NVIDIA GPU runtime support on the host.
-- The LLM model is not included in the image and must be mounted at runtime.
-- The app fails LLM initialisation if `LLM_MODEL_PATH` is missing or points to a
-  file that is not mounted inside the container.
+- The FastAPI container expects compatible NVIDIA GPU runtime support on the
+  host.
+- The LLM model is not included in either image and must be mounted only into
+  the FastAPI container at runtime.
+- The Web UI container does not include or load the LLM.
+- The Web UI requires FastAPI to be reachable and requires a matching
+  `FASTAPI_API_KEY`.
+- The FastAPI app fails LLM initialisation if `LLM_MODEL_PATH` is missing or
+  points to a file that is not mounted inside the container.
 - Chat endpoints load the model lazily on first use, so the first model-backed
   request can take significantly longer than `/health`.
 - The API key authenticates the calling service, not individual browser users.
-- HTTPS/TLS termination and domain deployment are intentionally outside this
-  local Docker setup.
+- Reverse proxy, HTTPS/TLS termination, domain deployment, and user login are
+  intentionally outside this local Docker setup.
 
 ## Bruno API client
 

@@ -10,6 +10,7 @@ def test_backend_unavailable_message_is_readable(
     page: Page,
     unavailable_backend_url: str,
     chainlit_process_factory,
+    requires_managed_chainlit: None,
 ):
     url = chainlit_process_factory(
         unavailable_backend_url,
@@ -36,6 +37,7 @@ def test_wrong_api_key_message_is_readable(
     chainlit_process_factory,
     reset_fake_backend: None,
     backend_requests,
+    requires_managed_chainlit: None,
 ):
     url = chainlit_process_factory(
         fake_backend,
@@ -69,6 +71,7 @@ def test_missing_api_key_message_is_readable(
     chainlit_process_factory,
     reset_fake_backend: None,
     backend_requests,
+    requires_managed_chainlit: None,
 ):
     url = chainlit_process_factory(
         fake_backend,
