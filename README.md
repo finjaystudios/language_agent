@@ -389,6 +389,11 @@ shared API key for your machine:
 Copy-Item .env.compose.example .env
 ```
 
+For Compose, `LLM_MODEL_PATH` must use the in-container mount path, for example
+`/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf`. A relative host path such as
+`models/Qwen2.5-7B-Instruct-Q4_K_M.gguf` will be resolved inside the container
+as `/app/models/...` and the backend will fail to load the model.
+
 Build both images:
 
 ```powershell
