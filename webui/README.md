@@ -134,6 +134,9 @@ Open `http://127.0.0.1:8001`. The Web UI service uses
 FastAPI service mounts `./models:/models:ro`; the Web UI service never mounts or
 loads model files.
 
+Keep `LLM_MODEL_PATH` in `.env` pointed at the container path under `/models`,
+not a relative host path such as `models/...`.
+
 ### Testing With Bruno and the Web UI
 
 Use Bruno to confirm the backend independently:
