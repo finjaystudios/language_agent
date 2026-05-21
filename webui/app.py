@@ -9,12 +9,10 @@ from chainlit.server import app as chainlit_app
 from client import (
     BackendClientError,
     BackendConfig,
-    BackendHTTPError,
     BackendInvalidResponseError,
     BackendStreamError,
-    BackendTimeoutError,
-    BackendUnavailableError,
     FastAPIClient,
+    format_ui_error,
 )
 from modes import starter_mode_for_values
 from renderer import render_chat_response
@@ -313,6 +311,9 @@ async def stream_backend_response(
 
     try:
         async for event in client.chat_stream(user_text, api_mode):
+            if done_received:
+                continue
+
             response_mode = str(event.get("mode", response_mode or ""))
 
             error_message = event.get("message") if event.get("error") else None
@@ -327,7 +328,6 @@ async def stream_backend_response(
 
             if event.get("done") is True:
                 done_received = True
-                break
     except BackendClientError:
         if received_token:
             logger.warning("webui_stream_interrupted_after_tokens mode=%s", api_mode)
@@ -357,43 +357,3 @@ async def stream_backend_response(
         "response_type": "stream",
     }
     await response.update()
-
-
-def format_ui_error(error: BackendClientError) -> str:
-    if isinstance(error, BackendUnavailableError):
-        return (
-            "**Service unavailable**\n\n"
-            "The language service is not reachable right now. Start the local "
-            "service, then try again."
-        )
-    if isinstance(error, BackendTimeoutError):
-        return (
-            "**Service timeout**\n\n"
-            "The language service took too long to answer. It may still be "
-            "loading or working on your request. Try again in a moment."
-        )
-    if isinstance(error, BackendHTTPError):
-        if error.error_code == "unsupported_mode":
-            return (
-                "**Unsupported mode**\n\n"
-                "This response mode is not available for that request. Try Auto "
-                "or choose a different mode."
-            )
-        return (
-            "**Request failed**\n\n"
-            "The language service could not complete the request. Try again, or "
-            "choose a different response mode."
-        )
-    if isinstance(error, BackendInvalidResponseError):
-        return (
-            "**Response could not be displayed**\n\n"
-            "The language service answered in a format this chat could not "
-            "display. Try again."
-        )
-    if isinstance(error, BackendStreamError):
-        return (
-            "**Streaming error**\n\n"
-            "The response was interrupted while it was being displayed. Try "
-            "again, or choose a full-response mode."
-        )
-    return "**Request failed**\n\nThe chat could not complete the request. Try again."

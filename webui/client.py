@@ -11,6 +11,7 @@ import httpx
 
 DEFAULT_BASE_URL = "http://localhost:8000"
 DEFAULT_TIMEOUT_SECONDS = 120.0
+API_KEY_HEADER_NAME = "X-API-Key"
 logger = logging.getLogger(__name__)
 
 
@@ -37,6 +38,14 @@ class BackendHTTPError(BackendClientError):
         self.error_code = error_code
 
 
+class BackendAuthenticationError(BackendHTTPError):
+    category = "backend_authentication"
+
+
+class BackendAuthConfigurationError(BackendClientError):
+    category = "backend_auth_configuration"
+
+
 class BackendInvalidResponseError(BackendClientError):
     category = "backend_invalid_response"
 
@@ -50,6 +59,7 @@ class BackendConfig:
     base_url: str
     timeout_seconds: float
     streaming_enabled: bool
+    api_key: str
 
     @classmethod
     def from_env(cls) -> BackendConfig:
@@ -69,6 +79,7 @@ class BackendConfig:
                 os.getenv("WEBUI_STREAMING_ENABLED", "true"),
                 default=True,
             ),
+            api_key=os.getenv("FASTAPI_API_KEY", "").strip(),
         )
 
 
@@ -130,7 +141,11 @@ class FastAPIClient:
         )
         try:
             async with self._client() as client:
-                response = await client.post("/api/chat", json=payload)
+                response = await client.post(
+                    "/api/chat",
+                    json=payload,
+                    headers=self._auth_headers(),
+                )
         except httpx.TimeoutException as error:
             logger.warning("webui_chat_full_timeout mode=%s", mode)
             raise BackendTimeoutError(
@@ -171,7 +186,10 @@ class FastAPIClient:
                     "POST",
                     "/api/chat/stream",
                     json=payload,
+                    headers=self._auth_headers(),
                 ) as response:
+                    if response.is_error:
+                        await response.aread()
                     self._raise_for_error(response)
                     async for line in response.aiter_lines():
                         event = parse_sse_line(line)
@@ -195,6 +213,13 @@ class FastAPIClient:
         timeout = httpx.Timeout(self.config.timeout_seconds)
         return httpx.AsyncClient(base_url=self.config.base_url, timeout=timeout)
 
+    def _auth_headers(self) -> dict[str, str]:
+        if not self.config.api_key:
+            raise BackendAuthConfigurationError(
+                "The Web UI is missing the backend API key."
+            )
+        return {API_KEY_HEADER_NAME: self.config.api_key}
+
     def _json_response(self, response: httpx.Response) -> dict[str, Any]:
         self._raise_for_error(response)
         try:
@@ -214,6 +239,12 @@ class FastAPIClient:
             response.raise_for_status()
         except httpx.HTTPStatusError as error:
             message, error_code = format_backend_error(error.response)
+            if error.response.status_code == 401:
+                raise BackendAuthenticationError(
+                    "The Web UI could not authenticate with the backend.",
+                    status_code=error.response.status_code,
+                    error_code=error_code,
+                ) from error
             raise BackendHTTPError(
                 message,
                 status_code=error.response.status_code,
@@ -265,3 +296,55 @@ def format_request_error(error: httpx.RequestError) -> str:
     if message:
         return f"Could not connect to the FastAPI backend: {message}"
     return "Could not connect to the FastAPI backend."
+
+
+def format_ui_error(error: BackendClientError) -> str:
+    if isinstance(error, BackendUnavailableError):
+        return (
+            "**Service unavailable**\n\n"
+            "The language service is not reachable right now. Start the local "
+            "service, then try again."
+        )
+    if isinstance(error, BackendTimeoutError):
+        return (
+            "**Service timeout**\n\n"
+            "The language service took too long to answer. It may still be "
+            "loading or working on your request. Try again in a moment."
+        )
+    if isinstance(error, BackendHTTPError):
+        if isinstance(error, BackendAuthenticationError):
+            return (
+                "**Backend authentication failed**\n\n"
+                "The Web UI could not authenticate with the backend. Check that "
+                "the Web UI and FastAPI backend use the same API key."
+            )
+        if error.error_code == "unsupported_mode":
+            return (
+                "**Unsupported mode**\n\n"
+                "This response mode is not available for that request. Try Auto "
+                "or choose a different mode."
+            )
+        return (
+            "**Request failed**\n\n"
+            "The language service could not complete the request. Try again, or "
+            "choose a different response mode."
+        )
+    if isinstance(error, BackendInvalidResponseError):
+        return (
+            "**Response could not be displayed**\n\n"
+            "The language service answered in a format this chat could not "
+            "display. Try again."
+        )
+    if isinstance(error, BackendStreamError):
+        return (
+            "**Streaming error**\n\n"
+            "The response was interrupted while it was being displayed. Try "
+            "again, or choose a full-response mode."
+        )
+    if isinstance(error, BackendAuthConfigurationError):
+        return (
+            "**Backend authentication is not configured**\n\n"
+            "The Web UI is missing the backend API key. Configure it on the "
+            "server and try again."
+        )
+    return "**Request failed**\n\nThe chat could not complete the request. Try again."

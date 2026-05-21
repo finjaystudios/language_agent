@@ -18,6 +18,7 @@ Example local values:
 
 ```powershell
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
+$env:FASTAPI_API_KEY = "local-dev-change-me"
 $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
 ```
@@ -31,6 +32,8 @@ Terminal 1:
 
 ```powershell
 $env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+$env:AUTH_ENABLED = "true"
+$env:FASTAPI_API_KEY = "local-dev-change-me"
 python -m uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -54,6 +57,7 @@ Run it with the local model directory mounted:
 docker run --rm --gpus all -p 8000:8000 `
   --env-file .env.example `
   -e APP_HOST=0.0.0.0 `
+  -e FASTAPI_API_KEY=local-dev-change-me `
   -e LLM_MODEL_PATH=/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf `
   -v ${PWD}/models:/models `
   local-language-agent-api
@@ -68,6 +72,7 @@ Terminal 2:
 
 ```powershell
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
+$env:FASTAPI_API_KEY = "local-dev-change-me"
 $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
 Push-Location webui
@@ -124,7 +129,8 @@ See `tests/e2e/README.md` for single-file and single-test commands.
 
 - `app.py` owns Chainlit callbacks, mode controls, starters, and UI messages.
 - `client.py` owns async HTTP calls to `/health`, `/api/chat`, and
-  `/api/chat/stream`.
+  `/api/chat/stream`. It sends `X-API-Key` only on protected chat requests,
+  using the server-side `FASTAPI_API_KEY` environment variable.
 - `renderer.py` formats structured backend payloads for Translation, Definition,
   and Learning responses.
 - `.chainlit/config.toml` sets the Chainlit theme, sidebar settings, and custom

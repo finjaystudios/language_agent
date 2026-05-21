@@ -18,7 +18,13 @@ async def health() -> dict[str, str]:
 @app.post("/api/chat")
 async def chat(request: Request) -> dict[str, Any]:
     payload = await request.json()
-    REQUESTS.append({"endpoint": "/api/chat", "payload": payload})
+    REQUESTS.append(
+        {
+            "endpoint": "/api/chat",
+            "payload": payload,
+            "api_key_present": bool(request.headers.get("X-API-Key")),
+        }
+    )
     mode = payload.get("mode") or "general"
 
     if mode == "definition":
@@ -51,7 +57,13 @@ async def chat(request: Request) -> dict[str, Any]:
 @app.post("/api/chat/stream")
 async def chat_stream(request: Request) -> StreamingResponse:
     payload = await request.json()
-    REQUESTS.append({"endpoint": "/api/chat/stream", "payload": payload})
+    REQUESTS.append(
+        {
+            "endpoint": "/api/chat/stream",
+            "payload": payload,
+            "api_key_present": bool(request.headers.get("X-API-Key")),
+        }
+    )
     mode = payload.get("mode") or "translation"
 
     async def events() -> AsyncIterator[str]:

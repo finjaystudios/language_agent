@@ -136,6 +136,7 @@ def start_chainlit(backend_url: str, *, name: str) -> tuple[int, ManagedProcess]
         {
             "DEBUG": "false",
             "FASTAPI_BASE_URL": backend_url,
+            "FASTAPI_API_KEY": "e2e-test-secret",
             "WEBUI_REQUEST_TIMEOUT_SECONDS": "5",
             "WEBUI_STREAMING_ENABLED": "true",
         }

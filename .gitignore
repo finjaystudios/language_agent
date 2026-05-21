@@ -182,5 +182,6 @@ models/
 
 
 # Web UI specific
+.chainlit/
 webui/.files/
 webui/.chainlit/translations/
