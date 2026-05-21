@@ -58,6 +58,18 @@ The intended Caddy routing shape is:
 
 ```caddyfile
 :80 {
+    encode zstd gzip
+
+    log {
+        output stdout
+        format filter {
+            wrap console
+            fields {
+                request>headers delete
+            }
+        }
+    }
+
     handle /api/* {
         reverse_proxy fastapi:8000
     }
@@ -73,6 +85,34 @@ Caddy's `reverse_proxy` transport supports streaming and WebSocket-style
 upgrades by default. It also forwards standard proxy headers such as
 `X-Forwarded-For` and `X-Forwarded-Proto`; the project Caddyfile explicitly
 preserves the incoming `Host` header for both upstreams.
+
+## Logging
+
+Caddy access logs are written to stdout with console formatting, so they are
+visible through Docker Compose:
+
+```powershell
+docker compose logs -f caddy
+```
+
+The access log records request metadata such as method, path, status, and
+latency. Request headers are removed from the access log, so the `X-API-Key`
+header used by protected FastAPI endpoints is not exposed in proxy logs. Do not
+pass API keys in query strings, because URLs can appear in ordinary access
+logs.
+
+## Health Checks
+
+Compose health checks are configured for all three services:
+
+| Service | Health check | Purpose |
+| --- | --- | --- |
+| `fastapi` | `GET http://127.0.0.1:8000/health` inside the container | Confirms the backend process is reachable without initializing the LLM. |
+| `webui` | `GET http://127.0.0.1:8001/` inside the container | Confirms the Chainlit server is serving the UI. |
+| `caddy` | `GET http://127.0.0.1/` inside the container | Confirms the proxy can serve the local root route through the Web UI upstream. |
+
+Caddy depends on both upstream services with `condition: service_healthy`, so
+the proxy starts only after FastAPI and Web UI have passed their health checks.
 
 ## Traffic Flow
 
@@ -129,6 +169,24 @@ Caddy exposes host port `80` for local HTTP routing, so LAN devices can use
 host-side Caddy port. FastAPI and Web UI may keep their existing direct host
 port mappings for development; later deployments can expose only Caddy if
 direct host access is no longer needed.
+
+## Load Balancing
+
+No load balancing is needed for the current local deployment. There is one
+FastAPI container and one Web UI container on a single host, so adding multiple
+upstreams would not improve availability or throughput for this feature.
+
+Caddy can support load balancing later by listing multiple upstreams in a
+`reverse_proxy` block if the services are scaled or split across hosts, for
+example:
+
+```caddyfile
+handle /api/* {
+    reverse_proxy fastapi-1:8000 fastapi-2:8000
+}
+```
+
+This feature intentionally does not add replicas or extra upstream containers.
 
 ## Limitations
 

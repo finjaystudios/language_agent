@@ -1,6 +1,16 @@
 :80 {
 	encode zstd gzip
 
+	log {
+		output stdout
+		format filter {
+			wrap console
+			fields {
+				request>headers delete
+			}
+		}
+	}
+
 	handle /api/* {
 		reverse_proxy fastapi:8000 {
 			header_up Host {host}
