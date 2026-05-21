@@ -65,3 +65,15 @@ services:
       timeout: 5s
       start_period: 15s
       retries: 3
+
+  caddy:
+    image: caddy:2.8-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      fastapi:
+        condition: service_healthy
+      webui:
+        condition: service_healthy

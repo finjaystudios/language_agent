@@ -1,0 +1,15 @@
+:80 {
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy fastapi:8000 {
+			header_up Host {host}
+		}
+	}
+
+	handle {
+		reverse_proxy webui:8001 {
+			header_up Host {host}
+		}
+	}
+}

@@ -69,6 +69,10 @@ The intended Caddy routing shape is:
 ```
 
 This preserves FastAPI paths such as `/api/chat` and `/api/chat/stream`.
+Caddy's `reverse_proxy` transport supports streaming and WebSocket-style
+upgrades by default. It also forwards standard proxy headers such as
+`X-Forwarded-For` and `X-Forwarded-Proto`; the project Caddyfile explicitly
+preserves the incoming `Host` header for both upstreams.
 
 ## Traffic Flow
 
@@ -113,16 +117,18 @@ Caddy.
 
 ## Compose Direction
 
-When the reverse proxy service is implemented, Caddy should be added as a third
-service in Docker Compose. The existing internal service addresses should remain
-valid:
+Caddy is implemented as a third service in Docker Compose. Its configuration is
+stored at `Caddyfile` and mounted read-only into the container at
+`/etc/caddy/Caddyfile`. The existing internal service addresses remain valid:
 
 - FastAPI inside Compose: `http://fastapi:8000`
 - Web UI inside Compose: `http://webui:8001`
 
-Caddy will expose a host port, expected to be port `80` for local HTTP routing,
-so LAN devices can use `http://<host-lan-ip>/`. Cloudflare Tunnel will later
-target that same host-side Caddy port.
+Caddy exposes host port `80` for local HTTP routing, so LAN devices can use
+`http://<host-lan-ip>/`. Cloudflare Tunnel will later target that same
+host-side Caddy port. FastAPI and Web UI may keep their existing direct host
+port mappings for development; later deployments can expose only Caddy if
+direct host access is no longer needed.
 
 ## Limitations
 
