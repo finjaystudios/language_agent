@@ -111,6 +111,26 @@ When running Web UI and FastAPI containers on the same Docker network, set
 `FASTAPI_BASE_URL=http://fastapi:8000`. The Web UI image does not include or
 mount model files; it only calls the FastAPI backend over HTTP.
 
+### Run FastAPI and Chainlit With Compose
+
+From the repository root, copy the Compose env template and set a local shared
+API key and mounted model filename:
+
+```powershell
+Copy-Item .env.compose.example .env
+```
+
+Build and run both separate containers:
+
+```powershell
+docker compose up --build
+```
+
+Open `http://127.0.0.1:8001`. The Web UI service uses
+`FASTAPI_BASE_URL=http://fastapi:8000` inside the Compose network. Only the
+FastAPI service mounts `./models:/models:ro`; the Web UI service never mounts or
+loads model files.
+
 ### Testing With Bruno and the Web UI
 
 Use Bruno to confirm the backend independently:

@@ -332,6 +332,74 @@ Application logs are written to stdout/stderr and can be viewed with:
 docker logs <container-id>
 ```
 
+### Docker Compose local development
+
+Use Compose to run the FastAPI backend and Chainlit Web UI as separate
+containers on one local Docker network. The backend mounts `./models` read-only
+at `/models` and requests GPU access. The Web UI does not mount the model
+directory and calls FastAPI over the internal Compose URL
+`http://fastapi:8000`.
+
+Create a local Compose env file from the template and set the model filename and
+shared API key for your machine:
+
+```powershell
+Copy-Item .env.compose.example .env
+```
+
+Build both images:
+
+```powershell
+docker compose build
+```
+
+Start both services:
+
+```powershell
+docker compose up
+```
+
+Or rebuild and start in one command:
+
+```powershell
+docker compose up --build
+```
+
+Open:
+
+- FastAPI docs: `http://127.0.0.1:8000/docs`
+- Chainlit Web UI: `http://127.0.0.1:8001`
+
+Useful log commands:
+
+```powershell
+docker compose logs -f webui
+docker compose logs -f fastapi
+```
+
+Stop and remove the local containers:
+
+```powershell
+docker compose down
+```
+
+Validate the Compose network path through the Web UI server:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8001/webui/backend-status
+```
+
+Protected FastAPI endpoints should still reject missing API keys:
+
+```powershell
+Invoke-WebRequest `
+  -UseBasicParsing `
+  -Uri http://127.0.0.1:8000/api/chat `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{"message":"Define recursion in simple terms"}'
+```
+
 ### Docker implementation summary
 
 - The image uses `python:3.11-slim` and installs only backend runtime
