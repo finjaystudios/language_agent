@@ -36,6 +36,7 @@ def test_definition_starter_sets_mode_and_renders_response(
     assert requests[-1]["endpoint"] == "/api/chat"
     assert requests[-1]["payload"]["mode"] == "definition"
     assert requests[-1]["api_key_present"] is True
+    assert requests[-1]["api_key_valid"] is True
 
 
 def test_user_can_send_full_response_message(
@@ -57,6 +58,7 @@ def test_user_can_send_full_response_message(
     assert requests[-1]["endpoint"] == "/api/chat"
     assert "mode" not in requests[-1]["payload"]
     assert requests[-1]["api_key_present"] is True
+    assert requests[-1]["api_key_valid"] is True
 
 
 def test_streaming_starter_renders_streamed_response(
@@ -77,3 +79,4 @@ def test_streaming_starter_renders_streamed_response(
     assert requests[-1]["payload"]["mode"] == "translation"
     assert requests[-1]["payload"]["stream"] is True
     assert requests[-1]["api_key_present"] is True
+    assert requests[-1]["api_key_valid"] is True

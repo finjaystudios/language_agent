@@ -24,7 +24,7 @@ python -m uvicorn app.api.main:app --reload
 The application logs major stages such as model initialisation, intent routing,
 mode selection, state updates, full-response generation, and streaming progress.
 Logs intentionally include metadata such as mode, session id, message length, and
-token counts rather than full user prompts.
+token counts rather than full user prompts. API keys are not logged.
 
 OpenAPI docs are available at:
 
@@ -39,6 +39,10 @@ OpenAPI docs are available at:
 | `GET` | `/` | Service metadata. |
 | `POST` | `/api/chat` | Full response chat endpoint. |
 | `POST` | `/api/chat/stream` | Server-Sent Events streaming chat endpoint. |
+
+Protected chat endpoints require service-to-service API key authentication with
+`X-API-Key`. `GET /health` and `GET /` remain public for health checks and local
+tooling.
 
 ### Full response request
 
@@ -105,8 +109,24 @@ Errors use a stable JSON shape and do not include stack traces:
 Expected status codes:
 
 - `400`: invalid client input such as an unsupported streaming mode.
+- `401`: missing or invalid API key on protected endpoints.
 - `422`: request body schema validation failures such as a missing or empty message.
 - `500`: LLM initialisation/runtime failures or unexpected internal errors.
+
+### CORS
+
+The browser does not call FastAPI directly in the current architecture. The
+Chainlit browser app calls Chainlit routes, and Chainlit server-side Python calls
+FastAPI with `X-API-Key`, so CORS is not required for normal Web UI chat.
+
+If a future browser-origin flow calls FastAPI directly, configure explicit
+origins with `CORS_ALLOWED_ORIGINS`, for example:
+
+```powershell
+$env:CORS_ALLOWED_ORIGINS = "http://localhost:8001,http://127.0.0.1:8001"
+```
+
+Wildcard origins with credentials are not used.
 
 ### Known limitations
 
@@ -151,7 +171,8 @@ The UI shows a welcome message, checks backend health, and sends chat requests
 over HTTP from the Chainlit server to the FastAPI backend. Translation and
 Learning modes use the backend streaming endpoint when
 `WEBUI_STREAMING_ENABLED=true`; Auto, Definition, and General use the full
-response endpoint.
+response endpoint. The browser never receives `FASTAPI_API_KEY`; the key is read
+only by the Chainlit server process and sent only on protected FastAPI requests.
 
 ### Run Backend and Web UI Together
 
@@ -242,6 +263,7 @@ Container environment variables:
 | `LOG_LEVEL` | `INFO` | Application logging level. |
 | `AUTH_ENABLED` | `true` | Enables API key validation on protected API routes. |
 | `FASTAPI_API_KEY` | None | Shared service API key. Set this at runtime; do not bake real secrets into images. |
+| `CORS_ALLOWED_ORIGINS` | Empty | Optional comma-separated browser origins allowed to call FastAPI directly. |
 | `LLM_MODEL_PATH` | `/models/model.gguf` | Mounted model file path inside the container. |
 | `LLM_CONTEXT_SIZE` | `4096` | LLM context window size. |
 | `LLM_N_GPU_LAYERS` | `-1` | GPU layer offload override; `-1` requests full offload. |
@@ -259,6 +281,14 @@ From another terminal, verify the exposed API:
 ```powershell
 curl http://127.0.0.1:8000/health
 curl http://127.0.0.1:8000/
+```
+
+Protected endpoints should reject unauthenticated requests:
+
+```powershell
+curl -X POST http://127.0.0.1:8000/api/chat `
+  -H "Content-Type: application/json" `
+  -d '{"message":"Define recursion in simple terms"}'
 ```
 
 Then test the model-backed endpoints after confirming GPU access and the mounted
@@ -323,6 +353,9 @@ docker logs <container-id>
   file that is not mounted inside the container.
 - Chat endpoints load the model lazily on first use, so the first model-backed
   request can take significantly longer than `/health`.
+- The API key authenticates the calling service, not individual browser users.
+- HTTPS/TLS termination and domain deployment are intentionally outside this
+  local Docker setup.
 
 ## Bruno API client
 

@@ -84,6 +84,7 @@ FastAPI:
 | --- | --- | --- | --- |
 | `AUTH_ENABLED` | `true` | Yes | Enables API key validation on protected routes. |
 | `FASTAPI_API_KEY` | `change-me-local-dev-only` | Yes | Shared service secret accepted by FastAPI. |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:8001,http://127.0.0.1:8001` | No | Optional explicit browser origins allowed to call FastAPI directly. |
 
 Web UI:
 
@@ -157,6 +158,15 @@ Browser automation tests:
   endpoints.
 - Ensure no browser-visible text, metadata, or network request from the browser
   contains the FastAPI API key.
+- Assert a wrong Web UI key produces a readable authentication failure.
+- Assert a missing Web UI key produces a readable configuration failure before
+  calling FastAPI.
+
+CORS tests:
+
+- Assert no CORS headers are emitted when `CORS_ALLOWED_ORIGINS` is unset.
+- Assert configured origins receive CORS headers.
+- Assert unconfigured origins are rejected.
 
 Bruno:
 
@@ -175,6 +185,9 @@ Bruno:
   service key.
 - This plan does not protect FastAPI from direct network access by itself; it
   should be paired with normal deployment network controls.
+- CORS is not part of the current Chainlit chat path because the browser does
+  not call FastAPI directly. Optional CORS support is limited to explicit
+  origins for future browser-origin flows.
 
 ## Future Upgrade Path
 

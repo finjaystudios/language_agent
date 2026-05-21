@@ -25,6 +25,8 @@ $env:WEBUI_STREAMING_ENABLED = "true"
 
 The Web UI also reads `.env` when launched through the VSCode configuration.
 Use `.env.example` as the shared template.
+Do not set `FASTAPI_API_KEY` in browser-visible content; it belongs only in the
+server process environment.
 
 ### Run FastAPI Locally
 
@@ -65,6 +67,7 @@ docker run --rm --gpus all -p 8000:8000 `
 
 The Web UI uses the same `FASTAPI_BASE_URL` for a local uvicorn backend and for a
 Dockerized backend published to `127.0.0.1:8000`.
+Use the same `FASTAPI_API_KEY` value for the backend and Web UI process.
 
 ### Run Chainlit Locally
 
@@ -96,7 +99,11 @@ Then use the Web UI against the same backend URL:
 2. Confirm the welcome message reports backend health as connected.
 3. Select `Definition - full response` and ask for a definition.
 4. Select `Translation - stream` or `Learning - stream` to test streaming.
-5. Stop the backend and send another message; the UI should show a clear backend
+5. Change the Web UI key to a wrong value and send a message; the UI should show
+   a backend authentication failure without printing the key.
+6. Unset the Web UI key and send a message; the UI should show a missing backend
+   API key configuration message.
+7. Stop the backend and send another message; the UI should show a clear backend
    unavailable message.
 
 ### Local Browser Tests
@@ -147,4 +154,5 @@ See `tests/e2e/README.md` for single-file and single-test commands.
 - Web UI Dockerization is handled by the later `Docker Container: Web UI`
   feature.
 - Browser-based CORS changes are not needed yet because Chainlit server-side
-  code calls FastAPI directly.
+  code calls FastAPI directly. FastAPI supports explicit `CORS_ALLOWED_ORIGINS`
+  for future browser-origin API access.

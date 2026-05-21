@@ -22,3 +22,7 @@ The chat requests call the real local model through the FastAPI backend, so make
 sure the model and GPU prerequisites used by the CLI are available before running
 those requests. System health and metadata requests remain unauthenticated;
 protected chat and error-case requests send `X-API-Key: {{apiKey}}`.
+
+To verify auth rejection manually, remove or change `apiKey` and run any Chat
+request. The protected endpoint should return `401` without exposing the expected
+key.
