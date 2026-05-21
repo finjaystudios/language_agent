@@ -30,6 +30,13 @@
 		}
 	}
 
+	handle /api/stream {
+		rewrite * /api/chat/stream
+		reverse_proxy fastapi:8000 {
+			header_up Host {host}
+		}
+	}
+
 	handle /api/* {
 		reverse_proxy fastapi:8000 {
 			header_up Host {host}

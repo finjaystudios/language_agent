@@ -426,6 +426,17 @@ machine's LAN IP address:
 - FastAPI health: `http://<host-lan-ip>/api/health`
 - FastAPI API: `http://<host-lan-ip>/api/chat`
 
+If your router DNS, local hosts files, or mDNS setup maps `agent.local` to the
+Docker host, you can use friendlier LAN URLs:
+
+- Web UI: `http://agent.local/`
+- FastAPI health: `http://agent.local/api/health`
+- FastAPI full response: `http://agent.local/api/chat`
+- FastAPI streaming alias: `http://agent.local/api/stream`
+
+Caddy does not create the `agent.local` name by itself; LAN devices must resolve
+that name to the host running Docker.
+
 Inside Compose, the Web UI still reaches FastAPI at `http://fastapi:8000`.
 Direct host ports remain published for development fallbacks:
 

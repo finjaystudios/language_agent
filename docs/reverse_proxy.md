@@ -55,6 +55,9 @@ Path-based routing will be used.
 | `http://localhost/api/*` | `http://fastapi:8000` | FastAPI API endpoint |
 | `http://<host-lan-ip>/api/health` | `http://fastapi:8000/health` | Proxied FastAPI health check from another LAN device |
 | `http://<host-lan-ip>/api/*` | `http://fastapi:8000` | FastAPI API endpoint from another LAN device |
+| `http://agent.local/` | `http://webui:8001` | Friendly LAN hostname for the Chainlit Web UI, if local name resolution points `agent.local` at the Docker host |
+| `http://agent.local/api/chat` | `http://fastapi:8000/api/chat` | Friendly LAN hostname for the full-response FastAPI endpoint |
+| `http://agent.local/api/stream` | `http://fastapi:8000/api/chat/stream` | Friendly LAN hostname alias for FastAPI streaming |
 
 The intended Caddy routing shape is:
 
@@ -89,6 +92,11 @@ The intended Caddy routing shape is:
         reverse_proxy fastapi:8000
     }
 
+    handle /api/stream {
+        rewrite * /api/chat/stream
+        reverse_proxy fastapi:8000
+    }
+
     handle /api/* {
         reverse_proxy fastapi:8000
     }
@@ -100,9 +108,10 @@ The intended Caddy routing shape is:
 ```
 
 This preserves FastAPI paths such as `/api/chat` and `/api/chat/stream`.
-`/api/health` is the only proxy-specific alias; it rewrites to FastAPI
-`/health` so local and LAN clients can validate the backend through Caddy while
-the Web UI continues to own `/`.
+`/api/health` rewrites to FastAPI `/health` so local and LAN clients can
+validate the backend through Caddy while the Web UI continues to own `/`.
+`/api/stream` rewrites to FastAPI `/api/chat/stream` as a shorter friendly
+streaming URL; the original `/api/chat/stream` path still works.
 Caddy's `reverse_proxy` transport supports streaming and WebSocket-style
 upgrades by default. It also forwards standard proxy headers such as
 `X-Forwarded-For` and `X-Forwarded-Proto`; the project Caddyfile explicitly
@@ -216,6 +225,19 @@ Use the host machine's LAN IP from another home-network device:
 | `http://<host-lan-ip>/` | Chainlit Web UI |
 | `http://<host-lan-ip>/api/health` | FastAPI health response through Caddy |
 | `http://<host-lan-ip>/api/chat` | Protected FastAPI chat endpoint through Caddy |
+
+If your router DNS, local hosts files, or mDNS setup maps `agent.local` to the
+Docker host, the same routes are available as:
+
+| URL | Expected result |
+| --- | --- |
+| `http://agent.local/` | Chainlit Web UI |
+| `http://agent.local/api/health` | FastAPI health response through Caddy |
+| `http://agent.local/api/chat` | Protected FastAPI full-response endpoint through Caddy |
+| `http://agent.local/api/stream` | Protected FastAPI streaming endpoint through Caddy |
+
+Caddy accepts these requests once the hostname resolves to the host. Caddy does
+not provide LAN DNS or mDNS advertisement by itself.
 
 Inspect proxy logs:
 
