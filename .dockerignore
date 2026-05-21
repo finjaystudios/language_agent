@@ -21,6 +21,10 @@ __pycache__
 .idea
 .codex
 /.chainlit
+node_modules
+playwright-report
+test-results
+blob-report
 bruno
 tests
 models
@@ -36,6 +40,7 @@ webui/.chainlit/translations
 *.log
 logs
 htmlcov
+coverage
 dist
 build
 *.egg-info

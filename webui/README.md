@@ -1,8 +1,8 @@
 ## Chainlit Web UI
 
 The Web UI lives in `webui/` as a separate Chainlit application. It communicates
-with the FastAPI backend only over HTTP and is intended to be deployed separately
-from the backend in a later Web UI Docker feature.
+with the FastAPI backend only over HTTP and is deployed separately from the
+backend in its own Docker image.
 
 ### Install Dependencies
 
@@ -111,6 +111,9 @@ When running Web UI and FastAPI containers on the same Docker network, set
 `FASTAPI_BASE_URL=http://fastapi:8000`. The Web UI image does not include or
 mount model files; it only calls the FastAPI backend over HTTP.
 
+The Web UI Dockerfile is `Dockerfile.webui`. The backend Dockerfile remains the
+root `Dockerfile`.
+
 ### Run FastAPI and Chainlit With Compose
 
 From the repository root, copy the Compose env template and set a local shared
@@ -207,11 +210,13 @@ tests.
 
 - The Web UI does not load the LLM directly.
 - The Web UI requires the FastAPI backend to be running for model-backed chat.
+- The Web UI requires `FASTAPI_API_KEY` to match the FastAPI backend key.
 - The FastAPI backend requires the local model to be mounted/configured.
+- The FastAPI Docker setup requires GPU access for the current model runtime.
 - The Web UI and FastAPI backend are separate applications and separate
   processes.
-- Web UI Dockerization is handled by the later `Docker Container: Web UI`
-  feature.
+- Reverse proxy, HTTPS/TLS termination, domain deployment, and user login are
+  separate future features.
 - Browser-based CORS changes are not needed yet because Chainlit server-side
   code calls FastAPI directly. FastAPI supports explicit `CORS_ALLOWED_ORIGINS`
   for future browser-origin API access.
