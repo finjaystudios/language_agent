@@ -178,6 +178,19 @@ pytest tests/e2e --headed
 
 See `tests/e2e/README.md` for single-file and single-test commands.
 
+To smoke-test a Web UI that is already running, including the Docker Compose Web
+UI, set `E2E_BASE_URL` and run the smoke test:
+
+```powershell
+$env:E2E_BASE_URL = "http://127.0.0.1:8001"
+pytest tests/e2e/test_chainlit_smoke.py
+```
+
+The full fake-backend browser suite remains the default because it is
+deterministic and does not require the real LLM. Compose-based browser checks
+use the real backend and mounted model, so treat them as local integration
+tests.
+
 ### Implementation Summary
 
 - `app.py` owns Chainlit callbacks, mode controls, starters, and UI messages.

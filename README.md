@@ -211,6 +211,20 @@ python -m playwright install chromium
 pytest tests/e2e
 ```
 
+To target a Web UI that is already running, set `E2E_BASE_URL`. This is useful
+for Docker Compose validation and does not change the default deterministic test
+path:
+
+```powershell
+$env:E2E_BASE_URL = "http://127.0.0.1:8001"
+pytest tests/e2e/test_chainlit_smoke.py
+```
+
+When `E2E_BASE_URL` points at the Compose Web UI, the test is a local
+integration check against the real FastAPI backend and mounted model. Keep using
+plain `pytest tests/e2e` for fake-backend browser coverage, including readable
+auth failures and checks that API keys are not displayed in the browser.
+
 ## Docker
 
 ### Prerequisites

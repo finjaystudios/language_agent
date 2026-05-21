@@ -16,6 +16,7 @@ def submit_chat_message(page: Page, text: str) -> None:
 
 
 def test_definition_starter_sets_mode_and_renders_response(
+    requires_fake_backend: None,
     page: Page,
     chainlit_url: str,
     reset_fake_backend: None,
@@ -40,6 +41,7 @@ def test_definition_starter_sets_mode_and_renders_response(
 
 
 def test_user_can_send_full_response_message(
+    requires_fake_backend: None,
     page: Page,
     chainlit_url: str,
     reset_fake_backend: None,
@@ -62,6 +64,7 @@ def test_user_can_send_full_response_message(
 
 
 def test_streaming_starter_renders_streamed_response(
+    requires_fake_backend: None,
     page: Page,
     chainlit_url: str,
     reset_fake_backend: None,
