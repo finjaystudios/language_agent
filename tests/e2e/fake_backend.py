@@ -1,13 +1,15 @@
 import asyncio
 import json
+import os
 from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 app = FastAPI(title="Fake Local Language Agent Backend")
 REQUESTS: list[dict[str, Any]] = []
+EXPECTED_API_KEY = os.getenv("FAKE_BACKEND_API_KEY", "e2e-test-secret")
 
 
 @app.get("/health")
@@ -18,7 +20,18 @@ async def health() -> dict[str, str]:
 @app.post("/api/chat")
 async def chat(request: Request) -> dict[str, Any]:
     payload = await request.json()
-    REQUESTS.append({"endpoint": "/api/chat", "payload": payload})
+    api_key_present = bool(request.headers.get("X-API-Key"))
+    REQUESTS.append(
+        {
+            "endpoint": "/api/chat",
+            "payload": payload,
+            "api_key_present": api_key_present,
+            "api_key_valid": request.headers.get("X-API-Key") == EXPECTED_API_KEY,
+        }
+    )
+    if request.headers.get("X-API-Key") != EXPECTED_API_KEY:
+        return authentication_error()
+
     mode = payload.get("mode") or "general"
 
     if mode == "definition":
@@ -51,7 +64,18 @@ async def chat(request: Request) -> dict[str, Any]:
 @app.post("/api/chat/stream")
 async def chat_stream(request: Request) -> StreamingResponse:
     payload = await request.json()
-    REQUESTS.append({"endpoint": "/api/chat/stream", "payload": payload})
+    api_key_present = bool(request.headers.get("X-API-Key"))
+    REQUESTS.append(
+        {
+            "endpoint": "/api/chat/stream",
+            "payload": payload,
+            "api_key_present": api_key_present,
+            "api_key_valid": request.headers.get("X-API-Key") == EXPECTED_API_KEY,
+        }
+    )
+    if request.headers.get("X-API-Key") != EXPECTED_API_KEY:
+        return authentication_error()
+
     mode = payload.get("mode") or "translation"
 
     async def events() -> AsyncIterator[str]:
@@ -61,6 +85,17 @@ async def chat_stream(request: Request) -> StreamingResponse:
         yield f"data: {json.dumps({'mode': mode, 'done': True})}\n\n"
 
     return StreamingResponse(events(), media_type="text/event-stream")
+
+
+def authentication_error():
+    return JSONResponse(
+        status_code=401,
+        content={
+            "error": "authentication_failed",
+            "message": "A valid API key is required.",
+            "details": None,
+        },
+    )
 
 
 @app.get("/test/requests")

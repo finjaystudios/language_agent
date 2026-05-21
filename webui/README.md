@@ -18,12 +18,15 @@ Example local values:
 
 ```powershell
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
+$env:FASTAPI_API_KEY = "local-dev-change-me"
 $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
 ```
 
 The Web UI also reads `.env` when launched through the VSCode configuration.
 Use `.env.example` as the shared template.
+Do not set `FASTAPI_API_KEY` in browser-visible content; it belongs only in the
+server process environment.
 
 ### Run FastAPI Locally
 
@@ -31,6 +34,8 @@ Terminal 1:
 
 ```powershell
 $env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+$env:AUTH_ENABLED = "true"
+$env:FASTAPI_API_KEY = "local-dev-change-me"
 python -m uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -54,6 +59,7 @@ Run it with the local model directory mounted:
 docker run --rm --gpus all -p 8000:8000 `
   --env-file .env.example `
   -e APP_HOST=0.0.0.0 `
+  -e FASTAPI_API_KEY=local-dev-change-me `
   -e LLM_MODEL_PATH=/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf `
   -v ${PWD}/models:/models `
   local-language-agent-api
@@ -61,6 +67,7 @@ docker run --rm --gpus all -p 8000:8000 `
 
 The Web UI uses the same `FASTAPI_BASE_URL` for a local uvicorn backend and for a
 Dockerized backend published to `127.0.0.1:8000`.
+Use the same `FASTAPI_API_KEY` value for the backend and Web UI process.
 
 ### Run Chainlit Locally
 
@@ -68,6 +75,7 @@ Terminal 2:
 
 ```powershell
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
+$env:FASTAPI_API_KEY = "local-dev-change-me"
 $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
 Push-Location webui
@@ -91,7 +99,11 @@ Then use the Web UI against the same backend URL:
 2. Confirm the welcome message reports backend health as connected.
 3. Select `Definition - full response` and ask for a definition.
 4. Select `Translation - stream` or `Learning - stream` to test streaming.
-5. Stop the backend and send another message; the UI should show a clear backend
+5. Change the Web UI key to a wrong value and send a message; the UI should show
+   a backend authentication failure without printing the key.
+6. Unset the Web UI key and send a message; the UI should show a missing backend
+   API key configuration message.
+7. Stop the backend and send another message; the UI should show a clear backend
    unavailable message.
 
 ### Local Browser Tests
@@ -124,7 +136,8 @@ See `tests/e2e/README.md` for single-file and single-test commands.
 
 - `app.py` owns Chainlit callbacks, mode controls, starters, and UI messages.
 - `client.py` owns async HTTP calls to `/health`, `/api/chat`, and
-  `/api/chat/stream`.
+  `/api/chat/stream`. It sends `X-API-Key` only on protected chat requests,
+  using the server-side `FASTAPI_API_KEY` environment variable.
 - `renderer.py` formats structured backend payloads for Translation, Definition,
   and Learning responses.
 - `.chainlit/config.toml` sets the Chainlit theme, sidebar settings, and custom
@@ -141,4 +154,5 @@ See `tests/e2e/README.md` for single-file and single-test commands.
 - Web UI Dockerization is handled by the later `Docker Container: Web UI`
   feature.
 - Browser-based CORS changes are not needed yet because Chainlit server-side
-  code calls FastAPI directly.
+  code calls FastAPI directly. FastAPI supports explicit `CORS_ALLOWED_ORIGINS`
+  for future browser-origin API access.

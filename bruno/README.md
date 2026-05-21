@@ -3,9 +3,12 @@
 This directory contains Git-tracked Bruno collections for local API testing.
 
 Open `bruno/local-language-agent-api` in Bruno, select the `Local` environment,
-and run the FastAPI backend:
+set `apiKey` to the same value as `FASTAPI_API_KEY`, and run the FastAPI
+backend:
 
 ```powershell
+$env:AUTH_ENABLED = "true"
+$env:FASTAPI_API_KEY = "local-dev-change-me"
 python -m uvicorn app.api.main:app --reload
 ```
 
@@ -17,4 +20,9 @@ bru run bruno/local-language-agent-api --env Local
 
 The chat requests call the real local model through the FastAPI backend, so make
 sure the model and GPU prerequisites used by the CLI are available before running
-those requests.
+those requests. System health and metadata requests remain unauthenticated;
+protected chat and error-case requests send `X-API-Key: {{apiKey}}`.
+
+To verify auth rejection manually, remove or change `apiKey` and run any Chat
+request. The protected endpoint should return `401` without exposing the expected
+key.

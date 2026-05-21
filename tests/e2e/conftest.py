@@ -129,7 +129,12 @@ def chainlit_url(fake_backend: str) -> Iterator[str]:
         process.stop()
 
 
-def start_chainlit(backend_url: str, *, name: str) -> tuple[int, ManagedProcess]:
+def start_chainlit(
+    backend_url: str,
+    *,
+    name: str,
+    api_key: str | None = "e2e-test-secret",
+) -> tuple[int, ManagedProcess]:
     port = free_port()
     env = os.environ.copy()
     env.update(
@@ -140,6 +145,10 @@ def start_chainlit(backend_url: str, *, name: str) -> tuple[int, ManagedProcess]
             "WEBUI_STREAMING_ENABLED": "true",
         }
     )
+    if api_key is None:
+        env.pop("FASTAPI_API_KEY", None)
+    else:
+        env["FASTAPI_API_KEY"] = api_key
     process = ManagedProcess(
         [
             sys.executable,
@@ -164,8 +173,13 @@ def start_chainlit(backend_url: str, *, name: str) -> tuple[int, ManagedProcess]
 def chainlit_process_factory():
     processes: list[ManagedProcess] = []
 
-    def start(backend_url: str, *, name: str = "chainlit-webui-test") -> str:
-        port, process = start_chainlit(backend_url, name=name)
+    def start(
+        backend_url: str,
+        *,
+        name: str = "chainlit-webui-test",
+        api_key: str | None = "e2e-test-secret",
+    ) -> str:
+        port, process = start_chainlit(backend_url, name=name, api_key=api_key)
         processes.append(process)
         return f"http://127.0.0.1:{port}"
 

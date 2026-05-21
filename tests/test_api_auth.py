@@ -1,0 +1,171 @@
+from collections.abc import AsyncIterator
+
+from app.api.dependencies import get_agent_service
+from app.api.main import create_app
+from app.api.models import ChatResponse, ResponseMetadata
+from fastapi.testclient import TestClient
+
+
+class FakeAgentService:
+    async def chat_full(self, request):
+        return ChatResponse(
+            mode=request.mode or "general",
+            response="Authenticated response.",
+            metadata=ResponseMetadata(session_id="auth-test"),
+        )
+
+    async def chat_stream(self, request) -> AsyncIterator[str]:
+        async def events() -> AsyncIterator[str]:
+            yield 'data: {"mode": "translation", "token": "hola"}\n\n'
+            yield 'data: {"mode": "translation", "done": true}\n\n'
+
+        return events()
+
+
+def test_health_endpoint_allows_missing_api_key(monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    client = TestClient(create_app())
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_root_endpoint_allows_missing_api_key(monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    client = TestClient(create_app())
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert response.json()["service"] == "local-language-agent"
+
+
+def test_chat_endpoint_rejects_missing_api_key(monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    client = TestClient(create_app())
+
+    response = client.post("/api/chat", json={"message": "Define recursion"})
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "error": "authentication_failed",
+        "message": "A valid API key is required.",
+        "details": None,
+    }
+
+
+def test_chat_endpoint_rejects_wrong_api_key(monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/chat",
+        headers={"X-API-Key": "wrong-secret"},
+        json={"message": "Define recursion"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"] == "authentication_failed"
+
+
+def test_chat_endpoint_accepts_correct_api_key(monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    app = create_app()
+    app.dependency_overrides[get_agent_service] = lambda: FakeAgentService()
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/chat",
+        headers={"X-API-Key": "test-secret"},
+        json={"message": "Define recursion", "mode": "definition"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["response"] == "Authenticated response."
+
+
+def test_streaming_endpoint_requires_api_key(monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/chat/stream",
+        json={"message": "Translate hello", "mode": "translation"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"] == "authentication_failed"
+
+
+def test_streaming_endpoint_accepts_correct_api_key(monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    app = create_app()
+    app.dependency_overrides[get_agent_service] = lambda: FakeAgentService()
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/chat/stream",
+        headers={"X-API-Key": "test-secret"},
+        json={"message": "Translate hello", "mode": "translation"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "hola" in response.text
+
+
+def test_auth_enabled_false_allows_unauthenticated_chat(monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "false")
+    monkeypatch.delenv("FASTAPI_API_KEY", raising=False)
+    app = create_app()
+    app.dependency_overrides[get_agent_service] = lambda: FakeAgentService()
+    client = TestClient(app)
+
+    response = client.post("/api/chat", json={"message": "Define recursion"})
+
+    assert response.status_code == 200
+    assert response.json()["response"] == "Authenticated response."
+
+
+def test_auth_enabled_with_missing_config_returns_safe_error(monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.delenv("FASTAPI_API_KEY", raising=False)
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/chat",
+        headers={"X-API-Key": "anything"},
+        json={"message": "Define recursion"},
+    )
+
+    body = response.json()
+    assert response.status_code == 500
+    assert body == {
+        "error": "auth_configuration_error",
+        "message": "API authentication is not configured correctly.",
+        "details": None,
+    }
+    assert "anything" not in str(body)
+
+
+def test_openapi_marks_chat_routes_as_api_key_protected():
+    schema = create_app().openapi()
+
+    assert schema["components"]["securitySchemes"]["APIKeyHeader"] == {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+    }
+    assert schema["paths"]["/api/chat"]["post"]["security"] == [{"APIKeyHeader": []}]
+    assert schema["paths"]["/api/chat/stream"]["post"]["security"] == [
+        {"APIKeyHeader": []}
+    ]

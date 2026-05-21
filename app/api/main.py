@@ -2,7 +2,9 @@ import logging
 
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.config import CORSConfig
 from app.api.errors import (
     APIError,
     api_error_handler,
@@ -34,6 +36,21 @@ def create_app() -> FastAPI:
             "without changing the existing CLI behavior."
         ),
     )
+
+    cors_config = CORSConfig.from_env()
+    if cors_config.allowed_origins:
+        logger.info(
+            "fastapi_cors_enabled allowed_origin_count=%d",
+            len(cors_config.allowed_origins),
+        )
+        fastapi_app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_config.allowed_origins,
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["Content-Type", "Accept", "X-API-Key"],
+        )
+
     logger.debug("fastapi_exception_handlers_register_start")
     fastapi_app.add_exception_handler(APIError, api_error_handler)
     fastapi_app.add_exception_handler(HTTPException, http_exception_handler)
