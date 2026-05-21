@@ -51,12 +51,26 @@ Path-based routing will be used.
 | --- | --- | --- |
 | `http://localhost/` | `http://webui:8001` | Chainlit Web UI |
 | `http://<host-lan-ip>/` | `http://webui:8001` | Chainlit Web UI from another LAN device |
+| `http://localhost/api/health` | `http://fastapi:8000/health` | Proxied FastAPI health check |
 | `http://localhost/api/*` | `http://fastapi:8000` | FastAPI API endpoint |
+| `http://<host-lan-ip>/api/health` | `http://fastapi:8000/health` | Proxied FastAPI health check from another LAN device |
 | `http://<host-lan-ip>/api/*` | `http://fastapi:8000` | FastAPI API endpoint from another LAN device |
 
 The intended Caddy routing shape is:
 
 ```caddyfile
+{
+    log {
+        output stdout
+        format filter {
+            wrap console
+            fields {
+                request>headers delete
+            }
+        }
+    }
+}
+
 :80 {
     encode zstd gzip
 
@@ -70,6 +84,11 @@ The intended Caddy routing shape is:
         }
     }
 
+    handle /api/health {
+        rewrite * /health
+        reverse_proxy fastapi:8000
+    }
+
     handle /api/* {
         reverse_proxy fastapi:8000
     }
@@ -81,6 +100,9 @@ The intended Caddy routing shape is:
 ```
 
 This preserves FastAPI paths such as `/api/chat` and `/api/chat/stream`.
+`/api/health` is the only proxy-specific alias; it rewrites to FastAPI
+`/health` so local and LAN clients can validate the backend through Caddy while
+the Web UI continues to own `/`.
 Caddy's `reverse_proxy` transport supports streaming and WebSocket-style
 upgrades by default. It also forwards standard proxy headers such as
 `X-Forwarded-For` and `X-Forwarded-Proto`; the project Caddyfile explicitly
@@ -95,11 +117,11 @@ visible through Docker Compose:
 docker compose logs -f caddy
 ```
 
-The access log records request metadata such as method, path, status, and
-latency. Request headers are removed from the access log, so the `X-API-Key`
-header used by protected FastAPI endpoints is not exposed in proxy logs. Do not
-pass API keys in query strings, because URLs can appear in ordinary access
-logs.
+Proxy logs record request metadata such as method, path, status, and latency.
+Request headers are removed from both access logs and Caddy error logs, so the
+`X-API-Key` header used by protected FastAPI endpoints is not exposed in proxy
+logs. Do not pass API keys in query strings, because URLs can appear in ordinary
+access logs.
 
 ## Health Checks
 
@@ -169,6 +191,58 @@ Caddy exposes host port `80` for local HTTP routing, so LAN devices can use
 host-side Caddy port. FastAPI and Web UI may keep their existing direct host
 port mappings for development; later deployments can expose only Caddy if
 direct host access is no longer needed.
+
+## Local Workflow
+
+Start the full local stack with Caddy:
+
+```powershell
+docker compose up --build
+```
+
+Use these local URLs:
+
+| URL | Expected result |
+| --- | --- |
+| `http://localhost/` | Chainlit Web UI |
+| `http://localhost/api/health` | FastAPI health response through Caddy |
+| `http://localhost/api/chat` | Protected FastAPI chat endpoint through Caddy |
+| `http://localhost/api/chat/stream` | Protected FastAPI streaming endpoint through Caddy |
+
+Use the host machine's LAN IP from another home-network device:
+
+| URL | Expected result |
+| --- | --- |
+| `http://<host-lan-ip>/` | Chainlit Web UI |
+| `http://<host-lan-ip>/api/health` | FastAPI health response through Caddy |
+| `http://<host-lan-ip>/api/chat` | Protected FastAPI chat endpoint through Caddy |
+
+Inspect proxy logs:
+
+```powershell
+docker compose logs -f caddy
+```
+
+Stop the stack:
+
+```powershell
+docker compose down
+```
+
+Bruno can exercise the proxied API by using the `Proxy` environment with
+`baseUrl: http://localhost`. API requests should keep `/api/...` paths, and
+protected endpoints still require the `X-API-Key` header. Use `System/Proxy
+Health` for the proxied health check.
+
+Playwright can smoke-test the Web UI through Caddy by setting:
+
+```powershell
+$env:E2E_BASE_URL = "http://localhost"
+pytest tests/e2e/test_chainlit_smoke.py
+```
+
+This is an integration workflow against the running Compose stack. The default
+`pytest tests/e2e` workflow still uses the deterministic fake backend.
 
 ## Load Balancing
 

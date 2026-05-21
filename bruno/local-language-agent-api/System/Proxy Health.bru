@@ -1,0 +1,26 @@
+meta {
+  name: Proxy Health
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/health
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+tests {
+  test("returns HTTP 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("returns status ok", function () {
+    const body = res.getBody();
+    expect(body.status).to.equal("ok");
+  });
+}

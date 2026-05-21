@@ -52,7 +52,7 @@ This is useful for validating the Dockerized Web UI without making Docker the
 default test path:
 
 ```powershell
-$env:E2E_BASE_URL = "http://127.0.0.1:8001"
+$env:E2E_BASE_URL = "http://localhost"
 pytest tests/e2e/test_chainlit_smoke.py
 ```
 
@@ -60,27 +60,28 @@ When `E2E_BASE_URL` is set, tests that require the deterministic fake backend
 are skipped because they assert exact fake responses and inspect fake backend
 request records.
 
-### Docker Compose Web UI Check
+### Docker Compose Proxy Check
 
-The Compose stack runs the real FastAPI backend and real model, so treat this as
-a local integration test. It requires the mounted GGUF model and GPU runtime
-used by the backend container.
+The Compose stack runs Caddy, the real Web UI, the real FastAPI backend, and the
+real model, so treat this as a local integration test. It requires the mounted
+GGUF model and GPU runtime used by the backend container.
 
 ```powershell
 docker compose up --build
 ```
 
-Wait until both services are healthy, then run the Playwright smoke test against
-the published Web UI:
+Wait until all services are healthy, then run the Playwright smoke test against
+the Caddy proxy:
 
 ```powershell
-$env:E2E_BASE_URL = "http://127.0.0.1:8001"
+$env:E2E_BASE_URL = "http://localhost"
 pytest tests/e2e/test_chainlit_smoke.py
 ```
 
 Useful logs while debugging:
 
 ```powershell
+docker compose logs -f caddy
 docker compose logs -f webui
 docker compose logs -f fastapi
 ```
