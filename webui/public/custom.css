@@ -1,0 +1,24 @@
+:root {
+  --lla-accent: #1f7a5c;
+  --lla-accent-muted: #e5f3ee;
+  --lla-border: #d8e3df;
+}
+
+[data-testid="chat-settings"] {
+  border-color: var(--lla-border);
+}
+
+.message-content code {
+  border: 1px solid var(--lla-border);
+  border-radius: 4px;
+}
+
+.message-content strong {
+  color: var(--lla-accent);
+}
+
+button[aria-label*="Translation"],
+button[aria-label*="Definition"],
+button[aria-label*="Learning"] {
+  border-color: var(--lla-border);
+}

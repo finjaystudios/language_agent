@@ -2,6 +2,8 @@
 
 Welcome to the Chainlit Web UI for the Local Language Agent.
 
-This UI is a separate application from the FastAPI backend. The initial
-scaffold does not call the LLM directly, load a local GGUF model, or import
-backend service code.
+Choose a response mode, then send a message. Translation and Learning stream
+responses when enabled; Definition and General use full-response requests.
+
+This chat connects to the local language service. It does not load or run the
+language model in the browser.

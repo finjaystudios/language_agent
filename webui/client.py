@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -10,10 +11,38 @@ import httpx
 
 DEFAULT_BASE_URL = "http://localhost:8000"
 DEFAULT_TIMEOUT_SECONDS = 120.0
+logger = logging.getLogger(__name__)
 
 
 class BackendClientError(RuntimeError):
     """Readable backend communication error for the Chainlit UI."""
+
+    category = "backend_error"
+
+
+class BackendUnavailableError(BackendClientError):
+    category = "backend_unavailable"
+
+
+class BackendTimeoutError(BackendClientError):
+    category = "backend_timeout"
+
+
+class BackendHTTPError(BackendClientError):
+    category = "backend_http_error"
+
+    def __init__(self, message: str, *, status_code: int, error_code: str = "") -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.error_code = error_code
+
+
+class BackendInvalidResponseError(BackendClientError):
+    category = "backend_invalid_response"
+
+
+class BackendStreamError(BackendClientError):
+    category = "backend_stream_error"
 
 
 @dataclass(frozen=True)
@@ -67,21 +96,60 @@ class FastAPIClient:
         self.config = config or BackendConfig.from_env()
 
     async def health(self) -> dict[str, Any]:
+        logger.info(
+            "webui_backend_health_check_start base_url=%s", self.config.base_url
+        )
         try:
             async with self._client() as client:
                 response = await client.get("/health")
+        except httpx.TimeoutException as error:
+            logger.warning(
+                "webui_backend_health_timeout base_url=%s", self.config.base_url
+            )
+            raise BackendTimeoutError(
+                "The FastAPI backend did not respond before the request timed out."
+            ) from error
         except httpx.RequestError as error:
-            raise BackendClientError(format_request_error(error)) from error
-        return self._json_response(response)
+            logger.warning(
+                "webui_backend_health_unavailable base_url=%s error_type=%s",
+                self.config.base_url,
+                type(error).__name__,
+            )
+            raise BackendUnavailableError(format_request_error(error)) from error
+        data = self._json_response(response)
+        logger.info("webui_backend_health_check_complete status=%s", data.get("status"))
+        return data
 
     async def chat_full(self, message: str, mode: str | None) -> dict[str, Any]:
         payload = build_chat_payload(message, mode)
+        logger.info(
+            "webui_chat_full_request_start base_url=%s mode=%s message_length=%d",
+            self.config.base_url,
+            mode,
+            len(message),
+        )
         try:
             async with self._client() as client:
                 response = await client.post("/api/chat", json=payload)
+        except httpx.TimeoutException as error:
+            logger.warning("webui_chat_full_timeout mode=%s", mode)
+            raise BackendTimeoutError(
+                "The FastAPI backend timed out while generating a response."
+            ) from error
         except httpx.RequestError as error:
-            raise BackendClientError(format_request_error(error)) from error
-        return self._json_response(response)
+            logger.warning(
+                "webui_chat_full_unavailable mode=%s error_type=%s",
+                mode,
+                type(error).__name__,
+            )
+            raise BackendUnavailableError(format_request_error(error)) from error
+        data = self._json_response(response)
+        logger.info(
+            "webui_chat_full_request_complete mode=%s response_mode=%s",
+            mode,
+            data.get("mode"),
+        )
+        return data
 
     async def chat_stream(
         self,
@@ -91,6 +159,12 @@ class FastAPIClient:
         payload = build_chat_payload(message, mode)
         payload["stream"] = True
 
+        logger.info(
+            "webui_chat_stream_request_start base_url=%s mode=%s message_length=%d",
+            self.config.base_url,
+            mode,
+            len(message),
+        )
         try:
             async with self._client() as client:
                 async with client.stream(
@@ -103,8 +177,19 @@ class FastAPIClient:
                         event = parse_sse_line(line)
                         if event is not None:
                             yield event
+            logger.info("webui_chat_stream_request_complete mode=%s", mode)
+        except httpx.TimeoutException as error:
+            logger.warning("webui_chat_stream_timeout mode=%s", mode)
+            raise BackendTimeoutError(
+                "The FastAPI backend timed out while streaming a response."
+            ) from error
         except httpx.RequestError as error:
-            raise BackendClientError(format_request_error(error)) from error
+            logger.warning(
+                "webui_chat_stream_unavailable mode=%s error_type=%s",
+                mode,
+                type(error).__name__,
+            )
+            raise BackendUnavailableError(format_request_error(error)) from error
 
     def _client(self) -> httpx.AsyncClient:
         timeout = httpx.Timeout(self.config.timeout_seconds)
@@ -115,18 +200,25 @@ class FastAPIClient:
         try:
             data = response.json()
         except ValueError as error:
-            raise BackendClientError(
+            raise BackendInvalidResponseError(
                 "Backend returned an invalid JSON response."
             ) from error
         if not isinstance(data, dict):
-            raise BackendClientError("Backend returned an unexpected response shape.")
+            raise BackendInvalidResponseError(
+                "Backend returned an unexpected response shape."
+            )
         return data
 
     def _raise_for_error(self, response: httpx.Response) -> None:
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as error:
-            raise BackendClientError(format_backend_error(error.response)) from error
+            message, error_code = format_backend_error(error.response)
+            raise BackendHTTPError(
+                message,
+                status_code=error.response.status_code,
+                error_code=error_code,
+            ) from error
 
 
 def parse_sse_line(line: str) -> dict[str, Any] | None:
@@ -140,33 +232,36 @@ def parse_sse_line(line: str) -> dict[str, Any] | None:
     try:
         event = json.loads(raw_data)
     except json.JSONDecodeError as error:
-        raise BackendClientError(
+        raise BackendStreamError(
             "Backend returned an invalid streaming event."
         ) from error
 
     if not isinstance(event, dict):
-        raise BackendClientError("Backend returned an unexpected streaming event.")
+        raise BackendStreamError("Backend returned an unexpected streaming event.")
     return event
 
 
-def format_backend_error(response: httpx.Response) -> str:
+def format_backend_error(response: httpx.Response) -> tuple[str, str]:
     fallback = f"Backend request failed with HTTP {response.status_code}."
     try:
         data = response.json()
     except ValueError:
-        return fallback
+        return fallback, ""
 
     if not isinstance(data, dict):
-        return fallback
+        return fallback, ""
 
     message = data.get("message")
     error = data.get("error")
     if isinstance(message, str) and isinstance(error, str):
-        return f"{message} ({error})"
+        return f"{message} ({error})", error
     if isinstance(message, str):
-        return message
-    return fallback
+        return message, ""
+    return fallback, ""
 
 
 def format_request_error(error: httpx.RequestError) -> str:
-    return f"Could not connect to the FastAPI backend: {error}"
+    message = str(error).strip()
+    if message:
+        return f"Could not connect to the FastAPI backend: {message}"
+    return "Could not connect to the FastAPI backend."

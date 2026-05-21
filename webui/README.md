@@ -1,33 +1,20 @@
 ## Chainlit Web UI
 
-This directory contains the separate Chainlit application for the Local Language
-Agent Web UI. It is intentionally kept independent from the FastAPI backend
-implementation and must communicate with the backend over HTTP.
+The Web UI lives in `webui/` as a separate Chainlit application. It communicates
+with the FastAPI backend only over HTTP and is intended to be deployed separately
+from the backend in a later Web UI Docker feature.
 
-Run from the repository root:
+### Install Dependencies
+
+From the repository root:
 
 ```powershell
 pip install -r webui/requirements.txt
-$env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
-Push-Location webui
-chainlit run app.py --host 127.0.0.1 --port 8001
-Pop-Location
 ```
 
-The current app provides a conversation scaffold with:
+### Environment
 
-- a startup welcome message
-- response mode settings for Auto, Translation, Definition, Learning, and General
-- quick mode action buttons
-- backend health status on chat start
-- full-response requests to `POST /api/chat`
-- streamed responses from `POST /api/chat/stream` for Translation and Learning
-- readable backend connection and API errors
-
-It does not import backend internals, call the LLM directly, or load a GGUF
-model.
-
-Configuration:
+Example local values:
 
 ```powershell
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
@@ -35,8 +22,97 @@ $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
 ```
 
-Streaming is used only for modes currently supported by the backend streaming
-contract: Translation and Learning. If the streaming request is rejected before
-any chunks are displayed, the UI falls back to the full-response endpoint. If a
-stream fails after partial output has already been shown, the UI displays a
-readable error instead of retrying and risking a duplicated response.
+The Web UI also reads `.env` when launched through the VSCode configuration.
+Use `.env.example` as the shared template.
+
+### Run FastAPI Locally
+
+Terminal 1:
+
+```powershell
+$env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+python -m uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Confirm the backend is reachable:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+```
+
+### Run FastAPI Through Docker
+
+Build the backend image:
+
+```powershell
+docker build -t local-language-agent-api .
+```
+
+Run it with the local model directory mounted:
+
+```powershell
+docker run --rm --gpus all -p 8000:8000 `
+  --env-file .env.example `
+  -e APP_HOST=0.0.0.0 `
+  -e LLM_MODEL_PATH=/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf `
+  -v ${PWD}/models:/models `
+  local-language-agent-api
+```
+
+The Web UI uses the same `FASTAPI_BASE_URL` for a local uvicorn backend and for a
+Dockerized backend published to `127.0.0.1:8000`.
+
+### Run Chainlit Locally
+
+Terminal 2:
+
+```powershell
+$env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
+$env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
+$env:WEBUI_STREAMING_ENABLED = "true"
+Push-Location webui
+chainlit run app.py --host 127.0.0.1 --port 8001
+Pop-Location
+```
+
+Open `http://127.0.0.1:8001`.
+
+### Testing With Bruno and the Web UI
+
+Use Bruno to confirm the backend independently:
+
+```powershell
+bru run bruno/local-language-agent-api --env Local
+```
+
+Then use the Web UI against the same backend URL:
+
+1. Open `http://127.0.0.1:8001`.
+2. Confirm the welcome message reports backend health as connected.
+3. Select `Definition - full response` and ask for a definition.
+4. Select `Translation - stream` or `Learning - stream` to test streaming.
+5. Stop the backend and send another message; the UI should show a clear backend
+   unavailable message.
+
+### Implementation Summary
+
+- `app.py` owns Chainlit callbacks, mode controls, starters, and UI messages.
+- `client.py` owns async HTTP calls to `/health`, `/api/chat`, and
+  `/api/chat/stream`.
+- `renderer.py` formats structured backend payloads for Translation, Definition,
+  and Learning responses.
+- `.chainlit/config.toml` sets the Chainlit theme, sidebar settings, and custom
+  CSS.
+- `public/custom.css` contains the lightweight Web UI styling.
+
+### Known Limitations
+
+- The Web UI does not load the LLM directly.
+- The Web UI requires the FastAPI backend to be running for model-backed chat.
+- The FastAPI backend requires the local model to be mounted/configured.
+- The Web UI and FastAPI backend are separate applications and separate
+  processes.
+- Web UI Dockerization is handled by the later `Docker Container: Web UI`
+  feature.
+- Browser-based CORS changes are not needed yet because Chainlit server-side
+  code calls FastAPI directly.

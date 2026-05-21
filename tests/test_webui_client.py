@@ -5,6 +5,9 @@ import httpx
 from webui.client import (
     BackendClientError,
     BackendConfig,
+    BackendHTTPError,
+    BackendInvalidResponseError,
+    BackendTimeoutError,
     FastAPIClient,
     build_chat_payload,
     parse_sse_line,
@@ -112,13 +115,43 @@ def test_backend_error_uses_api_error_message():
 
     try:
         asyncio.run(request_stream())
-    except BackendClientError as error:
+    except BackendHTTPError as error:
         assert (
             str(error)
             == "Streaming is not supported for definition. (unsupported_mode)"
         )
+        assert error.status_code == 400
+        assert error.error_code == "unsupported_mode"
     else:
-        raise AssertionError("Expected BackendClientError")
+        raise AssertionError("Expected BackendHTTPError")
+
+
+def test_timeout_error_is_readable():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("slow model", request=request)
+
+    client = client_with_transport(httpx.MockTransport(handler))
+
+    try:
+        asyncio.run(client.chat_full("Define recursion", "definition"))
+    except BackendTimeoutError as error:
+        assert "timed out" in str(error)
+    else:
+        raise AssertionError("Expected BackendTimeoutError")
+
+
+def test_invalid_json_response_is_readable():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content="not json")
+
+    client = client_with_transport(httpx.MockTransport(handler))
+
+    try:
+        asyncio.run(client.chat_full("Define recursion", "definition"))
+    except BackendInvalidResponseError as error:
+        assert "invalid JSON" in str(error)
+    else:
+        raise AssertionError("Expected BackendInvalidResponseError")
 
 
 def test_parse_sse_line_rejects_invalid_json():

@@ -118,6 +118,9 @@ to be deployed independently from the FastAPI backend and must communicate with
 the backend only over HTTP. The Web UI does not import backend internals, call
 the LLM directly, or load the local GGUF model.
 
+See `webui/README.md` for the full Web UI setup, validation, Docker-backend
+workflow, Bruno workflow, and known limitations.
+
 Install the Web UI dependencies:
 
 ```powershell
@@ -128,6 +131,8 @@ Run the Chainlit app locally:
 
 ```powershell
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
+$env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
+$env:WEBUI_STREAMING_ENABLED = "true"
 Push-Location webui
 chainlit run app.py --host 127.0.0.1 --port 8001
 Pop-Location
@@ -156,6 +161,8 @@ Terminal 2:
 
 ```powershell
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
+$env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
+$env:WEBUI_STREAMING_ENABLED = "true"
 Push-Location webui
 chainlit run app.py --host 127.0.0.1 --port 8001
 Pop-Location
