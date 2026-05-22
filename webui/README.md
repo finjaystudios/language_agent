@@ -197,6 +197,27 @@ deterministic and does not require the real LLM. Compose-based browser checks
 use the real backend and mounted model, so treat them as local integration
 tests.
 
+### Branding Assets
+
+LanguageAgent branding is configured through `.chainlit/config.toml` and static
+files in `public/`.
+
+- Replace `public/logo_dark.png` and `public/logo_light.png` to update the
+  header logo. Keep transparent PNGs sized around `640x160` so Chainlit can
+  scale them cleanly in the header.
+- Replace `public/favicon` to update the browser tab icon. The file is a PNG
+  without an extension because Chainlit looks up that exact public path.
+- Keep editable source designs outside the Docker image path, such as
+  `../design/languageagent-logo.svg` and `../design/languageagent-icon.svg`.
+  The Web UI Dockerfile only copies `webui/public`, so design sources are not
+  included in the runtime image.
+- Update `.chainlit/config.toml` for future brand text changes: `name`,
+  `description`, `custom_meta_url`, `custom_meta_image_url`, and
+  `[[UI.header_links]]`. Keep `logo_file_url` empty when both dark and light
+  logo variants are present so Chainlit can switch between them by theme.
+- Clear the browser cache or hard refresh after replacing logos or favicons;
+  browsers often cache these assets aggressively.
+
 ### Implementation Summary
 
 - `app.py` owns Chainlit callbacks, mode controls, starters, and UI messages.
@@ -205,9 +226,11 @@ tests.
   using the server-side `FASTAPI_API_KEY` environment variable.
 - `renderer.py` formats structured backend payloads for Translation, Definition,
   and Learning responses.
-- `.chainlit/config.toml` sets the Chainlit theme, sidebar settings, and custom
-  CSS.
-- `public/custom.css` contains the lightweight Web UI styling.
+- `.chainlit/config.toml` sets the LanguageAgent metadata, logo URL, theme,
+  sidebar settings, custom CSS, and custom JS.
+- `public/custom.css` contains the lightweight Web UI styling, and
+  `public/logo_dark.png`, `public/logo_light.png`, and `public/favicon` contain
+  the runtime brand assets.
 
 ### Known Limitations
 

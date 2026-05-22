@@ -84,18 +84,36 @@ def require_model_path() -> str:
     if MODEL_PATH is None:
         raise RuntimeError(
             "LLM model path is not configured. Set LLM_MODEL_PATH to the mounted "
-            "model file path, for example LLM_MODEL_PATH=/models/model.gguf."
+            "model file path, for example LLM_MODEL_PATH=models/model.gguf for "
+            "a host-local run or LLM_MODEL_PATH=/models/model.gguf in Docker."
         )
-    return MODEL_PATH
+    return resolve_model_path(MODEL_PATH)
+
+
+def resolve_model_path(model_path: str) -> str:
+    path = Path(model_path)
+    if path.is_file():
+        return model_path
+
+    # A common local-development mistake is reusing Docker's /models mount path
+    # while running FastAPI directly from the repository root on the host.
+    if path.as_posix().startswith("/models/"):
+        local_candidate = Path.cwd() / "models" / path.name
+        if local_candidate.is_file():
+            return str(local_candidate)
+
+    return model_path
 
 
 def assert_model_file_exists(model_path: str) -> None:
     path = Path(model_path)
     if not path.is_file():
         raise FileNotFoundError(
-            f"LLM model file was not found at '{model_path}'. Mount the local "
-            "model directory into the container and set LLM_MODEL_PATH to the "
-            "file path inside the container."
+            f"LLM model file was not found at '{model_path}'. For a host-local "
+            "run, set LLM_MODEL_PATH to a repository path such as "
+            "'models/model.gguf'. For Docker, mount the local model directory "
+            "into the container and set LLM_MODEL_PATH to the file path inside "
+            "the container, such as '/models/model.gguf'."
         )
 
 

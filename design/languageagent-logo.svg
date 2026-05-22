@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="160" viewBox="0 0 640 160" role="img" aria-labelledby="title desc">
+  <title id="title">LanguageAgent logo</title>
+  <desc id="desc">A speech bubble and page mark beside the LanguageAgent wordmark.</desc>
+  <defs>
+    <linearGradient id="la-mark-gradient" x1="28" y1="28" x2="132" y2="132" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#32d3ad"/>
+      <stop offset="0.55" stop-color="#168f74"/>
+      <stop offset="1" stop-color="#4f61c8"/>
+    </linearGradient>
+    <filter id="la-shadow" x="0" y="0" width="160" height="160" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#0b1722" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <g fill="none" fill-rule="evenodd">
+    <g filter="url(#la-shadow)">
+      <path fill="url(#la-mark-gradient)" d="M30 72c0-26.51 21.49-48 48-48h28c26.51 0 48 21.49 48 48v13c0 26.51-21.49 48-48 48H83.15L50.4 149.88c-6.65 3.43-14.38-2.51-12.68-9.8L45.84 105C35.93 96.2 30 84.24 30 72Z"/>
+      <path fill="#fff" d="M64 58c0-5.52 4.48-10 10-10h42c5.52 0 10 4.48 10 10v46c0 5.52-4.48 10-10 10H74c-5.52 0-10-4.48-10-10V58Z" opacity=".96"/>
+      <path fill="#d9fbf2" d="M104 48h12c5.52 0 10 4.48 10 10v12h-12c-5.52 0-10-4.48-10-10V48Z"/>
+      <path stroke="#168f74" stroke-linecap="round" stroke-width="6" d="M79 73h32M79 91h22"/>
+      <path stroke="#4f61c8" stroke-linecap="round" stroke-width="6" d="M87 109h17"/>
+    </g>
+    <text fill="#f8fafc" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="54" font-weight="760" letter-spacing="0" x="184" y="89">Language<tspan fill="#32d3ad">Agent</tspan></text>
+    <text fill="#9fb1c4" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="20" font-weight="500" letter-spacing="0" x="188" y="123">Local language help, clearly explained.</text>
+  </g>
+</svg>

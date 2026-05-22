@@ -9,7 +9,7 @@ python -m uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
 The local model path must be configured before calling chat endpoints:
 
 ```powershell
-$env:LLM_MODEL_PATH = "models/qwen2.5-7B-instruct-Q4_K_M.gguf"
+$env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
 $env:AUTH_ENABLED = "true"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
 ```
@@ -179,7 +179,7 @@ only by the Chainlit server process and sent only on protected FastAPI requests.
 Terminal 1:
 
 ```powershell
-$env:LLM_MODEL_PATH = "models/qwen2.5-7B-instruct-Q4_K_M.gguf"
+$env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
 $env:AUTH_ENABLED = "true"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
 python -m uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
@@ -272,9 +272,9 @@ docker run --rm --gpus all -p 8000:8000 `
   local-language-agent-api
 ```
 
-Use `.env.example` as the template for local container settings. If you use a
-VSCode-oriented `.env` with `APP_HOST=127.0.0.1`, override it with
-`-e APP_HOST=0.0.0.0` for Docker so the published port is reachable from the
+Use `.env.example` as the template for host-local FastAPI settings. For Docker,
+override `LLM_MODEL_PATH` with the in-container `/models/...` path as shown
+above, and set `APP_HOST=0.0.0.0` so the published port is reachable from the
 host.
 
 GPU execution requires a host NVIDIA GPU, working NVIDIA drivers, Docker GPU

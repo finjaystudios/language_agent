@@ -15,6 +15,7 @@ def test_chainlit_landing_page_loads(
 ):
     page.goto(chainlit_url)
 
+    expect(page).to_have_title(re.compile(r"LanguageAgent"))
     expect(page.get_by_alt_text("logo")).to_be_visible()
     expect(page.get_by_placeholder("Type your message here...")).to_be_visible()
     expect(page.get_by_text("Translate")).to_be_visible()

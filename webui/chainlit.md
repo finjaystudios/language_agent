@@ -1,6 +1,6 @@
-# Local Language Agent
+# LanguageAgent
 
-Welcome to the Chainlit Web UI for the Local Language Agent.
+Welcome to LanguageAgent, a local language assistant powered by a personal LLM.
 
 Backend target and availability are shown on this page for quick testing.
 
