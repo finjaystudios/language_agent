@@ -9,3 +9,4 @@ rich==14.2.0
 uvicorn==0.38.0
 httpx==0.28.1
 requests==2.34.2
+chainlit==0.1.0
