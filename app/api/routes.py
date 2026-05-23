@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from typing import Annotated
 
@@ -113,7 +112,7 @@ async def chat_stream(
 )
 async def llm_job_status(job_id: str) -> LLMJobStatusResponse:
     try:
-        job = await asyncio.to_thread(get_job_status, job_id)
+        job = await get_job_status(job_id)
     except Exception as error:
         raise HTTPException(status_code=404, detail="LLM job not found.") from error
     return LLMJobStatusResponse.from_job(job)
@@ -130,7 +129,7 @@ async def llm_job_status(job_id: str) -> LLMJobStatusResponse:
 )
 async def cancel_llm_job(job_id: str) -> LLMJobStatusResponse:
     try:
-        job = await asyncio.to_thread(cancel_llm_call, job_id)
+        job = await cancel_llm_call(job_id)
     except Exception as error:
         raise HTTPException(status_code=404, detail="LLM job not found.") from error
     return LLMJobStatusResponse.from_job(job)
@@ -146,5 +145,5 @@ async def cancel_llm_job(job_id: str) -> LLMJobStatusResponse:
     summary="Get LLM queue health and depth",
 )
 async def queue_status() -> QueueStatusResponse:
-    queue = await asyncio.to_thread(get_queue_status)
+    queue = await get_queue_status()
     return QueueStatusResponse(queue=queue)

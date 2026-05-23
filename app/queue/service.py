@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from redis import Redis
+from redis.asyncio import Redis as AsyncRedis
 from rq import Queue, Retry
 from rq.job import Job, JobStatus
 from rq.registry import FailedJobRegistry, StartedJobRegistry
@@ -33,6 +34,10 @@ def get_redis_connection(url: str | None = None) -> Redis:
     return Redis.from_url(url or REDIS_URL)
 
 
+def get_async_redis_connection(url: str | None = None) -> AsyncRedis:
+    return AsyncRedis.from_url(url or REDIS_URL)
+
+
 def get_llm_queue(
     connection: Redis | None = None,
     queue_name: str | None = None,
@@ -42,6 +47,11 @@ def get_llm_queue(
         connection=connection or get_redis_connection(),
         default_timeout=LLM_QUEUE_TIMEOUT_SECONDS,
     )
+
+
+async def close_async_redis_connection(connection: AsyncRedis | None) -> None:
+    if connection is not None:
+        await connection.aclose()
 
 
 def get_started_job_registry(
@@ -235,7 +245,7 @@ def get_job_result(
     return llm_call
 
 
-def enqueue_llm_call(job_request: LLMCallJob, queue: Queue | None = None) -> Job:
+def enqueue_llm_call_sync(job_request: LLMCallJob, queue: Queue | None = None) -> Job:
     llm_queue = queue or get_llm_queue()
     check_queue_backpressure(llm_queue)
     job_request.stream_channel = get_stream_channel(job_request.job_id)
@@ -266,7 +276,14 @@ def enqueue_llm_call(job_request: LLMCallJob, queue: Queue | None = None) -> Job
     return job
 
 
-def get_job_status(
+async def enqueue_llm_call(
+    job_request: LLMCallJob,
+    queue: Queue | None = None,
+) -> Job:
+    return await asyncio.to_thread(enqueue_llm_call_sync, job_request, queue)
+
+
+def get_job_status_sync(
     job_id: str,
     connection: Redis | None = None,
 ) -> LLMCallJob:
@@ -297,7 +314,21 @@ def get_job_status(
     return llm_call
 
 
-def cancel_llm_call(
+async def get_job_result_async(
+    job_id: str,
+    connection: Redis | None = None,
+) -> LLMCallJob:
+    return await asyncio.to_thread(get_job_result, job_id, connection)
+
+
+async def get_job_status(
+    job_id: str,
+    connection: Redis | None = None,
+) -> LLMCallJob:
+    return await asyncio.to_thread(get_job_status_sync, job_id, connection)
+
+
+def cancel_llm_call_sync(
     job_id: str,
     connection: Redis | None = None,
 ) -> LLMCallJob:
@@ -349,6 +380,13 @@ def cancel_llm_call(
     return llm_call
 
 
+async def cancel_llm_call(
+    job_id: str,
+    connection: Redis | None = None,
+) -> LLMCallJob:
+    return await asyncio.to_thread(cancel_llm_call_sync, job_id, connection)
+
+
 def is_cancel_requested(
     job_id: str,
     connection: Redis | None = None,
@@ -360,6 +398,14 @@ def ping_redis(connection: Redis | None = None) -> bool:
     redis_connection = connection or get_redis_connection()
     try:
         return bool(redis_connection.ping())
+    except Exception:
+        return False
+
+
+async def ping_redis_async(connection: AsyncRedis | None = None) -> bool:
+    redis_connection = connection or get_async_redis_connection()
+    try:
+        return bool(await redis_connection.ping())
     except Exception:
         return False
 
@@ -390,35 +436,55 @@ def read_stream_batch(
 async def stream_llm_events(
     job_id: str,
     *,
-    connection_factory: Callable[[], Redis] | None = None,
+    connection_factory: Callable[[], AsyncRedis] | None = None,
     timeout_seconds: int = LLM_STREAM_TIMEOUT_SECONDS,
 ) -> AsyncIterator[dict[str, Any]]:
-    connection_factory = connection_factory or get_redis_connection
+    connection_factory = connection_factory or get_async_redis_connection
     deadline = asyncio.get_running_loop().time() + timeout_seconds
     last_id = "0-0"
+    redis_connection = connection_factory()
 
-    while True:
-        events = await asyncio.to_thread(
-            read_stream_batch,
-            job_id,
-            last_id,
-            connection_factory(),
-        )
-        if not events:
-            if asyncio.get_running_loop().time() >= deadline:
-                raise TimeoutError(f"Timed out waiting for LLM stream '{job_id}'.")
-            continue
+    try:
+        while True:
+            stream_name = get_stream_channel(job_id)
+            records = await redis_connection.xread(
+                {stream_name: last_id},
+                count=20,
+                block=1000,
+            )
+            events: list[dict[str, Any]] = []
+            for _stream_name, stream_records in records:
+                for event_id, data in stream_records:
+                    raw_event = (
+                        data.get(b"event") if b"event" in data else data.get("event")
+                    )
+                    if isinstance(raw_event, bytes):
+                        raw_event = raw_event.decode()
+                    event = json.loads(raw_event)
+                    event["_stream_id"] = (
+                        event_id.decode()
+                        if isinstance(event_id, bytes)
+                        else str(event_id)
+                    )
+                    events.append(event)
 
-        deadline = asyncio.get_running_loop().time() + timeout_seconds
-        for event in events:
-            last_id = event.pop("_stream_id")
-            yield event
-            if event.get("done") is True or event.get("status") in {
-                "completed",
-                "failed",
-                "cancelled",
-            }:
-                return
+            if not events:
+                if asyncio.get_running_loop().time() >= deadline:
+                    raise TimeoutError(f"Timed out waiting for LLM stream '{job_id}'.")
+                continue
+
+            deadline = asyncio.get_running_loop().time() + timeout_seconds
+            for event in events:
+                last_id = event.pop("_stream_id")
+                yield event
+                if event.get("done") is True or event.get("status") in {
+                    "completed",
+                    "failed",
+                    "cancelled",
+                }:
+                    return
+    finally:
+        await close_async_redis_connection(redis_connection)
 
 
 async def wait_for_job_result(
@@ -432,13 +498,9 @@ async def wait_for_job_result(
     deadline = asyncio.get_running_loop().time() + timeout_seconds
 
     while True:
-        status = await asyncio.to_thread(get_job_status, job_id, connection_factory())
+        status = await get_job_status(job_id, connection_factory())
         if status.status in {"completed", "failed", "cancelled"}:
-            result = await asyncio.to_thread(
-                get_job_result,
-                job_id,
-                connection_factory(),
-            )
+            result = await get_job_result_async(job_id, connection_factory())
             return result
 
         if asyncio.get_running_loop().time() >= deadline:
@@ -447,7 +509,7 @@ async def wait_for_job_result(
         await asyncio.sleep(poll_interval_seconds)
 
 
-def get_queue_status(connection: Redis | None = None) -> QueueStatusSnapshot:
+def get_queue_status_sync(connection: Redis | None = None) -> QueueStatusSnapshot:
     redis_connection = connection or get_redis_connection()
     redis_connected = ping_redis(redis_connection)
     if not redis_connected:
@@ -490,3 +552,7 @@ def get_queue_status(connection: Redis | None = None) -> QueueStatusSnapshot:
             redis_connection,
         ),
     )
+
+
+async def get_queue_status(connection: Redis | None = None) -> QueueStatusSnapshot:
+    return await asyncio.to_thread(get_queue_status_sync, connection)

@@ -56,7 +56,7 @@ class SerialGateway:
 def test_chat_endpoint_returns_429_when_queue_is_saturated(monkeypatch):
     from app.llm.queued import QueuedLLMService
 
-    def fail_enqueue(_job):
+    async def fail_enqueue(_job):
         raise QueueSaturatedError(retry_after_seconds=9)
 
     monkeypatch.setattr("app.llm.queued.enqueue_llm_call", fail_enqueue)

@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import uuid
 from collections.abc import AsyncIterator
@@ -42,7 +41,7 @@ class QueuedLLMService:
             response_schema=schema,
         )
         logger.info("queued_llm_ask_enqueue job_id=%s mode=%s", job.job_id, mode)
-        enqueue_llm_call(job)
+        await enqueue_llm_call(job)
         try:
             result = await wait_for_job_result(job.job_id)
         except TimeoutError as error:
@@ -77,7 +76,7 @@ class QueuedLLMService:
             generation_parameters={"temperature": 0.1, "max_tokens": 2000},
         )
         logger.info("queued_llm_stream_enqueue job_id=%s mode=%s", job.job_id, mode)
-        enqueue_llm_call(job)
+        await enqueue_llm_call(job)
         try:
             async for event in stream_llm_events(job.job_id):
                 yield event
@@ -85,4 +84,4 @@ class QueuedLLMService:
             raise StreamingTimeoutError() from error
 
     async def cancel_job(self, job_id: str) -> LLMCallJob:
-        return await asyncio.to_thread(cancel_llm_call, job_id)
+        return await cancel_llm_call(job_id)

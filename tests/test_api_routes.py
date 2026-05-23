@@ -114,14 +114,17 @@ def test_chat_stream_endpoint_is_in_openapi_schema():
 
 
 def test_llm_job_status_route_returns_job_details(monkeypatch):
-    monkeypatch.setattr(
-        "app.api.routes.get_job_status",
-        lambda job_id: LLMCallJob(
+    async def fake_get_job_status(job_id):
+        return LLMCallJob(
             job_id=job_id,
             call_type="streaming_text_generation",
             messages=[],
             status="queued",
-        ),
+        )
+
+    monkeypatch.setattr(
+        "app.api.routes.get_job_status",
+        fake_get_job_status,
     )
 
     response = asyncio.run(llm_job_status("job-123"))
@@ -131,15 +134,18 @@ def test_llm_job_status_route_returns_job_details(monkeypatch):
 
 
 def test_cancel_llm_job_route_returns_job_details(monkeypatch):
-    monkeypatch.setattr(
-        "app.api.routes.cancel_llm_call",
-        lambda job_id: LLMCallJob(
+    async def fake_cancel_llm_call(job_id):
+        return LLMCallJob(
             job_id=job_id,
             call_type="streaming_text_generation",
             messages=[],
             status="cancelled",
             cancel_requested=True,
-        ),
+        )
+
+    monkeypatch.setattr(
+        "app.api.routes.cancel_llm_call",
+        fake_cancel_llm_call,
     )
 
     response = asyncio.run(cancel_llm_job("job-123"))
@@ -149,9 +155,8 @@ def test_cancel_llm_job_route_returns_job_details(monkeypatch):
 
 
 def test_queue_status_route_returns_sanitized_queue_snapshot(monkeypatch):
-    monkeypatch.setattr(
-        "app.api.routes.get_queue_status",
-        lambda: QueueStatusSnapshot(
+    async def fake_get_queue_status():
+        return QueueStatusSnapshot(
             redis_connected=True,
             queue_depth=2,
             active_job_count=1,
@@ -159,7 +164,11 @@ def test_queue_status_route_returns_sanitized_queue_snapshot(monkeypatch):
             worker_count=1,
             average_wait_time_seconds=1.5,
             estimated_wait_time_seconds=3.0,
-        ),
+        )
+
+    monkeypatch.setattr(
+        "app.api.routes.get_queue_status",
+        fake_get_queue_status,
     )
 
     response = asyncio.run(queue_status())

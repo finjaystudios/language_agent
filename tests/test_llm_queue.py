@@ -56,7 +56,7 @@ class RecordingGateway:
 def test_queued_gateway_enqueues_and_waits(monkeypatch):
     captured = {}
 
-    def fake_enqueue(job):
+    async def fake_enqueue(job):
         captured["job"] = job
 
     async def fake_wait(job_id):
@@ -278,7 +278,7 @@ def test_cancelling_queued_job_marks_it_cancelled(monkeypatch):
         lambda _job_id, payload, _connection=None: events.append(payload),
     )
 
-    result = cancel_llm_call("queued-job", connection=object())
+    result = asyncio.run(cancel_llm_call("queued-job", connection=object()))
 
     assert result.status == "cancelled"
     assert result.cancel_requested is True
@@ -310,7 +310,7 @@ def test_cancelling_running_job_sets_cancel_requested(monkeypatch):
         lambda _job_id, payload, _connection=None: events.append(payload),
     )
 
-    result = cancel_llm_call("running-job", connection=object())
+    result = asyncio.run(cancel_llm_call("running-job", connection=object()))
 
     assert result.cancel_requested is True
     assert result.status == "streaming"
