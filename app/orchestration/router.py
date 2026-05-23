@@ -38,6 +38,7 @@ class IntentRouter:
             system_prompt=INTENT_SYSTEM_PROMPT,
             user_prompt=prompt,
             schema=INTENT_RESPONSE_SCHEMA,
+            mode="intent",
         )
 
         intent = IntentResult(**response)

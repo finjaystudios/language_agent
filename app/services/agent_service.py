@@ -7,6 +7,7 @@ from app.api.models import ApiMode, ChatRequest, ChatResponse, ResponseMetadata
 from app.data_models.intent_result import IntentResult
 from app.data_models.mode_responses import BaseModeResponse
 from app.data_models.session_states import SessionState
+from app.llm.queued import QueuedLLMService
 from app.memory.short_term import ConversationMemory
 from app.orchestration.modes.base import ModeHandler
 from app.orchestration.modes.definition import DefinitionHandler
@@ -39,43 +40,17 @@ class AgentService:
 
     @classmethod
     def from_local_model(cls) -> "AgentService":
-        from app.llm.service import LLMService
-        from app.processor_selection import (
-            N_CTX,
-            N_THREADS,
-            assert_llama_cpp_gpu_offload_supported,
-            assert_model_file_exists,
-            assert_nvidia_gpu_visible,
-            choose_gpu_layers,
-            require_model_path,
-        )
+        from app.llm.service import create_local_llm_service
 
-        model_path = require_model_path()
-        assert_model_file_exists(model_path)
-        logger.info(
-            "agent_service_from_local_model_start model_path=%s n_ctx=%s n_threads=%s",
-            model_path,
-            N_CTX,
-            N_THREADS,
-        )
-        logger.info("gpu_visibility_check_start")
-        assert_nvidia_gpu_visible()
-        logger.info("gpu_visibility_check_complete")
-        logger.info("llama_cpp_gpu_offload_check_start")
-        assert_llama_cpp_gpu_offload_supported()
-        logger.info("llama_cpp_gpu_offload_check_complete")
+        llm_service = create_local_llm_service()
+        memory = ConversationMemory(max_turns=5)
+        router = IntentRouter(llm_service)
+        return cls(llm_service=llm_service, router=router, memory=memory)
 
-        logger.info("gpu_layer_selection_start")
-        n_gpu_layers = choose_gpu_layers(model_path)
-        logger.info("gpu_layer_selection_complete n_gpu_layers=%s", n_gpu_layers)
-        logger.info("llm_service_initialization_start")
-        llm_service = LLMService(
-            model_path=model_path,
-            n_ctx=N_CTX,
-            n_threads=N_THREADS,
-            n_gpu_layers=n_gpu_layers,
-        )
-        logger.info("llm_service_initialization_complete")
+    @classmethod
+    def from_queue(cls) -> "AgentService":
+        logger.info("agent_service_from_queue_start")
+        llm_service = QueuedLLMService()
         memory = ConversationMemory(max_turns=5)
         router = IntentRouter(llm_service)
         return cls(llm_service=llm_service, router=router, memory=memory)

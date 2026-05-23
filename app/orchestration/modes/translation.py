@@ -29,6 +29,7 @@ class TranslationHandler(ModeHandler):
             system_prompt=STATE_UPDATE_SYSTEM_PROMPT,
             user_prompt=prompt,
             schema=TRANSLATION_STATE_SCHEMA,
+            mode="translation",
         )
 
         session_state.translation = TranslationModeState(**response)
@@ -47,6 +48,7 @@ class TranslationHandler(ModeHandler):
             system_prompt=TRANSLATION_SYSTEM_PROMPT,
             user_prompt=prompt,
             schema=TRANSLATION_RESPONSE_SCHEMA,
+            mode="translation",
         )
 
         return TranslationResponse(**response)
@@ -63,5 +65,6 @@ class TranslationHandler(ModeHandler):
         async for token in self.llm_service.stream_llm(
             system_prompt=TRANSLATION_SYSTEM_PROMPT,
             user_prompt=prompt,
+            mode="translation",
         ):
             yield token

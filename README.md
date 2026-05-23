@@ -1,17 +1,31 @@
 ## FastAPI backend
 
-Run the backend locally:
+Run the API locally:
 
 ```powershell
 python -m uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-The local model path must be configured before calling chat endpoints:
+Chat endpoints now enqueue each individual LLM call into Redis + RQ. Start Redis
+and the dedicated LLM worker before calling `/api/chat` or `/api/chat/stream`:
+
+```powershell
+docker run --rm -p 6379:6379 redis:7-alpine
+```
 
 ```powershell
 $env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+$env:REDIS_URL = "redis://127.0.0.1:6379/0"
+python -m app.queue.worker
+```
+
+The API process itself does not load the local model. Configure queue access for
+the API, and model settings for the worker:
+
+```powershell
 $env:AUTH_ENABLED = "true"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
+$env:REDIS_URL = "redis://127.0.0.1:6379/0"
 ```
 
 Set logging verbosity with `LOG_LEVEL`:
@@ -35,7 +49,7 @@ OpenAPI docs are available at:
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/health` | Lightweight health check. Does not initialise the LLM. |
+| `GET` | `/health` | Lightweight health check. Does not initialise the LLM or worker model. |
 | `GET` | `/` | Service metadata. |
 | `POST` | `/api/chat` | Full response chat endpoint. |
 | `POST` | `/api/chat/stream` | Server-Sent Events streaming chat endpoint. |
@@ -92,6 +106,9 @@ data: {"mode": "translation", "token": "..."}
 data: {"mode": "translation", "done": true}
 ```
 
+Queued streaming is not implemented yet. The streaming endpoint currently waits
+for one queued generation job and emits the returned text as SSE output.
+
 ### Error response shape
 
 Errors use a stable JSON shape and do not include stack traces:
@@ -130,9 +147,9 @@ Wildcard origins with credentials are not used.
 
 ### Known limitations
 
-- The backend uses the same local GGUF model and GPU prerequisites as the CLI.
-- Chat endpoints initialise the local model lazily on first use.
-- Streaming is currently supported for modes configured as streaming in the existing agent (`translation` and `learning`).
+- The API depends on Redis plus a separate `app.queue.worker` process for all model-backed requests.
+- The worker uses the same local GGUF model and GPU prerequisites as the CLI.
+- Queued token-by-token streaming is not implemented yet; SSE output is produced after the queued generation completes.
 - If an LLM failure occurs after an SSE response has started, the API emits a sanitized SSE error event instead of changing the HTTP status code.
 
 ## Chainlit Web UI
@@ -187,13 +204,27 @@ and polite live-region updates for streamed responses.
 Terminal 1:
 
 ```powershell
-$env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
 $env:AUTH_ENABLED = "true"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
+$env:REDIS_URL = "redis://127.0.0.1:6379/0"
 python -m uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Terminal 2:
+
+```powershell
+docker run --rm -p 6379:6379 redis:7-alpine
+```
+
+Terminal 3:
+
+```powershell
+$env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+$env:REDIS_URL = "redis://127.0.0.1:6379/0"
+python -m app.queue.worker
+```
+
+Terminal 4:
 
 ```powershell
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
@@ -277,8 +308,8 @@ docker build -f Dockerfile.webui -t local-language-agent-webui .
 
 The Dockerfile includes a container health check that calls `GET /health`.
 That endpoint is intentionally lightweight and does not initialise, load, or
-query the local LLM model. Chat endpoints initialise the model lazily on first
-use, so a healthy container only means the HTTP API process is reachable.
+query the local LLM model. The API container only enqueues jobs; the worker
+container owns the model.
 
 The image does not include local GGUF/model files. Mount the model directory at
 runtime and point `LLM_MODEL_PATH` at the file path inside the container:
@@ -397,11 +428,11 @@ docker logs <container-id>
 
 ### Docker Compose local development
 
-Use Compose to run the FastAPI backend and Chainlit Web UI as separate
-containers on one local Docker network, with Caddy as the preferred local entry
-point. The backend mounts `./models` read-only at `/models` and requests GPU
-access. The Web UI does not mount the model directory and calls FastAPI over the
-internal Compose URL `http://fastapi:8000`, not through Caddy.
+Use Compose to run Redis, the FastAPI API, the dedicated LLM worker, and the
+Chainlit Web UI as separate containers on one local Docker network, with Caddy
+as the preferred local entry point. Only the worker mounts `./models` and
+requests GPU access. The Web UI does not mount the model directory and calls
+FastAPI over the internal Compose URL `http://fastapi:8000`, not through Caddy.
 
 Create a local Compose env file from the template and set the model filename and
 shared API key for your machine:
@@ -472,6 +503,8 @@ Useful log commands:
 docker compose logs -f caddy
 docker compose logs -f webui
 docker compose logs -f fastapi
+docker compose logs -f llm-worker
+docker compose logs -f redis
 ```
 
 Stop and remove the local containers:
@@ -561,17 +594,16 @@ domain; Caddy remains the local HTTP origin.
 ### Docker known limitations
 
 - CPU-only execution is not supported by this Docker setup.
-- The FastAPI container expects compatible NVIDIA GPU runtime support on the
-  host.
+- The worker container expects compatible NVIDIA GPU runtime support on the host.
 - The LLM model is not included in either image and must be mounted only into
-  the FastAPI container at runtime.
+  the worker container at runtime.
 - The Web UI container does not include or load the LLM.
 - The Web UI requires FastAPI to be reachable and requires a matching
   `FASTAPI_API_KEY`.
 - The FastAPI app fails LLM initialisation if `LLM_MODEL_PATH` is missing or
   points to a file that is not mounted inside the container.
-- Chat endpoints load the model lazily on first use, so the first model-backed
-  request can take significantly longer than `/health`.
+- Chat endpoints enqueue work immediately, but the first worker job can still be
+  slower because the worker loads the model lazily on first use.
 - The API key authenticates the calling service, not individual browser users.
 - Cloudflare Tunnel config, public domain routing, and user login are
   intentionally outside this local Docker setup.

@@ -98,15 +98,15 @@ def test_agent_dependency_wraps_initialisation_failure(monkeypatch):
     get_agent_service.cache_clear()
 
     def fail_initialisation():
-        raise RuntimeError("GPU not available")
+        raise RuntimeError("Redis not available")
 
-    monkeypatch.setattr(AgentService, "from_local_model", fail_initialisation)
+    monkeypatch.setattr(AgentService, "from_queue", fail_initialisation)
 
     try:
         try:
             get_agent_service()
         except LLMServiceError as error:
-            assert "GPU not available" in str(error)
+            assert "Redis not available" in str(error)
         else:
             raise AssertionError("Expected LLMServiceError")
     finally:

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 def get_agent_service() -> AgentService:
     logger.info("agent_service_dependency_resolve_start")
     try:
-        service = AgentService.from_local_model()
+        service = AgentService.from_queue()
         logger.info("agent_service_dependency_resolve_complete")
         return service
     except Exception as error:

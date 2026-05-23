@@ -29,6 +29,7 @@ class LearningHandler(ModeHandler):
             system_prompt=STATE_UPDATE_SYSTEM_PROMPT,
             user_prompt=prompt,
             schema=LEARNING_STATE_SCHEMA,
+            mode="learning",
         )
 
         session_state.learning = LearningModeState(**response)
@@ -47,6 +48,7 @@ class LearningHandler(ModeHandler):
             system_prompt=LEARNING_SYSTEM_PROMPT,
             user_prompt=prompt,
             schema=LEARNING_RESPONSE_SCHEMA,
+            mode="learning",
         )
 
         return LearningResponse(**response)
@@ -63,5 +65,6 @@ class LearningHandler(ModeHandler):
         async for token in self.llm_service.stream_llm(
             system_prompt=LEARNING_SYSTEM_PROMPT,
             user_prompt=prompt,
+            mode="learning",
         ):
             yield token
