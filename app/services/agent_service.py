@@ -1,6 +1,8 @@
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
+from typing import Any
 
 from app.api.errors import LLMServiceError, UnsupportedModeError
 from app.api.models import ApiMode, ChatRequest, ChatResponse, ResponseMetadata
@@ -287,38 +289,66 @@ class AgentService:
         request: ChatRequest,
         history: str,
     ) -> AsyncIterator[str]:
+        active_job_id: str | None = None
         try:
             assistant_reply = ""
             token_count = 0
+            done_sent = False
             logger.info("stream_handler_start mode=%s", self.session_state.active_mode)
-            async for token in handler.stream(
+            async for item in handler.stream(
                 user_input=request.message,
                 session_state=self.session_state,
                 conversation_history=history,
             ):
-                assistant_reply += token
-                token_count += 1
-                logger.debug(
-                    "stream_token_received mode=%s token_length=%d token_count=%d",
-                    self.session_state.active_mode,
-                    len(token),
-                    token_count,
-                )
-                yield self._sse_data(
-                    {
-                        "mode": self.session_state.active_mode,
-                        "token": token,
-                    }
-                )
+                if isinstance(item, str):
+                    event: dict[str, Any] = {"token": item}
+                else:
+                    event = dict(item)
 
-            self.memory.add_turn(request.message, assistant_reply)
+                if isinstance(event.get("job_id"), str):
+                    active_job_id = event["job_id"]
+
+                token = event.get("token")
+                if isinstance(token, str) and token:
+                    assistant_reply += token
+                    token_count += 1
+                    logger.debug(
+                        "stream_token_received mode=%s token_length=%d token_count=%d",
+                        self.session_state.active_mode,
+                        len(token),
+                        token_count,
+                    )
+
+                payload = {"mode": self.session_state.active_mode, **event}
+                yield self._sse_data(payload)
+
+                if event.get("done") is True:
+                    done_sent = True
+                    break
+
+            if assistant_reply:
+                self.memory.add_turn(request.message, assistant_reply)
             logger.info(
                 "stream_handler_complete mode=%s token_count=%d response_length=%d",
                 self.session_state.active_mode,
                 token_count,
                 len(assistant_reply),
             )
-            yield self._sse_data({"mode": self.session_state.active_mode, "done": True})
+            if not done_sent:
+                yield self._sse_data(
+                    {"mode": self.session_state.active_mode, "done": True}
+                )
+        except asyncio.CancelledError:
+            if active_job_id and hasattr(self.llm_service, "cancel_job"):
+                try:
+                    await self.llm_service.cancel_job(active_job_id)
+                except Exception:
+                    logger.exception(
+                        "stream_handler_cancel_job_failed mode=%s job_id=%s",
+                        self.session_state.active_mode,
+                        active_job_id,
+                    )
+            raise
         except Exception:
             logger.exception(
                 "stream_handler_runtime_failure mode=%s", self.session_state.active_mode

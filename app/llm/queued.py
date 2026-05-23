@@ -1,9 +1,16 @@
+import asyncio
 import logging
 import uuid
 from collections.abc import AsyncIterator
+from typing import Any
 
 from app.queue.models import LLMCallJob
-from app.queue.service import enqueue_llm_call, wait_for_job_result
+from app.queue.service import (
+    cancel_llm_call,
+    enqueue_llm_call,
+    stream_llm_events,
+    wait_for_job_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +49,10 @@ class QueuedLLMService:
         system_prompt: str,
         user_prompt: str,
         mode: str | None = None,
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[dict[str, Any]]:
         job = LLMCallJob(
             job_id=str(uuid.uuid4()),
-            call_type="text_generation",
+            call_type="streaming_text_generation",
             prompt=user_prompt,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -56,9 +63,8 @@ class QueuedLLMService:
         )
         logger.info("queued_llm_stream_enqueue job_id=%s mode=%s", job.job_id, mode)
         enqueue_llm_call(job)
-        result = await wait_for_job_result(job.job_id)
-        if result.status != "completed":
-            raise RuntimeError(result.error or "LLM job failed.")
-        if not isinstance(result.result, str):
-            raise RuntimeError("Text LLM job returned a non-string result.")
-        yield result.result
+        async for event in stream_llm_events(job.job_id):
+            yield event
+
+    async def cancel_job(self, job_id: str) -> LLMCallJob:
+        return await asyncio.to_thread(cancel_llm_call, job_id)

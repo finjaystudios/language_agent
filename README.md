@@ -26,6 +26,7 @@ the API, and model settings for the worker:
 $env:AUTH_ENABLED = "true"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
 $env:REDIS_URL = "redis://127.0.0.1:6379/0"
+$env:LLM_STREAM_CHANNEL_PREFIX = "llm-stream"
 ```
 
 Set logging verbosity with `LOG_LEVEL`:
@@ -106,8 +107,11 @@ data: {"mode": "translation", "token": "..."}
 data: {"mode": "translation", "done": true}
 ```
 
-Queued streaming is not implemented yet. The streaming endpoint currently waits
-for one queued generation job and emits the returned text as SSE output.
+Streaming calls are also queued. The worker publishes token and status events
+through Redis Streams, and the FastAPI streaming endpoint forwards them as SSE.
+Additional SSE status events may include `job_id`, `status`, `queue_position`,
+`elapsed_seconds`, and `cancel_requested`; the existing `token` and `done`
+events remain compatible with the current Web UI.
 
 ### Error response shape
 
@@ -149,7 +153,7 @@ Wildcard origins with credentials are not used.
 
 - The API depends on Redis plus a separate `app.queue.worker` process for all model-backed requests.
 - The worker uses the same local GGUF model and GPU prerequisites as the CLI.
-- Queued token-by-token streaming is not implemented yet; SSE output is produced after the queued generation completes.
+- Cancellation is cooperative. Queued jobs cancel immediately. Running streaming jobs stop between generated chunks when possible. Running non-streaming jobs cannot be interrupted mid-call by the current local model runtime and may finish before cancellation is applied.
 - If an LLM failure occurs after an SSE response has started, the API emits a sanitized SSE error event instead of changing the HTTP status code.
 
 ## Chainlit Web UI
@@ -207,6 +211,7 @@ Terminal 1:
 $env:AUTH_ENABLED = "true"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
 $env:REDIS_URL = "redis://127.0.0.1:6379/0"
+$env:LLM_STREAM_CHANNEL_PREFIX = "llm-stream"
 python -m uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -221,6 +226,7 @@ Terminal 3:
 ```powershell
 $env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
 $env:REDIS_URL = "redis://127.0.0.1:6379/0"
+$env:LLM_STREAM_CHANNEL_PREFIX = "llm-stream"
 python -m app.queue.worker
 ```
 
@@ -505,6 +511,40 @@ docker compose logs -f webui
 docker compose logs -f fastapi
 docker compose logs -f llm-worker
 docker compose logs -f redis
+```
+
+Manual streaming and cancellation checks:
+
+```powershell
+$streamBody = @{
+  message = "Translate this sentence to French: Good morning and welcome."
+  mode = "translation"
+  stream = $true
+} | ConvertTo-Json -Compress
+Invoke-WebRequest `
+  -UseBasicParsing `
+  -Uri http://127.0.0.1:8000/api/chat/stream `
+  -Method Post `
+  -ContentType "application/json" `
+  -Headers @{"X-API-Key" = "local-dev-change-me"} `
+  -Body $streamBody
+```
+
+The first SSE status event includes the queued `job_id`. Cancel it with:
+
+```powershell
+Invoke-RestMethod `
+  -Uri http://127.0.0.1:8000/api/llm/jobs/<job-id>/cancel `
+  -Method Post `
+  -Headers @{"X-API-Key" = "local-dev-change-me"}
+```
+
+Inspect queue status details with:
+
+```powershell
+Invoke-RestMethod `
+  -Uri http://127.0.0.1:8000/api/llm/jobs/<job-id> `
+  -Headers @{"X-API-Key" = "local-dev-change-me"}
 ```
 
 Stop and remove the local containers:

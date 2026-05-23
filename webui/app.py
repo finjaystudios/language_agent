@@ -28,7 +28,13 @@ SESSION_MODE_KEY = "selected_mode"
 LAST_USER_MESSAGE_KEY = "last_user_message"
 STREAM_FLUSH_CHAR_LIMIT = 96
 MODE_AUTO = "auto"
-STREAMING_MODES = {"translation", "learning"}
+STREAMING_MODES = {"translation", "learning", "definition", "general"}
+STREAM_STATUS_MESSAGES = {
+    "queued": "Your request is queued and waiting for the local model.",
+    "processing": "The local model is preparing your response.",
+    "streaming": "The local model is streaming your response.",
+    "cancelled": "This response was cancelled before completion.",
+}
 MODE_OPTIONS = {
     MODE_AUTO: "Auto",
     "translation": "Translation",
@@ -360,28 +366,33 @@ async def handle_user_text(
         len(user_text),
     )
 
-    response = cl.Message(
+    status_message = cl.Message(
         content=(
             f"Sending request to `{client.config.base_url}` using "
             f"**{mode_label(selected_mode)}** mode..."
         )
     )
-    await response.send()
+    await status_message.send()
 
     try:
         if use_streaming:
-            await stream_backend_response(client, response, user_text, api_mode)
+            await stream_backend_response(client, status_message, user_text, api_mode)
         else:
-            await send_full_backend_response(client, response, user_text, api_mode)
+            await send_full_backend_response(
+                client,
+                status_message,
+                user_text,
+                api_mode,
+            )
     except BackendClientError as error:
         logger.warning(
             "webui_message_backend_error category=%s mode=%s",
             error.category,
             api_mode,
         )
-        response.content = format_ui_error(error)
-        response.actions = response_actions(user_text, selected_mode)
-        await response.update()
+        status_message.content = format_ui_error(error)
+        status_message.actions = response_actions(user_text, selected_mode)
+        await status_message.update()
 
 
 def starter_mode_for_message(message: cl.Message) -> str | None:
@@ -412,16 +423,19 @@ async def send_full_backend_response(
 
 async def stream_backend_response(
     client: FastAPIClient,
-    response: cl.Message,
+    status_message: cl.Message,
     user_text: str,
     api_mode: str | None,
 ) -> None:
+    response = cl.Message(content="")
     response.content = ""
     streamed_text = ""
     token_buffer = ""
     received_token = False
+    response_started = False
     response_mode = api_mode
     done_received = False
+    latest_status = "queued"
 
     try:
         async for event in client.chat_stream(user_text, api_mode):
@@ -429,14 +443,63 @@ async def stream_backend_response(
                 continue
 
             response_mode = str(event.get("mode", response_mode or ""))
+            status = event.get("status")
+            if isinstance(status, str):
+                latest_status = status
+                if not received_token and status in STREAM_STATUS_MESSAGES:
+                    status_message.content = STREAM_STATUS_MESSAGES[status]
+                    await status_message.update()
+
+            if event.get("cancelled") is True or status == "cancelled":
+                if token_buffer:
+                    if not response_started:
+                        await status_message.remove()
+                        await response.send()
+                        response_started = True
+                    await response.stream_token(token_buffer)
+                response.content = (
+                    f"{streamed_text}\n\n{STREAM_STATUS_MESSAGES['cancelled']}"
+                    if streamed_text
+                    else STREAM_STATUS_MESSAGES["cancelled"]
+                )
+                response.actions = response_actions(user_text, get_selected_mode())
+                if response_started:
+                    await response.update()
+                else:
+                    status_message.content = response.content
+                    status_message.actions = response.actions
+                    await status_message.update()
+                return
 
             error_message = event.get("message") if event.get("error") else None
             if isinstance(error_message, str):
-                raise BackendStreamError(error_message)
+                if token_buffer:
+                    if not response_started:
+                        await status_message.remove()
+                        await response.send()
+                        response_started = True
+                    await response.stream_token(token_buffer)
+                response.content = (
+                    f"{streamed_text}\n\n{error_message}"
+                    if streamed_text
+                    else error_message
+                )
+                response.actions = response_actions(user_text, get_selected_mode())
+                if response_started:
+                    await response.update()
+                else:
+                    status_message.content = response.content
+                    status_message.actions = response.actions
+                    await status_message.update()
+                return
 
             token = event.get("token")
             if isinstance(token, str) and token:
                 received_token = True
+                if not response_started:
+                    await status_message.remove()
+                    await response.send()
+                    response_started = True
                 streamed_text += token
                 token_buffer += token
                 if should_flush_stream_buffer(token_buffer, streamed_text):
@@ -458,7 +521,15 @@ async def stream_backend_response(
             response.actions = response_actions(user_text, get_selected_mode())
             await response.update()
             return
-        await send_full_backend_response(client, response, user_text, api_mode)
+        status_message.content = format_ui_error(
+            BackendStreamError(
+                STREAM_STATUS_MESSAGES.get(
+                    latest_status, "The response stream was interrupted."
+                )
+            )
+        )
+        status_message.actions = response_actions(user_text, get_selected_mode())
+        await status_message.update()
         return
 
     if not streamed_text:

@@ -9,6 +9,7 @@ from app.data_models.mode_responses import (
     LearningResponse,
     TranslationResponse,
 )
+from app.queue.models import LLMCallJob
 
 
 class ApiMode(StrEnum):
@@ -134,3 +135,9 @@ class ErrorResponse(BaseModel):
         default=None,
         description="Optional structured details about the error.",
     )
+
+
+class LLMJobStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    job: LLMCallJob

@@ -6,10 +6,12 @@ from app.api.main import create_app
 from app.api.models import (
     ChatRequest,
     ChatResponse,
+    LLMJobStatusResponse,
     ResponseMetadata,
     StreamChatRequest,
 )
-from app.api.routes import chat_full, chat_stream
+from app.api.routes import cancel_llm_job, chat_full, chat_stream, llm_job_status
+from app.queue.models import LLMCallJob
 
 
 class FakeAgentService:
@@ -102,3 +104,38 @@ def test_chat_stream_endpoint_is_in_openapi_schema():
 
     assert "/api/chat/stream" in schema["paths"]
     assert "post" in schema["paths"]["/api/chat/stream"]
+
+
+def test_llm_job_status_route_returns_job_details(monkeypatch):
+    monkeypatch.setattr(
+        "app.api.routes.get_job_status",
+        lambda job_id: LLMCallJob(
+            job_id=job_id,
+            call_type="streaming_text_generation",
+            messages=[],
+            status="queued",
+        ),
+    )
+
+    response = asyncio.run(llm_job_status("job-123"))
+
+    assert isinstance(response, LLMJobStatusResponse)
+    assert response.job.job_id == "job-123"
+
+
+def test_cancel_llm_job_route_returns_job_details(monkeypatch):
+    monkeypatch.setattr(
+        "app.api.routes.cancel_llm_call",
+        lambda job_id: LLMCallJob(
+            job_id=job_id,
+            call_type="streaming_text_generation",
+            messages=[],
+            status="cancelled",
+            cancel_requested=True,
+        ),
+    )
+
+    response = asyncio.run(cancel_llm_job("job-123"))
+
+    assert response.job.status == "cancelled"
+    assert response.job.cancel_requested is True

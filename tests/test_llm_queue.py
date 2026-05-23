@@ -1,10 +1,12 @@
 import asyncio
 import threading
 import time
+from types import SimpleNamespace
 from unittest.mock import sentinel
 
 from app.api.models import ChatRequest
 from app.data_models.intent_result import IntentResult
+from app.llm.queued import QueuedLLMService
 from app.memory.short_term import ConversationMemory
 from app.queue.models import LLMCallJob
 from app.queue.worker import get_worker_class, process_llm_call
@@ -52,8 +54,6 @@ class RecordingGateway:
 
 
 def test_queued_gateway_enqueues_and_waits(monkeypatch):
-    from app.llm.queued import QueuedLLMService
-
     captured = {}
 
     def fake_enqueue(job):
@@ -129,6 +129,7 @@ def test_worker_processes_mocked_llm_call(monkeypatch):
         "app.queue.worker.get_worker_llm_service", lambda: FakeService()
     )
     monkeypatch.setattr("app.queue.worker.get_current_job", lambda: None)
+    monkeypatch.setattr("app.queue.worker.is_cancel_requested", lambda *args: False)
 
     result = process_llm_call(
         LLMCallJob(
@@ -165,6 +166,7 @@ def test_worker_serializes_mocked_llm_calls(monkeypatch):
         "app.queue.worker.get_worker_llm_service", lambda: FakeService()
     )
     monkeypatch.setattr("app.queue.worker.get_current_job", lambda: None)
+    monkeypatch.setattr("app.queue.worker.is_cancel_requested", lambda *args: False)
 
     payloads = [
         LLMCallJob(
@@ -189,6 +191,136 @@ def test_worker_serializes_mocked_llm_calls(monkeypatch):
         thread.join()
 
     assert state["max_active"] == 1
+
+
+def test_worker_streaming_publishes_mocked_token_chunks(monkeypatch):
+    events = []
+
+    class FakeService:
+        def stream_llm_sync(self, *, messages, temperature, max_tokens):
+            yield {"choices": [{"delta": {"content": "bon"}}]}
+            yield {"choices": [{"delta": {"content": "jour"}}]}
+
+    class FakeJob:
+        def __init__(self):
+            self.connection = object()
+            self.meta = {}
+
+        def save_meta(self):
+            return None
+
+    monkeypatch.setattr(
+        "app.queue.worker.get_worker_llm_service", lambda: FakeService()
+    )
+    monkeypatch.setattr("app.queue.worker.get_current_job", lambda: FakeJob())
+    monkeypatch.setattr("app.queue.worker.is_cancel_requested", lambda *args: False)
+    monkeypatch.setattr(
+        "app.queue.worker.append_stream_event",
+        lambda _job_id, payload, _connection: events.append(payload),
+    )
+
+    result = process_llm_call(
+        LLMCallJob(
+            job_id="stream-job",
+            call_type="streaming_text_generation",
+            messages=[
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "user"},
+            ],
+            generation_parameters={"temperature": 0.1, "max_tokens": 2000},
+        ).model_dump(mode="json")
+    )
+
+    assert result["status"] == "completed"
+    assert result["result"] == "bonjour"
+    assert [event.get("status") for event in events[:2]] == ["processing", "streaming"]
+    assert [event.get("token") for event in events if event.get("token")] == [
+        "bon",
+        "jour",
+    ]
+    assert events[-1]["done"] is True
+
+
+def test_cancelling_queued_job_marks_it_cancelled(monkeypatch):
+    from app.queue.service import cancel_llm_call
+
+    events = []
+    fake_job = SimpleNamespace(
+        meta={},
+        set_status=lambda status: None,
+        save_meta=lambda: None,
+        get_status=lambda refresh=True: "queued",
+    )
+    queued_call = LLMCallJob(
+        job_id="queued-job",
+        call_type="streaming_text_generation",
+        messages=[],
+        status="queued",
+    )
+    fake_queue = SimpleNamespace(remove=lambda job_id: None)
+
+    monkeypatch.setattr("app.queue.service.Job.fetch", lambda *args, **kwargs: fake_job)
+    monkeypatch.setattr(
+        "app.queue.service.get_job_result", lambda *args, **kwargs: queued_call
+    )
+    monkeypatch.setattr(
+        "app.queue.service.get_llm_queue", lambda *_args, **_kwargs: fake_queue
+    )
+    monkeypatch.setattr(
+        "app.queue.service.append_stream_event",
+        lambda _job_id, payload, _connection=None: events.append(payload),
+    )
+
+    result = cancel_llm_call("queued-job", connection=object())
+
+    assert result.status == "cancelled"
+    assert result.cancel_requested is True
+    assert events[-1]["status"] == "cancelled"
+
+
+def test_cancelling_running_job_sets_cancel_requested(monkeypatch):
+    from app.queue.service import cancel_llm_call
+
+    events = []
+    fake_job = SimpleNamespace(
+        meta={},
+        save_meta=lambda: None,
+        get_status=lambda refresh=True: "started",
+    )
+    running_call = LLMCallJob(
+        job_id="running-job",
+        call_type="streaming_text_generation",
+        messages=[],
+        status="streaming",
+    )
+
+    monkeypatch.setattr("app.queue.service.Job.fetch", lambda *args, **kwargs: fake_job)
+    monkeypatch.setattr(
+        "app.queue.service.get_job_result", lambda *args, **kwargs: running_call
+    )
+    monkeypatch.setattr(
+        "app.queue.service.append_stream_event",
+        lambda _job_id, payload, _connection=None: events.append(payload),
+    )
+
+    result = cancel_llm_call("running-job", connection=object())
+
+    assert result.cancel_requested is True
+    assert result.status == "streaming"
+    assert events[-1]["cancel_requested"] is True
+
+
+def test_agent_service_from_queue_does_not_load_local_model(monkeypatch):
+    def fail_local_model_load():
+        raise AssertionError("Local model should not load in the API process.")
+
+    monkeypatch.setattr(
+        "app.llm.service.create_local_llm_service", fail_local_model_load
+    )
+
+    service = AgentService.from_queue()
+
+    assert isinstance(service.llm_service, QueuedLLMService)
 
 
 def test_worker_uses_simpleworker_on_windows(monkeypatch):

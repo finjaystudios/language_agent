@@ -1,12 +1,20 @@
+import asyncio
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.api.auth import require_api_key
 from app.api.dependencies import get_agent_service
-from app.api.models import ChatRequest, ChatResponse, ErrorResponse, StreamChatRequest
+from app.api.models import (
+    ChatRequest,
+    ChatResponse,
+    ErrorResponse,
+    LLMJobStatusResponse,
+    StreamChatRequest,
+)
+from app.queue.service import cancel_llm_call, get_job_status
 from app.services.agent_service import AgentService
 
 router = APIRouter(
@@ -89,3 +97,37 @@ async def chat_stream(
     event_stream = await agent_service.chat_stream(request)
     logger.info("api_chat_stream_response_started")
     return StreamingResponse(event_stream, media_type="text/event-stream")
+
+
+@router.get(
+    "/llm/jobs/{job_id}",
+    response_model=LLMJobStatusResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid API key."},
+        404: {"model": ErrorResponse, "description": "Job was not found."},
+    },
+    summary="Get LLM queue job status",
+)
+async def llm_job_status(job_id: str) -> LLMJobStatusResponse:
+    try:
+        job = await asyncio.to_thread(get_job_status, job_id)
+    except Exception as error:
+        raise HTTPException(status_code=404, detail="LLM job not found.") from error
+    return LLMJobStatusResponse(job=job)
+
+
+@router.post(
+    "/llm/jobs/{job_id}/cancel",
+    response_model=LLMJobStatusResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid API key."},
+        404: {"model": ErrorResponse, "description": "Job was not found."},
+    },
+    summary="Cancel an LLM queue job",
+)
+async def cancel_llm_job(job_id: str) -> LLMJobStatusResponse:
+    try:
+        job = await asyncio.to_thread(cancel_llm_call, job_id)
+    except Exception as error:
+        raise HTTPException(status_code=404, detail="LLM job not found.") from error
+    return LLMJobStatusResponse(job=job)
