@@ -28,7 +28,7 @@ SESSION_MODE_KEY = "selected_mode"
 LAST_USER_MESSAGE_KEY = "last_user_message"
 STREAM_FLUSH_CHAR_LIMIT = 96
 MODE_AUTO = "auto"
-STREAMING_MODES = {"translation", "learning"}
+STREAMING_MODES = {"translation", "definition", "learning"}
 STREAM_STATUS_MESSAGES = {
     "queued": "Your request is queued and waiting for the local model.",
     "processing": "The local model is preparing your response.",
@@ -203,7 +203,7 @@ async def send_mode_settings(initial: str = MODE_AUTO) -> None:
                 tooltip="Select the response mode to use for future chat requests.",
                 description=(
                     "Auto lets the language service choose the best mode. Live "
-                    "responses are used only for Translation and Learning."
+                    "responses are used for Translation, Definition, and Learning."
                 ),
             )
         ]

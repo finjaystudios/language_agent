@@ -64,10 +64,6 @@ async def chat_full(
     "/chat/stream",
     response_class=StreamingResponse,
     responses={
-        400: {
-            "model": ErrorResponse,
-            "description": "Mode does not support streaming.",
-        },
         401: {"model": ErrorResponse, "description": "Missing or invalid API key."},
         429: {"model": ErrorResponse, "description": "Queue is saturated."},
         422: {
@@ -81,7 +77,7 @@ async def chat_full(
     },
     summary="Stream a language-agent response as Server-Sent Events",
     description=(
-        "Streams token events for modes that support streaming. Events are emitted "
+        "Streams token events for any mode. Events are emitted "
         'as `data: {"mode": "translation", "token": "..."}` and end '
         'with `data: {"mode": "translation", "done": true}`.'
     ),

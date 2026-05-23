@@ -44,15 +44,16 @@ def test_definition_starter_sets_mode_and_renders_response(
     page.get_by_role("button", name=re.compile(r"Define")).click()
 
     expect(page.get_by_text("Define recursion in simple terms.")).to_be_visible()
-    expect(
-        page.get_by_text("E2E definition response from fake backend.")
-    ).to_be_visible(timeout=15000)
+    expect(page.get_by_text("Definition from fake stream.")).to_be_visible(
+        timeout=15000
+    )
     expect(page.locator("#lla-backend-status")).to_be_hidden()
     expect_response_actions(page)
 
     requests = backend_requests()
-    assert requests[-1]["endpoint"] == "/api/chat"
+    assert requests[-1]["endpoint"] == "/api/chat/stream"
     assert requests[-1]["payload"]["mode"] == "definition"
+    assert requests[-1]["payload"]["stream"] is True
     assert requests[-1]["api_key_present"] is True
     assert requests[-1]["api_key_valid"] is True
 
@@ -93,13 +94,14 @@ def test_settings_response_mode_overrides_next_message(
     select_response_mode(page, "Definition")
     submit_chat_message(page, "Workshop")
 
-    expect(
-        page.get_by_text("E2E definition response from fake backend.")
-    ).to_be_visible(timeout=15000)
+    expect(page.get_by_text("Definition from fake stream.")).to_be_visible(
+        timeout=15000
+    )
 
     requests = backend_requests()
-    assert requests[-1]["endpoint"] == "/api/chat"
+    assert requests[-1]["endpoint"] == "/api/chat/stream"
     assert requests[-1]["payload"]["mode"] == "definition"
+    assert requests[-1]["payload"]["stream"] is True
 
 
 def test_streaming_starter_renders_streamed_response(

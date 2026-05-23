@@ -5,7 +5,6 @@ from app.api.dependencies import get_agent_service
 from app.api.errors import (
     LLMServiceError,
     QueueSaturatedError,
-    UnsupportedModeError,
     api_error_handler,
     http_exception_handler,
     unexpected_exception_handler,
@@ -18,17 +17,6 @@ from fastapi.exceptions import RequestValidationError
 
 def response_body(response):
     return json.loads(response.body.decode())
-
-
-def test_unsupported_mode_handler_returns_error_response():
-    response = asyncio.run(api_error_handler(None, UnsupportedModeError("definition")))
-
-    assert response.status_code == 400
-    assert response_body(response) == {
-        "error": "unsupported_mode",
-        "message": "Mode 'definition' is not supported for this operation.",
-        "details": None,
-    }
 
 
 def test_llm_service_handler_does_not_leak_stack_trace():

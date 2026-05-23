@@ -148,7 +148,7 @@ Errors use a stable JSON shape and do not include stack traces:
 
 Expected status codes:
 
-- `400`: invalid client input such as an unsupported streaming mode.
+- `400`: invalid client input such as an unsupported mode value.
 - `401`: missing or invalid API key on protected endpoints.
 - `429`: queue backpressure rejected the request; check `Retry-After`.
 - `422`: request body schema validation failures such as a missing or empty message.
@@ -213,10 +213,10 @@ Open the Web UI at:
 
 The LanguageAgent UI shows a branded landing page, checks backend health, offers
 starter prompts, and sends chat requests over HTTP from the Chainlit server to
-the FastAPI backend. Translation and Learning modes use the backend streaming
-endpoint when
-`WEBUI_STREAMING_ENABLED=true`; Auto, Definition, and General use the full
-response endpoint. The browser never receives `FASTAPI_API_KEY`; the key is read
+the FastAPI backend. The backend accepts every mode on both `/api/chat` and
+`/api/chat/stream`; the current Web UI chooses to stream Translation,
+Definition, and Learning when `WEBUI_STREAMING_ENABLED=true`, while Auto and
+General still use the full response endpoint. The browser never receives `FASTAPI_API_KEY`; the key is read
 only by the Chainlit server process and sent only on protected FastAPI requests.
 
 The personalised UI assets live under `webui/public/`: theme variables in
@@ -410,7 +410,7 @@ Web UI container environment variables:
 | `WEBUI_HOST` | `0.0.0.0` | Chainlit bind host inside the container. |
 | `WEBUI_PORT` | `8001` | Chainlit port inside the container. |
 | `WEBUI_REQUEST_TIMEOUT_SECONDS` | `120` | Backend request timeout. |
-| `WEBUI_STREAMING_ENABLED` | `true` | Enables streaming for supported modes. |
+| `WEBUI_STREAMING_ENABLED` | `true` | Enables streaming for Translation, Definition, and Learning modes. |
 | `LOG_LEVEL` | `INFO` | Web UI server logging level. |
 
 ### Container validation

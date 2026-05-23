@@ -4,7 +4,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
-from app.api.errors import APIError, LLMServiceError, UnsupportedModeError
+from app.api.errors import APIError, LLMServiceError
 from app.api.models import ApiMode, ChatRequest, ChatResponse, ResponseMetadata
 from app.data_models.intent_result import IntentResult
 from app.data_models.mode_responses import BaseModeResponse
@@ -15,7 +15,6 @@ from app.orchestration.modes.base import ModeHandler
 from app.orchestration.modes.definition import DefinitionHandler
 from app.orchestration.modes.learning import LearningHandler
 from app.orchestration.modes.translation import TranslationHandler
-from app.orchestration.output_modes import ModeOutputConfig
 from app.orchestration.router import IntentRouter
 
 GENERAL_RESPONSE = "I can help with translation, definitions, or language learning. Which would you like?"
@@ -186,15 +185,15 @@ class AgentService:
                 )
 
             handler = self.handlers.get(self.session_state.active_mode)
-            if (
-                handler is None
-                or ModeOutputConfig[self.session_state.active_mode] != "stream"
-            ):
+            if handler is None:
                 logger.warning(
-                    "chat_stream_unsupported_mode mode=%s",
-                    self.session_state.active_mode,
+                    "chat_stream_no_handler mode=%s", self.session_state.active_mode
                 )
-                raise UnsupportedModeError(self.session_state.active_mode)
+                return self._stream_static_response(
+                    message=request.message,
+                    mode="general",
+                    response=GENERAL_RESPONSE,
+                )
 
             logger.info(
                 "chat_stream_state_update_start mode=%s", self.session_state.active_mode
@@ -216,9 +215,6 @@ class AgentService:
                 request=request,
                 history=history,
             )
-        except UnsupportedModeError:
-            logger.warning("chat_stream_unsupported_mode_error")
-            raise
         except APIError:
             logger.exception("chat_stream_llm_service_error")
             raise
@@ -291,6 +287,19 @@ class AgentService:
     ) -> AsyncIterator[str]:
         active_job_id: str | None = None
         try:
+            if not hasattr(handler, "stream"):
+                mode_response = await handler.handle(
+                    user_input=request.message,
+                    session_state=self.session_state,
+                    conversation_history=history,
+                )
+                async for event in self._stream_mode_response(
+                    message=request.message,
+                    mode_response=mode_response,
+                ):
+                    yield event
+                return
+
             assistant_reply = ""
             token_count = 0
             done_sent = False
@@ -360,6 +369,18 @@ class AgentService:
                     "done": True,
                 }
             )
+
+    async def _stream_mode_response(
+        self,
+        *,
+        message: str,
+        mode_response: BaseModeResponse,
+    ) -> AsyncIterator[str]:
+        self.memory.add_turn(message, mode_response.response)
+        yield self._sse_data(
+            {"mode": mode_response.mode, "token": mode_response.response}
+        )
+        yield self._sse_data({"mode": mode_response.mode, "done": True})
 
     def _sse_data(self, payload: dict) -> str:
         return f"data: {json.dumps(payload)}\n\n"
