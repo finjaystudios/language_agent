@@ -1,18 +1,20 @@
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
+from typing import Any
 
-from app.api.errors import LLMServiceError, UnsupportedModeError
+from app.api.errors import APIError, LLMServiceError
 from app.api.models import ApiMode, ChatRequest, ChatResponse, ResponseMetadata
 from app.data_models.intent_result import IntentResult
 from app.data_models.mode_responses import BaseModeResponse
 from app.data_models.session_states import SessionState
+from app.llm.queued import QueuedLLMService
 from app.memory.short_term import ConversationMemory
 from app.orchestration.modes.base import ModeHandler
 from app.orchestration.modes.definition import DefinitionHandler
 from app.orchestration.modes.learning import LearningHandler
 from app.orchestration.modes.translation import TranslationHandler
-from app.orchestration.output_modes import ModeOutputConfig
 from app.orchestration.router import IntentRouter
 
 GENERAL_RESPONSE = "I can help with translation, definitions, or language learning. Which would you like?"
@@ -39,43 +41,17 @@ class AgentService:
 
     @classmethod
     def from_local_model(cls) -> "AgentService":
-        from app.llm.service import LLMService
-        from app.processor_selection import (
-            N_CTX,
-            N_THREADS,
-            assert_llama_cpp_gpu_offload_supported,
-            assert_model_file_exists,
-            assert_nvidia_gpu_visible,
-            choose_gpu_layers,
-            require_model_path,
-        )
+        from app.llm.service import create_local_llm_service
 
-        model_path = require_model_path()
-        assert_model_file_exists(model_path)
-        logger.info(
-            "agent_service_from_local_model_start model_path=%s n_ctx=%s n_threads=%s",
-            model_path,
-            N_CTX,
-            N_THREADS,
-        )
-        logger.info("gpu_visibility_check_start")
-        assert_nvidia_gpu_visible()
-        logger.info("gpu_visibility_check_complete")
-        logger.info("llama_cpp_gpu_offload_check_start")
-        assert_llama_cpp_gpu_offload_supported()
-        logger.info("llama_cpp_gpu_offload_check_complete")
+        llm_service = create_local_llm_service()
+        memory = ConversationMemory(max_turns=5)
+        router = IntentRouter(llm_service)
+        return cls(llm_service=llm_service, router=router, memory=memory)
 
-        logger.info("gpu_layer_selection_start")
-        n_gpu_layers = choose_gpu_layers(model_path)
-        logger.info("gpu_layer_selection_complete n_gpu_layers=%s", n_gpu_layers)
-        logger.info("llm_service_initialization_start")
-        llm_service = LLMService(
-            model_path=model_path,
-            n_ctx=N_CTX,
-            n_threads=N_THREADS,
-            n_gpu_layers=n_gpu_layers,
-        )
-        logger.info("llm_service_initialization_complete")
+    @classmethod
+    def from_queue(cls) -> "AgentService":
+        logger.info("agent_service_from_queue_start")
+        llm_service = QueuedLLMService()
         memory = ConversationMemory(max_turns=5)
         router = IntentRouter(llm_service)
         return cls(llm_service=llm_service, router=router, memory=memory)
@@ -165,7 +141,7 @@ class AgentService:
                 intent=intent,
                 metadata=metadata,
             )
-        except LLMServiceError:
+        except APIError:
             logger.exception("chat_full_llm_service_error")
             raise
         except Exception as error:
@@ -209,15 +185,15 @@ class AgentService:
                 )
 
             handler = self.handlers.get(self.session_state.active_mode)
-            if (
-                handler is None
-                or ModeOutputConfig[self.session_state.active_mode] != "stream"
-            ):
+            if handler is None:
                 logger.warning(
-                    "chat_stream_unsupported_mode mode=%s",
-                    self.session_state.active_mode,
+                    "chat_stream_no_handler mode=%s", self.session_state.active_mode
                 )
-                raise UnsupportedModeError(self.session_state.active_mode)
+                return self._stream_static_response(
+                    message=request.message,
+                    mode="general",
+                    response=GENERAL_RESPONSE,
+                )
 
             logger.info(
                 "chat_stream_state_update_start mode=%s", self.session_state.active_mode
@@ -239,10 +215,7 @@ class AgentService:
                 request=request,
                 history=history,
             )
-        except UnsupportedModeError:
-            logger.warning("chat_stream_unsupported_mode_error")
-            raise
-        except LLMServiceError:
+        except APIError:
             logger.exception("chat_stream_llm_service_error")
             raise
         except Exception as error:
@@ -312,38 +285,79 @@ class AgentService:
         request: ChatRequest,
         history: str,
     ) -> AsyncIterator[str]:
+        active_job_id: str | None = None
         try:
+            if not hasattr(handler, "stream"):
+                mode_response = await handler.handle(
+                    user_input=request.message,
+                    session_state=self.session_state,
+                    conversation_history=history,
+                )
+                async for event in self._stream_mode_response(
+                    message=request.message,
+                    mode_response=mode_response,
+                ):
+                    yield event
+                return
+
             assistant_reply = ""
             token_count = 0
+            done_sent = False
             logger.info("stream_handler_start mode=%s", self.session_state.active_mode)
-            async for token in handler.stream(
+            async for item in handler.stream(
                 user_input=request.message,
                 session_state=self.session_state,
                 conversation_history=history,
             ):
-                assistant_reply += token
-                token_count += 1
-                logger.debug(
-                    "stream_token_received mode=%s token_length=%d token_count=%d",
-                    self.session_state.active_mode,
-                    len(token),
-                    token_count,
-                )
-                yield self._sse_data(
-                    {
-                        "mode": self.session_state.active_mode,
-                        "token": token,
-                    }
-                )
+                if isinstance(item, str):
+                    event: dict[str, Any] = {"token": item}
+                else:
+                    event = dict(item)
 
-            self.memory.add_turn(request.message, assistant_reply)
+                if isinstance(event.get("job_id"), str):
+                    active_job_id = event["job_id"]
+
+                token = event.get("token")
+                if isinstance(token, str) and token:
+                    assistant_reply += token
+                    token_count += 1
+                    logger.debug(
+                        "stream_token_received mode=%s token_length=%d token_count=%d",
+                        self.session_state.active_mode,
+                        len(token),
+                        token_count,
+                    )
+
+                payload = {"mode": self.session_state.active_mode, **event}
+                yield self._sse_data(payload)
+
+                if event.get("done") is True:
+                    done_sent = True
+                    break
+
+            if assistant_reply:
+                self.memory.add_turn(request.message, assistant_reply)
             logger.info(
                 "stream_handler_complete mode=%s token_count=%d response_length=%d",
                 self.session_state.active_mode,
                 token_count,
                 len(assistant_reply),
             )
-            yield self._sse_data({"mode": self.session_state.active_mode, "done": True})
+            if not done_sent:
+                yield self._sse_data(
+                    {"mode": self.session_state.active_mode, "done": True}
+                )
+        except asyncio.CancelledError:
+            if active_job_id and hasattr(self.llm_service, "cancel_job"):
+                try:
+                    await self.llm_service.cancel_job(active_job_id)
+                except Exception:
+                    logger.exception(
+                        "stream_handler_cancel_job_failed mode=%s job_id=%s",
+                        self.session_state.active_mode,
+                        active_job_id,
+                    )
+            raise
         except Exception:
             logger.exception(
                 "stream_handler_runtime_failure mode=%s", self.session_state.active_mode
@@ -355,6 +369,18 @@ class AgentService:
                     "done": True,
                 }
             )
+
+    async def _stream_mode_response(
+        self,
+        *,
+        message: str,
+        mode_response: BaseModeResponse,
+    ) -> AsyncIterator[str]:
+        self.memory.add_turn(message, mode_response.response)
+        yield self._sse_data(
+            {"mode": mode_response.mode, "token": mode_response.response}
+        )
+        yield self._sse_data({"mode": mode_response.mode, "done": True})
 
     def _sse_data(self, payload: dict) -> str:
         return f"data: {json.dumps(payload)}\n\n"

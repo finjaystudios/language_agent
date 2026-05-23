@@ -6,5 +6,5 @@ OutputMode = Literal["stream", "ask"]
 
 class ModeOutputConfig(StrEnum):
     translation = "stream"
-    definition = "ask"
+    definition = "stream"
     learning = "stream"

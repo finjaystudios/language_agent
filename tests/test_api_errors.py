@@ -4,7 +4,7 @@ import json
 from app.api.dependencies import get_agent_service
 from app.api.errors import (
     LLMServiceError,
-    UnsupportedModeError,
+    QueueSaturatedError,
     api_error_handler,
     http_exception_handler,
     unexpected_exception_handler,
@@ -19,17 +19,6 @@ def response_body(response):
     return json.loads(response.body.decode())
 
 
-def test_unsupported_mode_handler_returns_error_response():
-    response = asyncio.run(api_error_handler(None, UnsupportedModeError("definition")))
-
-    assert response.status_code == 400
-    assert response_body(response) == {
-        "error": "unsupported_mode",
-        "message": "Mode 'definition' is not supported for this operation.",
-        "details": None,
-    }
-
-
 def test_llm_service_handler_does_not_leak_stack_trace():
     response = asyncio.run(api_error_handler(None, LLMServiceError("Model failed.")))
 
@@ -38,6 +27,16 @@ def test_llm_service_handler_does_not_leak_stack_trace():
     assert body["error"] == "llm_service_error"
     assert body["message"] == "Model failed."
     assert "Traceback" not in json.dumps(body)
+
+
+def test_queue_saturated_handler_returns_retry_after_header():
+    response = asyncio.run(
+        api_error_handler(None, QueueSaturatedError(retry_after_seconds=12))
+    )
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "12"
+    assert response_body(response)["error"] == "queue_saturated"
 
 
 def test_http_exception_handler_returns_error_response():
@@ -98,15 +97,15 @@ def test_agent_dependency_wraps_initialisation_failure(monkeypatch):
     get_agent_service.cache_clear()
 
     def fail_initialisation():
-        raise RuntimeError("GPU not available")
+        raise RuntimeError("Redis not available")
 
-    monkeypatch.setattr(AgentService, "from_local_model", fail_initialisation)
+    monkeypatch.setattr(AgentService, "from_queue", fail_initialisation)
 
     try:
         try:
             get_agent_service()
         except LLMServiceError as error:
-            assert "GPU not available" in str(error)
+            assert "Redis not available" in str(error)
         else:
             raise AssertionError("Expected LLMServiceError")
     finally:

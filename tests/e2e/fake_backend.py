@@ -79,7 +79,12 @@ async def chat_stream(request: Request) -> StreamingResponse:
     mode = payload.get("mode") or "translation"
 
     async def events() -> AsyncIterator[str]:
-        for token in ["Bonjour", " from", " fake", " stream."]:
+        tokens = (
+            ["Definition", " from", " fake", " stream."]
+            if mode == "definition"
+            else ["Bonjour", " from", " fake", " stream."]
+        )
+        for token in tokens:
             yield f"data: {json.dumps({'mode': mode, 'token': token})}\n\n"
             await asyncio.sleep(0.05)
         yield f"data: {json.dumps({'mode': mode, 'done': True})}\n\n"

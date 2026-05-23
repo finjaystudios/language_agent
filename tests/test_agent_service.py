@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 import pytest
-from app.api.errors import LLMServiceError, UnsupportedModeError
+from app.api.errors import LLMServiceError
 from app.api.models import ChatRequest, StreamChatRequest
 from app.data_models.intent_result import IntentResult
 from app.data_models.mode_responses import DefinitionResponse, TranslationResponse
@@ -42,6 +42,11 @@ class FakeDefinitionHandler:
             language="English",
             meaning="A process that refers back to itself.",
         )
+
+    async def stream(self, user_input, session_state, conversation_history):
+        self.calls.append("stream")
+        yield "Recursion"
+        yield " is a function calling itself."
 
 
 class FakeTranslationHandler:
@@ -224,7 +229,7 @@ def test_chat_stream_yields_sse_tokens_and_done_event():
     assert service.memory.turns[0].assistant_reply == "bonjour"
 
 
-def test_chat_stream_rejects_non_streaming_mode():
+def test_chat_stream_supports_definition_mode():
     intent = IntentResult(
         mode="general",
         confidence="high",
@@ -234,15 +239,42 @@ def test_chat_stream_rejects_non_streaming_mode():
     service = make_service(intent)
     service.handlers = {"definition": FakeDefinitionHandler()}
 
-    async def stream_definition():
-        await service.chat_stream(
+    async def collect_events():
+        stream = await service.chat_stream(
             StreamChatRequest(message="Define recursion", mode="definition")
         )
+        return [event async for event in stream]
 
-    with pytest.raises(UnsupportedModeError) as error:
-        asyncio.run(stream_definition())
+    events = asyncio.run(collect_events())
 
-    assert "definition" in str(error.value)
+    assert events == [
+        'data: {"mode": "definition", "token": "Recursion"}\n\n',
+        'data: {"mode": "definition", "token": " is a function calling itself."}\n\n',
+        'data: {"mode": "definition", "done": true}\n\n',
+    ]
+    assert service.handlers["definition"].calls == ["update", "stream"]
+
+
+def test_chat_stream_returns_general_fallback_when_no_mode_handler_exists():
+    intent = IntentResult(
+        mode="general",
+        confidence="high",
+        should_switch_mode=False,
+        reason="General request.",
+    )
+    service = make_service(intent)
+    service.handlers = {}
+
+    async def collect_events():
+        stream = await service.chat_stream(StreamChatRequest(message="Hello"))
+        return [event async for event in stream]
+
+    events = asyncio.run(collect_events())
+
+    assert events == [
+        'data: {"mode": "general", "token": "I can help with translation, definitions, or language learning. Which would you like?"}\n\n',
+        'data: {"mode": "general", "done": true}\n\n',
+    ]
 
 
 def test_stream_chat_request_rejects_invalid_body():

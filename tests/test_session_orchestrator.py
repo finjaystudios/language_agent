@@ -1,7 +1,6 @@
 import asyncio
 
 from app.data_models.intent_result import IntentResult
-from app.data_models.mode_responses import DefinitionResponse
 from app.memory.short_term import ConversationMemory
 from app.orchestration.session import SessionOrchestrator
 
@@ -37,28 +36,6 @@ class FakeStreamHandler:
     async def stream(self, user_input, session_state, conversation_history):
         self.order.append("stream")
         yield "hola"
-
-
-class FakeAskHandler:
-    def __init__(self, order):
-        self.order = order
-
-    async def update_session_state(
-        self, user_input, session_state, conversation_history
-    ):
-        self.order.append("update")
-        return session_state
-
-    async def handle(self, user_input, session_state, conversation_history):
-        self.order.append("handle")
-        return DefinitionResponse(
-            term="bonjour",
-            language="French",
-            part_of_speech="interjection",
-            pronunciation="",
-            meaning="hello",
-            response="bonjour means hello",
-        )
 
 
 def test_handle_turn_returns_clarification_without_calling_mode_handler():
@@ -106,7 +83,7 @@ def test_handle_turn_updates_session_state_before_streaming_response():
     assert order == ["update", "stream"]
 
 
-def test_handle_turn_updates_session_state_before_ask_response():
+def test_handle_turn_updates_session_state_before_definition_streaming_response():
     order = []
     intent = IntentResult(
         mode="definition",
@@ -115,11 +92,11 @@ def test_handle_turn_updates_session_state_before_ask_response():
         reason="Definition request.",
     )
     orchestrator = SessionOrchestrator(None, FakeRouter(intent), ConversationMemory())
-    orchestrator.handlers = {"definition": FakeAskHandler(order)}
+    orchestrator.handlers = {"definition": FakeStreamHandler(order)}
 
     asyncio.run(orchestrator.handle_turn("define bonjour", FakeConsole()))
 
-    assert order == ["update", "handle"]
+    assert order == ["update", "stream"]
 
 
 def test_handle_turn_stores_streamed_assistant_reply_in_memory():

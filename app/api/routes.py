@@ -1,12 +1,20 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.api.auth import require_api_key
 from app.api.dependencies import get_agent_service
-from app.api.models import ChatRequest, ChatResponse, ErrorResponse, StreamChatRequest
+from app.api.models import (
+    ChatRequest,
+    ChatResponse,
+    ErrorResponse,
+    LLMJobStatusResponse,
+    QueueStatusResponse,
+    StreamChatRequest,
+)
+from app.queue.service import cancel_llm_call, get_job_status, get_queue_status
 from app.services.agent_service import AgentService
 
 router = APIRouter(
@@ -21,6 +29,7 @@ logger = logging.getLogger(__name__)
     responses={
         400: {"model": ErrorResponse, "description": "Invalid client input."},
         401: {"model": ErrorResponse, "description": "Missing or invalid API key."},
+        429: {"model": ErrorResponse, "description": "Queue is saturated."},
         422: {
             "model": ErrorResponse,
             "description": "Request schema validation failed.",
@@ -55,11 +64,8 @@ async def chat_full(
     "/chat/stream",
     response_class=StreamingResponse,
     responses={
-        400: {
-            "model": ErrorResponse,
-            "description": "Mode does not support streaming.",
-        },
         401: {"model": ErrorResponse, "description": "Missing or invalid API key."},
+        429: {"model": ErrorResponse, "description": "Queue is saturated."},
         422: {
             "model": ErrorResponse,
             "description": "Request schema validation failed.",
@@ -71,7 +77,7 @@ async def chat_full(
     },
     summary="Stream a language-agent response as Server-Sent Events",
     description=(
-        "Streams token events for modes that support streaming. Events are emitted "
+        "Streams token events for any mode. Events are emitted "
         'as `data: {"mode": "translation", "token": "..."}` and end '
         'with `data: {"mode": "translation", "done": true}`.'
     ),
@@ -89,3 +95,51 @@ async def chat_stream(
     event_stream = await agent_service.chat_stream(request)
     logger.info("api_chat_stream_response_started")
     return StreamingResponse(event_stream, media_type="text/event-stream")
+
+
+@router.get(
+    "/llm/jobs/{job_id}",
+    response_model=LLMJobStatusResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid API key."},
+        404: {"model": ErrorResponse, "description": "Job was not found."},
+    },
+    summary="Get LLM queue job status",
+)
+async def llm_job_status(job_id: str) -> LLMJobStatusResponse:
+    try:
+        job = await get_job_status(job_id)
+    except Exception as error:
+        raise HTTPException(status_code=404, detail="LLM job not found.") from error
+    return LLMJobStatusResponse.from_job(job)
+
+
+@router.post(
+    "/llm/jobs/{job_id}/cancel",
+    response_model=LLMJobStatusResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid API key."},
+        404: {"model": ErrorResponse, "description": "Job was not found."},
+    },
+    summary="Cancel an LLM queue job",
+)
+async def cancel_llm_job(job_id: str) -> LLMJobStatusResponse:
+    try:
+        job = await cancel_llm_call(job_id)
+    except Exception as error:
+        raise HTTPException(status_code=404, detail="LLM job not found.") from error
+    return LLMJobStatusResponse.from_job(job)
+
+
+@router.get(
+    "/queue/status",
+    response_model=QueueStatusResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid API key."},
+        500: {"model": ErrorResponse, "description": "Queue status check failed."},
+    },
+    summary="Get LLM queue health and depth",
+)
+async def queue_status() -> QueueStatusResponse:
+    queue = await get_queue_status()
+    return QueueStatusResponse(queue=queue)

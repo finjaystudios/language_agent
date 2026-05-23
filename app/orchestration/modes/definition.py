@@ -29,6 +29,7 @@ class DefinitionHandler(ModeHandler):
             system_prompt=STATE_UPDATE_SYSTEM_PROMPT,
             user_prompt=prompt,
             schema=DEFINITION_STATE_SCHEMA,
+            mode="definition",
         )
 
         session_state.definition = DefinitionModeState(**response)
@@ -47,6 +48,7 @@ class DefinitionHandler(ModeHandler):
             system_prompt=DEFINITION_SYSTEM_PROMPT,
             user_prompt=prompt,
             schema=DEFINITION_RESPONSE_SCHEMA,
+            mode="definition",
         )
 
         return DefinitionResponse(**response)
@@ -63,5 +65,6 @@ class DefinitionHandler(ModeHandler):
         async for token in self.llm_service.stream_llm(
             system_prompt=DEFINITION_SYSTEM_PROMPT,
             user_prompt=prompt,
+            mode="definition",
         ):
             yield token

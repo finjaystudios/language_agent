@@ -9,7 +9,7 @@ class FakeLLM:
     def __init__(self, response):
         self.response = response
 
-    async def ask_llm(self, system_prompt, user_prompt, schema):
+    async def ask_llm(self, system_prompt, user_prompt, schema, mode=None):
         return self.response
 
 

@@ -11,21 +11,23 @@ class FakeLLM:
         self.response = response
         self.calls = []
 
-    async def ask_llm(self, system_prompt, user_prompt, schema):
+    async def ask_llm(self, system_prompt, user_prompt, schema, mode=None):
         self.calls.append(
             {
                 "system_prompt": system_prompt,
                 "user_prompt": user_prompt,
                 "schema": schema,
+                "mode": mode,
             }
         )
         return self.response
 
-    async def stream_llm(self, system_prompt, user_prompt):
+    async def stream_llm(self, system_prompt, user_prompt, mode=None):
         self.calls.append(
             {
                 "system_prompt": system_prompt,
                 "user_prompt": user_prompt,
+                "mode": mode,
             }
         )
         yield "bonjour"

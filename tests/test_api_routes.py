@@ -1,15 +1,22 @@
 import asyncio
 
-import pytest
-from app.api.errors import UnsupportedModeError
 from app.api.main import create_app
 from app.api.models import (
     ChatRequest,
     ChatResponse,
+    LLMJobStatusResponse,
+    QueueStatusResponse,
     ResponseMetadata,
     StreamChatRequest,
 )
-from app.api.routes import chat_full, chat_stream
+from app.api.routes import (
+    cancel_llm_job,
+    chat_full,
+    chat_stream,
+    llm_job_status,
+    queue_status,
+)
+from app.queue.models import LLMCallJob, QueueStatusSnapshot
 
 
 class FakeAgentService:
@@ -32,11 +39,6 @@ class FakeAgentService:
             yield 'data: {"mode": "translation", "done": true}\n\n'
 
         return events()
-
-
-class FakeUnsupportedStreamService:
-    async def chat_stream(self, request):
-        raise UnsupportedModeError("definition")
 
 
 def test_chat_full_route_delegates_to_agent_service():
@@ -80,21 +82,6 @@ def test_chat_stream_route_returns_streaming_response():
     ]
 
 
-def test_chat_stream_route_maps_unsupported_mode_to_bad_request():
-    request = StreamChatRequest(message="Define recursion", mode="definition")
-
-    with pytest.raises(UnsupportedModeError) as error:
-        asyncio.run(
-            chat_stream(
-                request=request,
-                agent_service=FakeUnsupportedStreamService(),
-            )
-        )
-
-    assert error.value.status_code == 400
-    assert "definition" in str(error.value)
-
-
 def test_chat_stream_endpoint_is_in_openapi_schema():
     app = create_app()
 
@@ -102,3 +89,67 @@ def test_chat_stream_endpoint_is_in_openapi_schema():
 
     assert "/api/chat/stream" in schema["paths"]
     assert "post" in schema["paths"]["/api/chat/stream"]
+
+
+def test_llm_job_status_route_returns_job_details(monkeypatch):
+    async def fake_get_job_status(job_id):
+        return LLMCallJob(
+            job_id=job_id,
+            call_type="streaming_text_generation",
+            messages=[],
+            status="queued",
+        )
+
+    monkeypatch.setattr(
+        "app.api.routes.get_job_status",
+        fake_get_job_status,
+    )
+
+    response = asyncio.run(llm_job_status("job-123"))
+
+    assert isinstance(response, LLMJobStatusResponse)
+    assert response.job_id == "job-123"
+
+
+def test_cancel_llm_job_route_returns_job_details(monkeypatch):
+    async def fake_cancel_llm_call(job_id):
+        return LLMCallJob(
+            job_id=job_id,
+            call_type="streaming_text_generation",
+            messages=[],
+            status="cancelled",
+            cancel_requested=True,
+        )
+
+    monkeypatch.setattr(
+        "app.api.routes.cancel_llm_call",
+        fake_cancel_llm_call,
+    )
+
+    response = asyncio.run(cancel_llm_job("job-123"))
+
+    assert response.status == "cancelled"
+    assert response.cancel_requested is True
+
+
+def test_queue_status_route_returns_sanitized_queue_snapshot(monkeypatch):
+    async def fake_get_queue_status():
+        return QueueStatusSnapshot(
+            redis_connected=True,
+            queue_depth=2,
+            active_job_count=1,
+            failed_job_count=0,
+            worker_count=1,
+            average_wait_time_seconds=1.5,
+            estimated_wait_time_seconds=3.0,
+        )
+
+    monkeypatch.setattr(
+        "app.api.routes.get_queue_status",
+        fake_get_queue_status,
+    )
+
+    response = asyncio.run(queue_status())
+
+    assert isinstance(response, QueueStatusResponse)
+    assert response.queue.queue_depth == 2

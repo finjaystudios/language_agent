@@ -150,7 +150,7 @@ Then use the Web UI against the same backend URL:
 1. Open `http://127.0.0.1:8001`.
 2. Confirm the LanguageAgent landing page shows the logo, starter prompts, and
    backend health as connected.
-3. Select `Definition - full response` and ask for a definition.
+3. Select `Definition - stream` and ask for a definition.
 4. Select `Translation - stream` or `Learning - stream` to test streaming.
 5. Change the Web UI key to a wrong value and send a message; the UI should show
    a backend authentication failure without printing the key.

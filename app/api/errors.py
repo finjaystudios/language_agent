@@ -5,19 +5,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.api.models import ErrorResponse
+from app.errors import APIError
 
 logger = logging.getLogger(__name__)
-
-
-class APIError(Exception):
-    status_code = 500
-    error = "internal_error"
-    message = "An internal service error occurred."
-
-    def __init__(self, message: str | None = None, details: dict | None = None):
-        self.message = message or self.message
-        self.details = details
-        super().__init__(self.message)
 
 
 class UnsupportedModeError(APIError):
@@ -40,9 +30,14 @@ def error_response(
     error: str,
     message: str,
     details: dict | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     payload = ErrorResponse(error=error, message=message, details=details)
-    return JSONResponse(status_code=status_code, content=payload.model_dump())
+    return JSONResponse(
+        status_code=status_code,
+        content=payload.model_dump(),
+        headers=headers,
+    )
 
 
 def _validation_status_code(exc: RequestValidationError) -> int:
@@ -66,6 +61,7 @@ async def api_error_handler(request: Request, exc: APIError) -> JSONResponse:
         error=exc.error,
         message=exc.message,
         details=exc.details,
+        headers=exc.headers,
     )
 
 
@@ -105,3 +101,26 @@ async def unexpected_exception_handler(
         error="internal_error",
         message="An unexpected internal error occurred.",
     )
+
+
+from app.queue.errors import (  # noqa: E402
+    GenerationTimeoutError,
+    QueueSaturatedError,
+    QueueWaitTimeoutError,
+    StreamingTimeoutError,
+)
+
+__all__ = [
+    "APIError",
+    "GenerationTimeoutError",
+    "LLMServiceError",
+    "QueueSaturatedError",
+    "QueueWaitTimeoutError",
+    "StreamingTimeoutError",
+    "UnsupportedModeError",
+    "api_error_handler",
+    "error_response",
+    "http_exception_handler",
+    "unexpected_exception_handler",
+    "validation_exception_handler",
+]
