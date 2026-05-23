@@ -378,7 +378,7 @@ FastAPI API container environment variables:
 | `REDIS_URL` | `redis://redis:6379/0` | Redis connection used by the queued gateway. |
 | `LLM_QUEUE_NAME` | `llm` | RQ queue name for model-call jobs. |
 | `LLM_QUEUE_TIMEOUT_SECONDS` | `180` | General queue operation timeout. |
-| `LLM_QUEUE_WAIT_TIMEOUT_SECONDS` | `90` | Maximum time the API waits for a queued non-streaming job. |
+| `LLM_QUEUE_WAIT_TIMEOUT_SECONDS` | `300` | Maximum time the API waits for a queued non-streaming job, including cold-start model initialization. |
 | `LLM_GENERATION_TIMEOUT_SECONDS` | `180` | Per-job generation timeout enforced by RQ. |
 | `LLM_RESULT_TTL_SECONDS` | `300` | How long completed job metadata and stream data are retained. |
 | `LLM_MAX_QUEUE_SIZE` | `100` | Maximum queued job depth before backpressure returns `429`. |

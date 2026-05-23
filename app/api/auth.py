@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from fastapi import Depends
 from fastapi.security import APIKeyHeader
 
-from app.api.errors import APIError
+from app.errors import APIError
 
 API_KEY_HEADER_NAME = "X-API-Key"
 

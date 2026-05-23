@@ -28,7 +28,7 @@ SESSION_MODE_KEY = "selected_mode"
 LAST_USER_MESSAGE_KEY = "last_user_message"
 STREAM_FLUSH_CHAR_LIMIT = 96
 MODE_AUTO = "auto"
-STREAMING_MODES = {"translation", "learning", "definition", "general"}
+STREAMING_MODES = {"translation", "learning"}
 STREAM_STATUS_MESSAGES = {
     "queued": "Your request is queued and waiting for the local model.",
     "processing": "The local model is preparing your response.",

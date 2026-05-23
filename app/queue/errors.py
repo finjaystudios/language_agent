@@ -1,4 +1,4 @@
-from app.api.errors import APIError
+from app.errors import APIError
 
 
 class QueueSaturatedError(APIError):

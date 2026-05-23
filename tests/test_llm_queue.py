@@ -331,16 +331,14 @@ def test_agent_service_from_queue_does_not_load_local_model(monkeypatch):
 
 
 def test_worker_uses_simpleworker_on_windows(monkeypatch):
-    monkeypatch.setattr("app.queue.worker.os.name", "nt")
     monkeypatch.setattr("app.queue.worker.SimpleWorker", sentinel.spawn_worker)
     monkeypatch.setattr("app.queue.worker.Worker", sentinel.worker)
 
     assert get_worker_class() is sentinel.spawn_worker
 
 
-def test_worker_uses_standard_worker_off_windows(monkeypatch):
-    monkeypatch.setattr("app.queue.worker.os.name", "posix")
+def test_worker_uses_simpleworker_off_windows(monkeypatch):
     monkeypatch.setattr("app.queue.worker.SimpleWorker", sentinel.spawn_worker)
     monkeypatch.setattr("app.queue.worker.Worker", sentinel.worker)
 
-    assert get_worker_class() is sentinel.worker
+    assert get_worker_class() is sentinel.spawn_worker

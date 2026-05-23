@@ -1,5 +1,4 @@
 import logging
-import os
 import threading
 from typing import Any
 
@@ -8,6 +7,7 @@ from rq import SimpleWorker, Worker
 from rq.job import get_current_job
 
 from app.llm.service import LLMService, create_local_llm_service
+from app.logging_config import configure_logging
 from app.queue.config import LLM_JOB_MAX_RETRIES, LLM_QUEUE_NAME, LLM_WORKER_CONCURRENCY
 from app.queue.models import LLMCallJob, utcnow
 from app.queue.service import (
@@ -33,10 +33,10 @@ class NonRetryableLLMJobError(RuntimeError):
     pass
 
 
-def get_worker_class() -> type[Worker]:
-    if os.name == "nt":
-        return SimpleWorker
-    return Worker
+def get_worker_class() -> type[SimpleWorker]:
+    # Keep LLM execution inside one long-lived process so the loaded GPU model
+    # is reused across jobs instead of being re-created in forked work horses.
+    return SimpleWorker
 
 
 def get_worker_llm_service() -> LLMService:
@@ -261,6 +261,9 @@ def create_worker(connection: Redis | None = None) -> Worker:
 
 
 def main() -> None:
+    configure_logging()
+    with _MODEL_LOCK:
+        get_worker_llm_service()
     worker = create_worker()
     logger.info(
         "llm_worker_start queue=%s worker_class=%s",
