@@ -27,6 +27,7 @@ test-results
 blob-report
 bruno
 tests
+design
 models
 webui/.files
 webui/.chainlit/translations

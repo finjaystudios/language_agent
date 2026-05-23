@@ -28,6 +28,18 @@ button[aria-label*="Learning"] {
   border-color: var(--lla-border);
 }
 
+img.logo[alt="logo"] {
+  height: auto !important;
+  max-width: calc(100vw - 48px);
+  width: clamp(560px, 32vw, 640px) !important;
+}
+
+@media (max-width: 720px) {
+  img.logo[alt="logo"] {
+    width: min(420px, calc(100vw - 32px)) !important;
+  }
+}
+
 .lla-status-card {
   align-items: center;
   border: 1px solid var(--lla-border);

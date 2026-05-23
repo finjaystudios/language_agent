@@ -57,13 +57,29 @@ def test_model_path_is_required(monkeypatch):
     assert "Set LLM_MODEL_PATH" in str(error.value)
 
 
+def test_docker_model_path_resolves_to_local_model_when_running_from_repo(
+    monkeypatch, tmp_path
+):
+    models_dir = tmp_path / "models"
+    models_dir.mkdir()
+    model = models_dir / "model.gguf"
+    model.write_bytes(b"model")
+    monkeypatch.chdir(tmp_path)
+    processor_selection = reload_processor_selection(
+        monkeypatch, LLM_MODEL_PATH="/models/model.gguf"
+    )
+
+    assert processor_selection.require_model_path() == str(model)
+
+
 def test_model_file_must_exist(monkeypatch):
     processor_selection = reload_processor_selection(monkeypatch)
 
     with pytest.raises(FileNotFoundError) as error:
         processor_selection.assert_model_file_exists("missing-model.gguf")
 
-    assert "Mount the local model directory" in str(error.value)
+    assert "host-local run" in str(error.value)
+    assert "For Docker" in str(error.value)
 
 
 def test_model_file_exists_accepts_file(monkeypatch, tmp_path):

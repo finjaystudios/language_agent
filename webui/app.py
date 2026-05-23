@@ -25,6 +25,8 @@ logging.basicConfig(
 BACKEND_STATUS_ATTEMPTS = 3
 BACKEND_STATUS_RETRY_COOLDOWN_SECONDS = 1
 SESSION_MODE_KEY = "selected_mode"
+LAST_USER_MESSAGE_KEY = "last_user_message"
+STREAM_FLUSH_CHAR_LIMIT = 96
 MODE_AUTO = "auto"
 STREAMING_MODES = {"translation", "learning"}
 MODE_OPTIONS = {
@@ -40,6 +42,11 @@ MODE_DESCRIPTIONS = {
     "definition": "Define a term and render structured meaning, examples, and related words.",
     "learning": "Ask for language-learning help with live feedback.",
     "general": "Ask a general language-agent question with a full response.",
+}
+FEEDBACK_CATEGORIES = {
+    "not_relevant": "Not relevant",
+    "incorrect": "Incorrect",
+    "offensive": "Offensive",
 }
 
 
@@ -123,6 +130,15 @@ def api_mode_value(mode: str | None = None) -> str | None:
     return selected_mode
 
 
+def normalize_mode_value(value: object) -> str:
+    selected_mode = str(value or MODE_AUTO).strip()
+    if selected_mode in MODE_OPTIONS:
+        return selected_mode
+
+    normalized_labels = {label.casefold(): mode for mode, label in MODE_OPTIONS.items()}
+    return normalized_labels.get(selected_mode.casefold(), MODE_AUTO)
+
+
 def get_backend_client() -> FastAPIClient:
     return FastAPIClient(BackendConfig.from_env())
 
@@ -144,14 +160,40 @@ def mode_actions() -> list[cl.Action]:
     ]
 
 
+def response_actions(user_text: str, selected_mode: str) -> list[cl.Action]:
+    return [
+        cl.Action(
+            name="retry_response",
+            label="Retry",
+            tooltip="Retry the last request.",
+            icon="rotate-ccw",
+            payload={"message": user_text, "mode": selected_mode},
+        ),
+        cl.Action(
+            name="feedback_good",
+            label="Helpful",
+            tooltip="Mark this response as helpful.",
+            icon="thumbs-up",
+            payload={"message": user_text, "rating": "positive"},
+        ),
+        cl.Action(
+            name="feedback_needs_category",
+            label="Needs improvement",
+            tooltip="Tell us what went wrong.",
+            icon="thumbs-down",
+            payload={"message": user_text, "rating": "negative"},
+        ),
+    ]
+
+
 async def send_mode_settings(initial: str = MODE_AUTO) -> None:
     await cl.ChatSettings(
         [
             Select(
                 id=SESSION_MODE_KEY,
                 label="Response mode",
-                items=MODE_OPTIONS,
-                initial=initial,
+                values=list(MODE_OPTIONS.values()),
+                initial_value=MODE_OPTIONS.get(initial, MODE_OPTIONS[MODE_AUTO]),
                 tooltip="Select the response mode to use for future chat requests.",
                 description=(
                     "Auto lets the language service choose the best mode. Live "
@@ -186,15 +228,14 @@ async def set_starters() -> list[cl.Starter]:
 @cl.on_chat_start
 async def on_chat_start() -> None:
     cl.user_session.set(SESSION_MODE_KEY, MODE_AUTO)
+    cl.user_session.set(LAST_USER_MESSAGE_KEY, "")
     logger.info("webui_chat_start default_mode=%s", MODE_AUTO)
     await send_mode_settings()
 
 
 @cl.on_settings_update
 async def on_settings_update(settings: dict[str, object]) -> None:
-    selected_mode = str(settings.get(SESSION_MODE_KEY, MODE_AUTO))
-    if selected_mode not in MODE_OPTIONS:
-        selected_mode = MODE_AUTO
+    selected_mode = normalize_mode_value(settings.get(SESSION_MODE_KEY, MODE_AUTO))
 
     cl.user_session.set(SESSION_MODE_KEY, selected_mode)
     logger.info("webui_mode_settings_update mode=%s", selected_mode)
@@ -208,9 +249,7 @@ async def on_settings_update(settings: dict[str, object]) -> None:
 
 @cl.action_callback("set_mode")
 async def on_set_mode(action: cl.Action) -> None:
-    selected_mode = str(action.payload.get("mode", MODE_AUTO))
-    if selected_mode not in MODE_OPTIONS:
-        selected_mode = MODE_AUTO
+    selected_mode = normalize_mode_value(action.payload.get("mode", MODE_AUTO))
 
     cl.user_session.set(SESSION_MODE_KEY, selected_mode)
     logger.info("webui_mode_action_update mode=%s", selected_mode)
@@ -218,6 +257,65 @@ async def on_set_mode(action: cl.Action) -> None:
     await send_mode_settings(selected_mode)
     await cl.Message(
         content=f"Response mode set to **{mode_label(selected_mode)}**."
+    ).send()
+
+
+@cl.action_callback("retry_response")
+async def on_retry_response(action: cl.Action) -> None:
+    user_text = str(action.payload.get("message", "")).strip()
+    selected_mode = normalize_mode_value(
+        action.payload.get("mode", get_selected_mode())
+    )
+    if not user_text:
+        await action.remove()
+        return
+
+    cl.user_session.set(SESSION_MODE_KEY, selected_mode)
+    logger.info("webui_retry_response mode=%s", selected_mode)
+    await action.remove()
+    await send_mode_settings(selected_mode)
+    await handle_user_text(user_text, echo_user=True)
+
+
+@cl.action_callback("feedback_good")
+async def on_feedback_good(action: cl.Action) -> None:
+    user_text = str(action.payload.get("message", "")).strip()
+    logger.info(
+        "webui_feedback_submitted rating=positive message_length=%d",
+        len(user_text),
+    )
+    await action.remove()
+    await cl.Message(content="Thanks for the feedback.", author="Feedback").send()
+
+
+@cl.action_callback("feedback_needs_category")
+async def on_feedback_needs_category(action: cl.Action) -> None:
+    user_text = str(action.payload.get("message", "")).strip()
+    res = await cl.AskActionMessage(
+        content="What should be improved?",
+        author="Feedback",
+        actions=[
+            cl.Action(
+                name="feedback_category",
+                label=label,
+                payload={"category": category, "message": user_text},
+            )
+            for category, label in FEEDBACK_CATEGORIES.items()
+        ],
+        timeout=60,
+        raise_on_timeout=False,
+    ).send()
+    if not res:
+        return
+    payload = res.get("payload", {})
+    category = str(payload.get("category", "uncategorized"))
+    logger.info(
+        "webui_feedback_submitted rating=negative category=%s message_length=%d",
+        category,
+        len(user_text),
+    )
+    await cl.Message(
+        content="Thanks. I logged that feedback.", author="Feedback"
     ).send()
 
 
@@ -232,11 +330,24 @@ async def on_message(message: cl.Message) -> None:
         return
 
     starter_mode = starter_mode_for_message(message)
+    await handle_user_text(user_text, starter_mode=starter_mode)
+
+
+async def handle_user_text(
+    user_text: str,
+    *,
+    starter_mode: str | None = None,
+    echo_user: bool = False,
+) -> None:
+    if echo_user:
+        await cl.Message(content=user_text, author="You", type="user_message").send()
+
     if starter_mode:
         cl.user_session.set(SESSION_MODE_KEY, starter_mode)
         await send_mode_settings(starter_mode)
         logger.info("webui_starter_mode_selected mode=%s", starter_mode)
 
+    cl.user_session.set(LAST_USER_MESSAGE_KEY, user_text)
     selected_mode = get_selected_mode()
     api_mode = api_mode_value(selected_mode)
     client = get_backend_client()
@@ -269,6 +380,7 @@ async def on_message(message: cl.Message) -> None:
             api_mode,
         )
         response.content = format_ui_error(error)
+        response.actions = response_actions(user_text, selected_mode)
         await response.update()
 
 
@@ -294,6 +406,7 @@ async def send_full_backend_response(
         "mode": result.get("mode"),
         "response_type": "full",
     }
+    response.actions = response_actions(user_text, get_selected_mode())
     await response.update()
 
 
@@ -305,6 +418,7 @@ async def stream_backend_response(
 ) -> None:
     response.content = ""
     streamed_text = ""
+    token_buffer = ""
     received_token = False
     response_mode = api_mode
     done_received = False
@@ -324,18 +438,24 @@ async def stream_backend_response(
             if isinstance(token, str) and token:
                 received_token = True
                 streamed_text += token
-                await response.stream_token(token)
+                token_buffer += token
+                if should_flush_stream_buffer(token_buffer, streamed_text):
+                    await response.stream_token(token_buffer)
+                    token_buffer = ""
 
             if event.get("done") is True:
                 done_received = True
     except BackendClientError:
         if received_token:
             logger.warning("webui_stream_interrupted_after_tokens mode=%s", api_mode)
+            if token_buffer:
+                await response.stream_token(token_buffer)
             response.content = (
                 f"{streamed_text}\n\n"
                 "The response was interrupted before it completed. The partial "
                 "answer above is all that was received."
             )
+            response.actions = response_actions(user_text, get_selected_mode())
             await response.update()
             return
         await send_full_backend_response(client, response, user_text, api_mode)
@@ -343,12 +463,15 @@ async def stream_backend_response(
 
     if not streamed_text:
         raise BackendStreamError("Backend stream completed without response text.")
+    if token_buffer:
+        await response.stream_token(token_buffer)
     if not done_received:
         response.content = (
             f"{streamed_text}\n\n"
             "The response ended before the completion signal arrived. The "
             "partial answer above is all that was received."
         )
+        response.actions = response_actions(user_text, get_selected_mode())
         await response.update()
         return
 
@@ -356,4 +479,17 @@ async def stream_backend_response(
         "mode": response_mode,
         "response_type": "stream",
     }
+    response.actions = response_actions(user_text, get_selected_mode())
     await response.update()
+
+
+def should_flush_stream_buffer(token_buffer: str, streamed_text: str) -> bool:
+    if len(token_buffer) >= STREAM_FLUSH_CHAR_LIMIT:
+        return True
+    if token_buffer.endswith(("\n\n", ". ", "? ", "! ")):
+        return not has_unclosed_markdown_fence(streamed_text)
+    return False
+
+
+def has_unclosed_markdown_fence(text: str) -> bool:
+    return text.count("```") % 2 == 1

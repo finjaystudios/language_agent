@@ -18,7 +18,7 @@ def test_backend_unavailable_message_is_readable(
     )
     page.goto(url)
 
-    input_box = page.get_by_placeholder("Type your message here...")
+    input_box = page.get_by_placeholder("Ask your local language assistant...")
     expect(input_box).to_be_enabled()
     input_box.fill("Hello")
     page.locator("#chat-submit:not([disabled])").click()
@@ -46,7 +46,7 @@ def test_wrong_api_key_message_is_readable(
     )
     page.goto(url)
 
-    input_box = page.get_by_placeholder("Type your message here...")
+    input_box = page.get_by_placeholder("Ask your local language assistant...")
     expect(input_box).to_be_enabled()
     input_box.fill("Define recursion")
     page.locator("#chat-submit:not([disabled])").click()
@@ -80,7 +80,7 @@ def test_missing_api_key_message_is_readable(
     )
     page.goto(url)
 
-    input_box = page.get_by_placeholder("Type your message here...")
+    input_box = page.get_by_placeholder("Ask your local language assistant...")
     expect(input_box).to_be_enabled()
     input_box.fill("Define recursion")
     page.locator("#chat-submit:not([disabled])").click()

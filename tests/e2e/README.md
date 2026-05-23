@@ -13,6 +13,12 @@ pip install -r tests/e2e/requirements.txt
 python -m playwright install chromium
 ```
 
+Install additional browsers for cross-browser checks when needed:
+
+```powershell
+python -m playwright install firefox webkit
+```
+
 ### Run
 
 Run all local browser tests:
@@ -25,6 +31,14 @@ Run headed:
 
 ```powershell
 pytest tests/e2e --headed
+```
+
+Run a specific browser:
+
+```powershell
+pytest tests/e2e --browser chromium
+pytest tests/e2e --browser firefox
+pytest tests/e2e --browser webkit
 ```
 
 Run one file:
@@ -99,8 +113,9 @@ docker compose down
 - Chainlit Web UI: started from `webui/` with `FASTAPI_BASE_URL` pointed at the
   fake backend.
 
-The tests assert landing-page status, starters, chat input, full responses,
-streamed responses, selected mode behavior, and readable offline errors.
+The tests assert the LanguageAgent title, served branding/theme assets,
+landing-page status, starters, chat input, full responses, streamed responses,
+selected mode behavior, retry and feedback actions, and readable offline errors.
 
 The fake-backend tests confirm that the Web UI sends the backend API key from
 server-side environment variables, that wrong keys produce a readable UI error,

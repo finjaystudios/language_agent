@@ -1,3 +1,5 @@
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 from webui.client import (
@@ -6,6 +8,14 @@ from webui.client import (
     format_ui_error,
 )
 from webui.modes import starter_mode_for_values
+
+WEBUI_DIR = Path(__file__).resolve().parents[1] / "webui"
+sys.path.insert(0, str(WEBUI_DIR))
+from webui.app import (  # noqa: E402
+    has_unclosed_markdown_fence,
+    normalize_mode_value,
+    should_flush_stream_buffer,
+)
 
 
 def test_starter_mode_uses_chainlit_command():
@@ -51,3 +61,30 @@ def test_missing_webui_api_key_message_is_readable_and_safe():
     assert "missing the backend API key" in message
     assert "change-me" not in message
     assert "Traceback" not in message
+
+
+def test_normalize_mode_value_accepts_mode_ids_and_labels():
+    assert normalize_mode_value("definition") == "definition"
+    assert normalize_mode_value("Definition") == "definition"
+    assert normalize_mode_value("Translation") == "translation"
+    assert normalize_mode_value("Auto") == "auto"
+
+
+def test_normalize_mode_value_falls_back_to_auto():
+    assert normalize_mode_value("unknown") == "auto"
+    assert normalize_mode_value(None) == "auto"
+
+
+def test_stream_buffer_waits_inside_markdown_fence():
+    assert (
+        should_flush_stream_buffer("done. ", "```python\nprint('hi')\ndone. ") is False
+    )
+
+
+def test_stream_buffer_flushes_sentence_outside_markdown_fence():
+    assert should_flush_stream_buffer("done. ", "The answer is done. ") is True
+
+
+def test_unclosed_markdown_fence_detection():
+    assert has_unclosed_markdown_fence("```python\nprint('hi')") is True
+    assert has_unclosed_markdown_fence("```python\nprint('hi')\n```") is False
