@@ -23,6 +23,12 @@ def select_response_mode(page: Page, label: str) -> None:
     expect(page.get_by_text(f"Response mode set to {label}.")).to_be_visible()
 
 
+def expect_response_actions(page: Page) -> None:
+    expect(page.get_by_role("button", name="Retry")).to_be_visible()
+    expect(page.get_by_role("button", name="Helpful")).to_be_visible()
+    expect(page.get_by_role("button", name="Needs improvement")).to_be_visible()
+
+
 def test_definition_starter_sets_mode_and_renders_response(
     requires_fake_backend: None,
     page: Page,
@@ -42,6 +48,7 @@ def test_definition_starter_sets_mode_and_renders_response(
         page.get_by_text("E2E definition response from fake backend.")
     ).to_be_visible(timeout=15000)
     expect(page.locator("#lla-backend-status")).to_be_hidden()
+    expect_response_actions(page)
 
     requests = backend_requests()
     assert requests[-1]["endpoint"] == "/api/chat"
@@ -65,6 +72,7 @@ def test_user_can_send_full_response_message(
     expect(
         page.get_by_text(re.compile(r"E2E full response from fake backend"))
     ).to_be_visible(timeout=15000)
+    expect_response_actions(page)
 
     requests = backend_requests()
     assert requests[-1]["endpoint"] == "/api/chat"
@@ -109,6 +117,7 @@ def test_streaming_starter_renders_streamed_response(
     page.get_by_role("button", name=re.compile(r"Translate")).click()
 
     expect(page.get_by_text("Bonjour from fake stream.")).to_be_visible(timeout=15000)
+    expect_response_actions(page)
 
     requests = backend_requests()
     assert requests[-1]["endpoint"] == "/api/chat/stream"

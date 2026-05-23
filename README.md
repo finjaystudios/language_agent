@@ -167,12 +167,20 @@ Open the Web UI at:
 
 - `http://127.0.0.1:8001`
 
-The UI shows a welcome message, checks backend health, and sends chat requests
-over HTTP from the Chainlit server to the FastAPI backend. Translation and
-Learning modes use the backend streaming endpoint when
+The LanguageAgent UI shows a branded landing page, checks backend health, offers
+starter prompts, and sends chat requests over HTTP from the Chainlit server to
+the FastAPI backend. Translation and Learning modes use the backend streaming
+endpoint when
 `WEBUI_STREAMING_ENABLED=true`; Auto, Definition, and General use the full
 response endpoint. The browser never receives `FASTAPI_API_KEY`; the key is read
 only by the Chainlit server process and sent only on protected FastAPI requests.
+
+The personalised UI assets live under `webui/public/`: theme variables in
+`theme.json`, scoped CSS in `style.css`, landing-page behavior in
+`landing-status.js`, and runtime logos/favicons in the same directory. The chat
+interface includes starter prompts, response mode settings, stop/retry controls
+where Chainlit exposes them, response feedback actions, visible focus states,
+and polite live-region updates for streamed responses.
 
 ### Run Backend and Web UI Together
 
@@ -209,6 +217,18 @@ a deterministic fake backend and do not require Docker or the GGUF model:
 pip install -r tests/e2e/requirements.txt
 python -m playwright install chromium
 pytest tests/e2e
+```
+
+The browser suite checks the LanguageAgent title and static assets, landing-page
+backend status, quick actions, response mode overrides, streaming/full-response
+requests, retry and feedback buttons, and readable error states.
+
+Run additional Playwright browsers when installed:
+
+```powershell
+pytest tests/e2e --browser chromium
+pytest tests/e2e --browser firefox
+pytest tests/e2e --browser webkit
 ```
 
 To target a Web UI that is already running, set `E2E_BASE_URL`. This is useful
@@ -525,7 +545,7 @@ domain; Caddy remains the local HTTP origin.
 - The backend image installs only backend runtime dependencies.
 - The Web UI image installs only `webui/requirements.txt` dependencies and
   copies only Web UI Python files, Chainlit config, `chainlit.md`, and public
-  assets.
+  assets including the LanguageAgent logos, favicon, theme, CSS, and custom JS.
 - BuildKit cache mounts are used for apt and pip downloads to speed up rebuilds.
 - The backend CUDA `llama_cpp_python==0.3.4` wheel is installed from the cu124
   index.

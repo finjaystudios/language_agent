@@ -148,7 +148,8 @@ bru run bruno/local-language-agent-api --env Local
 Then use the Web UI against the same backend URL:
 
 1. Open `http://127.0.0.1:8001`.
-2. Confirm the welcome message reports backend health as connected.
+2. Confirm the LanguageAgent landing page shows the logo, starter prompts, and
+   backend health as connected.
 3. Select `Definition - full response` and ask for a definition.
 4. Select `Translation - stream` or `Learning - stream` to test streaming.
 5. Change the Web UI key to a wrong value and send a message; the UI should show
@@ -203,20 +204,70 @@ LanguageAgent branding is configured through `.chainlit/config.toml` and static
 files in `public/`.
 
 - Replace `public/logo_dark.png` and `public/logo_light.png` to update the
-  header logo. Keep transparent PNGs sized around `640x160` so Chainlit can
-  scale them cleanly in the header.
+  Chainlit logo. Keep transparent PNGs sized around `640x160` so Chainlit can
+  scale them cleanly. The landing page uses CSS in `public/style.css` to render
+  the same assets at a larger first-screen size.
 - Replace `public/favicon` to update the browser tab icon. The file is a PNG
   without an extension because Chainlit looks up that exact public path.
+- Keep compact icons such as `public/languageagent-icon-32.png` and
+  `public/languageagent-icon-64.png` in `public/` if they are referenced from
+  header links or future compact UI.
 - Keep editable source designs outside the Docker image path, such as
   `../design/languageagent-logo.svg` and `../design/languageagent-icon.svg`.
-  The Web UI Dockerfile only copies `webui/public`, so design sources are not
-  included in the runtime image.
+  The Web UI Dockerfile only copies `webui/public`, and `.dockerignore`
+  excludes `design/`, so design sources are not included in the runtime image or
+  build context.
 - Update `.chainlit/config.toml` for future brand text changes: `name`,
   `description`, `custom_meta_url`, `custom_meta_image_url`, and
   `[[UI.header_links]]`. Keep `logo_file_url` empty when both dark and light
   logo variants are present so Chainlit can switch between them by theme.
 - Clear the browser cache or hard refresh after replacing logos or favicons;
   browsers often cache these assets aggressively.
+
+### Theme and Chat UX Customization
+
+The LanguageAgent theme is split between Chainlit configuration, theme tokens,
+CSS, JavaScript, and Python callbacks:
+
+- `public/theme.json` defines the light and dark HSL colour variables used by
+  Chainlit. Keep foreground/background pairs at WCAG AA contrast or better.
+- `public/style.css` contains scoped polish for the landing page, message
+  bubbles, composer, status card, starter buttons, action buttons, and focus
+  states. It is loaded through `custom_css` with a cache-busting query string.
+- `public/landing-status.js` owns the landing-page backend status card and
+  hides it only after the user starts a conversation. It also patches the
+  composer placeholder and live-region accessibility attributes.
+- `app.py` owns starters, response mode settings, streaming/full-response
+  selection, retry actions, and thumbs up/down feedback actions.
+- `chainlit.md` controls the landing-page brand block that appears before the
+  first user message.
+
+To change quick actions, edit the `@cl.set_starters` callback in `app.py`.
+Each starter sets a prompt and optional mode metadata. To change the default
+Chain of Thought display, update `cot` in `.chainlit/config.toml`; the current
+value is `hidden` for a cleaner user-facing interface.
+
+Feedback is captured asynchronously in the Web UI process logs for now. Keep it
+free of secrets and user credentials until a dedicated backend endpoint exists.
+
+### Rebuild After UI Asset Changes
+
+After changing logos, favicons, `theme.json`, `style.css`, `landing-status.js`,
+or `.chainlit/config.toml`, rebuild the Web UI image:
+
+```powershell
+docker build -f Dockerfile.webui -t local-language-agent-webui .
+```
+
+For the full local stack:
+
+```powershell
+docker compose up --build
+```
+
+Hard refresh the browser after asset changes. If CSS appears stale, increment
+the query string in `.chainlit/config.toml`, for example
+`/public/style.css?v=languageagent-theme-v2`.
 
 ### Implementation Summary
 

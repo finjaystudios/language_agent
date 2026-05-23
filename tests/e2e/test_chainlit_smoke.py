@@ -36,3 +36,13 @@ def test_chainlit_landing_page_loads(
         page.get_by_role("button", name="Refresh language service status")
     ).to_be_visible()
     expect(page.get_by_text("Service unavailable")).not_to_be_visible()
+
+    for asset_path in (
+        "/public/theme.json",
+        "/public/style.css?v=languageagent-theme-v1",
+        "/public/landing-status.js",
+        "/logo?theme=dark",
+        "/favicon",
+    ):
+        response = page.request.get(f"{chainlit_url}{asset_path}")
+        assert response.ok, f"{asset_path} was not served by Chainlit"
