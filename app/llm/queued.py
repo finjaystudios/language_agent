@@ -4,6 +4,12 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
+from app.api.errors import LLMServiceError
+from app.queue.errors import (
+    GenerationTimeoutError,
+    QueueWaitTimeoutError,
+    StreamingTimeoutError,
+)
 from app.queue.models import LLMCallJob
 from app.queue.service import (
     cancel_llm_call,
@@ -37,11 +43,20 @@ class QueuedLLMService:
         )
         logger.info("queued_llm_ask_enqueue job_id=%s mode=%s", job.job_id, mode)
         enqueue_llm_call(job)
-        result = await wait_for_job_result(job.job_id)
+        try:
+            result = await wait_for_job_result(job.job_id)
+        except TimeoutError as error:
+            raise QueueWaitTimeoutError() from error
         if result.status != "completed":
-            raise RuntimeError(result.error or "LLM job failed.")
+            if result.status == "cancelled":
+                raise LLMServiceError("The language model request was cancelled.")
+            if result.last_error and "timeout" in result.last_error.lower():
+                raise GenerationTimeoutError() from None
+            raise LLMServiceError(
+                "The language model failed while generating a response."
+            )
         if not isinstance(result.result, dict):
-            raise RuntimeError("Structured LLM job returned a non-dict result.")
+            raise LLMServiceError("The language model returned an invalid response.")
         return result.result
 
     async def stream_llm(
@@ -63,8 +78,11 @@ class QueuedLLMService:
         )
         logger.info("queued_llm_stream_enqueue job_id=%s mode=%s", job.job_id, mode)
         enqueue_llm_call(job)
-        async for event in stream_llm_events(job.job_id):
-            yield event
+        try:
+            async for event in stream_llm_events(job.job_id):
+                yield event
+        except TimeoutError as error:
+            raise StreamingTimeoutError() from error
 
     async def cancel_job(self, job_id: str) -> LLMCallJob:
         return await asyncio.to_thread(cancel_llm_call, job_id)

@@ -12,9 +12,10 @@ from app.api.models import (
     ChatResponse,
     ErrorResponse,
     LLMJobStatusResponse,
+    QueueStatusResponse,
     StreamChatRequest,
 )
-from app.queue.service import cancel_llm_call, get_job_status
+from app.queue.service import cancel_llm_call, get_job_status, get_queue_status
 from app.services.agent_service import AgentService
 
 router = APIRouter(
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
     responses={
         400: {"model": ErrorResponse, "description": "Invalid client input."},
         401: {"model": ErrorResponse, "description": "Missing or invalid API key."},
+        429: {"model": ErrorResponse, "description": "Queue is saturated."},
         422: {
             "model": ErrorResponse,
             "description": "Request schema validation failed.",
@@ -68,6 +70,7 @@ async def chat_full(
             "description": "Mode does not support streaming.",
         },
         401: {"model": ErrorResponse, "description": "Missing or invalid API key."},
+        429: {"model": ErrorResponse, "description": "Queue is saturated."},
         422: {
             "model": ErrorResponse,
             "description": "Request schema validation failed.",
@@ -113,7 +116,7 @@ async def llm_job_status(job_id: str) -> LLMJobStatusResponse:
         job = await asyncio.to_thread(get_job_status, job_id)
     except Exception as error:
         raise HTTPException(status_code=404, detail="LLM job not found.") from error
-    return LLMJobStatusResponse(job=job)
+    return LLMJobStatusResponse.from_job(job)
 
 
 @router.post(
@@ -130,4 +133,18 @@ async def cancel_llm_job(job_id: str) -> LLMJobStatusResponse:
         job = await asyncio.to_thread(cancel_llm_call, job_id)
     except Exception as error:
         raise HTTPException(status_code=404, detail="LLM job not found.") from error
-    return LLMJobStatusResponse(job=job)
+    return LLMJobStatusResponse.from_job(job)
+
+
+@router.get(
+    "/queue/status",
+    response_model=QueueStatusResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid API key."},
+        500: {"model": ErrorResponse, "description": "Queue status check failed."},
+    },
+    summary="Get LLM queue health and depth",
+)
+async def queue_status() -> QueueStatusResponse:
+    queue = await asyncio.to_thread(get_queue_status)
+    return QueueStatusResponse(queue=queue)

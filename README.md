@@ -54,10 +54,29 @@ OpenAPI docs are available at:
 | `GET` | `/` | Service metadata. |
 | `POST` | `/api/chat` | Full response chat endpoint. |
 | `POST` | `/api/chat/stream` | Server-Sent Events streaming chat endpoint. |
+| `GET` | `/api/queue/status` | Protected Redis/RQ queue status, depth, worker heartbeat, and failed-job counts. |
 
 Protected chat endpoints require service-to-service API key authentication with
 `X-API-Key`. `GET /health` and `GET /` remain public for health checks and local
 tooling.
+
+### Queue architecture
+
+Each individual LLM call is the queued unit, not the top-level HTTP request.
+That matters because one API request can trigger multiple model calls for intent
+routing, state updates, and final generation. Putting the queue at the LLM call
+boundary guarantees that only one GPU-backed model call runs at a time even
+when multiple API requests overlap.
+
+Current flow:
+
+- FastAPI validates input, applies auth, and calls the queued LLM gateway.
+- The queued gateway enqueues one RQ job per LLM call.
+- Redis stores queue state, stream events, lightweight metrics, and RQ registries.
+- The dedicated worker owns the local model and is the only process allowed to
+  call it directly.
+- Streaming jobs publish token chunks and status events through Redis Streams;
+  FastAPI forwards those events as SSE to the Web UI or other clients.
 
 ### Full response request
 
@@ -131,8 +150,10 @@ Expected status codes:
 
 - `400`: invalid client input such as an unsupported streaming mode.
 - `401`: missing or invalid API key on protected endpoints.
+- `429`: queue backpressure rejected the request; check `Retry-After`.
 - `422`: request body schema validation failures such as a missing or empty message.
 - `500`: LLM initialisation/runtime failures or unexpected internal errors.
+- `504`: queue wait, generation, or streaming timeout.
 
 ### CORS
 
@@ -153,8 +174,10 @@ Wildcard origins with credentials are not used.
 
 - The API depends on Redis plus a separate `app.queue.worker` process for all model-backed requests.
 - The worker uses the same local GGUF model and GPU prerequisites as the CLI.
+- Retry behavior is limited to transient worker failures and defaults to `LLM_JOB_MAX_RETRIES=2`.
 - Cancellation is cooperative. Queued jobs cancel immediately. Running streaming jobs stop between generated chunks when possible. Running non-streaming jobs cannot be interrupted mid-call by the current local model runtime and may finish before cancellation is applied.
 - If an LLM failure occurs after an SSE response has started, the API emits a sanitized SSE error event instead of changing the HTTP status code.
+- Future scaling options such as a dedicated `llama.cpp` server or continuous batching are intentionally out of scope for this implementation.
 
 ## Chainlit Web UI
 
@@ -342,7 +365,7 @@ the cu124 wheel index by default.
 The Web UI image does not need GPU access and must not mount `./models`. It only
 needs network access to FastAPI and the same `FASTAPI_API_KEY` value.
 
-Container environment variables:
+FastAPI API container environment variables:
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -352,15 +375,31 @@ Container environment variables:
 | `AUTH_ENABLED` | `true` | Enables API key validation on protected API routes. |
 | `FASTAPI_API_KEY` | None | Shared service API key. Set this at runtime; do not bake real secrets into images. |
 | `CORS_ALLOWED_ORIGINS` | Empty | Optional comma-separated browser origins allowed to call FastAPI directly. |
-| `LLM_MODEL_PATH` | `/models/model.gguf` | Mounted model file path inside the container. |
+| `REDIS_URL` | `redis://redis:6379/0` | Redis connection used by the queued gateway. |
+| `LLM_QUEUE_NAME` | `llm` | RQ queue name for model-call jobs. |
+| `LLM_QUEUE_TIMEOUT_SECONDS` | `180` | General queue operation timeout. |
+| `LLM_QUEUE_WAIT_TIMEOUT_SECONDS` | `90` | Maximum time the API waits for a queued non-streaming job. |
+| `LLM_GENERATION_TIMEOUT_SECONDS` | `180` | Per-job generation timeout enforced by RQ. |
+| `LLM_RESULT_TTL_SECONDS` | `300` | How long completed job metadata and stream data are retained. |
+| `LLM_MAX_QUEUE_SIZE` | `100` | Maximum queued job depth before backpressure returns `429`. |
+| `LLM_JOB_MAX_RETRIES` | `2` | Retries for transient worker failures. |
+| `LLM_STREAM_CHANNEL_PREFIX` | `llm-stream` | Redis Stream prefix for queued streaming events. |
+| `LLM_STATUS_POLL_INTERVAL_SECONDS` | `0.05` | Poll interval for non-streaming job status checks. |
+| `LLM_STREAM_TIMEOUT_SECONDS` | `180` | Maximum time the API waits for streaming events. |
+
+Worker-only environment variables:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `LLM_MODEL_PATH` | `/models/model.gguf` | Mounted model file path inside the worker container. |
 | `LLM_CONTEXT_SIZE` | `4096` | LLM context window size. |
 | `LLM_N_GPU_LAYERS` | `-1` | GPU layer offload override; `-1` requests full offload. |
 | `LLM_THREADS` | `4` | CPU thread count passed to llama-cpp. |
 | `LLM_RESERVED_VRAM_GB` | `1.5` | VRAM headroom used when auto-selecting GPU layers. |
 
-If `LLM_MODEL_PATH` is missing, or if the mounted file does not exist, the app
-fails during LLM initialisation with a configuration error. It does not download
-models or fall back to an unrelated local path.
+If `LLM_MODEL_PATH` is missing, or if the mounted file does not exist, the
+worker fails during LLM initialisation with a configuration error. It does not
+download models or fall back to an unrelated local path.
 
 Web UI container environment variables:
 
@@ -470,6 +509,12 @@ Or rebuild and start in one command:
 docker compose up --build
 ```
 
+VSCode task equivalents:
+
+- `compose-config: language-agent`
+- `compose-up: language-agent`
+- `compose-down: language-agent`
+
 Open through Caddy:
 
 - Chainlit Web UI: `http://localhost/`
@@ -546,6 +591,18 @@ Invoke-RestMethod `
   -Uri http://127.0.0.1:8000/api/llm/jobs/<job-id> `
   -Headers @{"X-API-Key" = "local-dev-change-me"}
 ```
+
+Queue monitoring check:
+
+```powershell
+Invoke-RestMethod `
+  -Uri http://127.0.0.1:8000/api/queue/status `
+  -Headers @{"X-API-Key" = "local-dev-change-me"}
+```
+
+Expected fields include Redis connectivity, queue depth, active job count,
+failed job count, worker count, worker heartbeat age, average wait time, and
+estimated wait time.
 
 Stop and remove the local containers:
 

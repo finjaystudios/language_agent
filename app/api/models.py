@@ -9,7 +9,7 @@ from app.data_models.mode_responses import (
     LearningResponse,
     TranslationResponse,
 )
-from app.queue.models import LLMCallJob
+from app.queue.models import LLMCallJob, QueueStatusSnapshot
 
 
 class ApiMode(StrEnum):
@@ -140,4 +140,38 @@ class ErrorResponse(BaseModel):
 class LLMJobStatusResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    job: LLMCallJob
+    job_id: str
+    call_type: str
+    mode: str | None = None
+    created_at: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+    status: str
+    cancel_requested: bool = False
+    queue_position: int | None = None
+    elapsed_seconds: float | None = None
+    retry_count: int = 0
+    last_error: str | None = None
+
+    @classmethod
+    def from_job(cls, job: LLMCallJob) -> "LLMJobStatusResponse":
+        return cls(
+            job_id=job.job_id,
+            call_type=job.call_type,
+            mode=job.mode,
+            created_at=job.created_at.isoformat() if job.created_at else None,
+            started_at=job.started_at.isoformat() if job.started_at else None,
+            completed_at=job.completed_at.isoformat() if job.completed_at else None,
+            status=job.status,
+            cancel_requested=job.cancel_requested,
+            queue_position=job.queue_position,
+            elapsed_seconds=job.elapsed_seconds,
+            retry_count=job.retry_count,
+            last_error=job.last_error,
+        )
+
+
+class QueueStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    queue: QueueStatusSnapshot

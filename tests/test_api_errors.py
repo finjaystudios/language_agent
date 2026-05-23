@@ -4,6 +4,7 @@ import json
 from app.api.dependencies import get_agent_service
 from app.api.errors import (
     LLMServiceError,
+    QueueSaturatedError,
     UnsupportedModeError,
     api_error_handler,
     http_exception_handler,
@@ -38,6 +39,16 @@ def test_llm_service_handler_does_not_leak_stack_trace():
     assert body["error"] == "llm_service_error"
     assert body["message"] == "Model failed."
     assert "Traceback" not in json.dumps(body)
+
+
+def test_queue_saturated_handler_returns_retry_after_header():
+    response = asyncio.run(
+        api_error_handler(None, QueueSaturatedError(retry_after_seconds=12))
+    )
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "12"
+    assert response_body(response)["error"] == "queue_saturated"
 
 
 def test_http_exception_handler_returns_error_response():

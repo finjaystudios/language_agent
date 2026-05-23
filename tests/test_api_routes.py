@@ -7,11 +7,18 @@ from app.api.models import (
     ChatRequest,
     ChatResponse,
     LLMJobStatusResponse,
+    QueueStatusResponse,
     ResponseMetadata,
     StreamChatRequest,
 )
-from app.api.routes import cancel_llm_job, chat_full, chat_stream, llm_job_status
-from app.queue.models import LLMCallJob
+from app.api.routes import (
+    cancel_llm_job,
+    chat_full,
+    chat_stream,
+    llm_job_status,
+    queue_status,
+)
+from app.queue.models import LLMCallJob, QueueStatusSnapshot
 
 
 class FakeAgentService:
@@ -120,7 +127,7 @@ def test_llm_job_status_route_returns_job_details(monkeypatch):
     response = asyncio.run(llm_job_status("job-123"))
 
     assert isinstance(response, LLMJobStatusResponse)
-    assert response.job.job_id == "job-123"
+    assert response.job_id == "job-123"
 
 
 def test_cancel_llm_job_route_returns_job_details(monkeypatch):
@@ -137,5 +144,25 @@ def test_cancel_llm_job_route_returns_job_details(monkeypatch):
 
     response = asyncio.run(cancel_llm_job("job-123"))
 
-    assert response.job.status == "cancelled"
-    assert response.job.cancel_requested is True
+    assert response.status == "cancelled"
+    assert response.cancel_requested is True
+
+
+def test_queue_status_route_returns_sanitized_queue_snapshot(monkeypatch):
+    monkeypatch.setattr(
+        "app.api.routes.get_queue_status",
+        lambda: QueueStatusSnapshot(
+            redis_connected=True,
+            queue_depth=2,
+            active_job_count=1,
+            failed_job_count=0,
+            worker_count=1,
+            average_wait_time_seconds=1.5,
+            estimated_wait_time_seconds=3.0,
+        ),
+    )
+
+    response = asyncio.run(queue_status())
+
+    assert isinstance(response, QueueStatusResponse)
+    assert response.queue.queue_depth == 2

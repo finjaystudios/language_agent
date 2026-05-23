@@ -33,5 +33,18 @@ class LLMCallJob(BaseModel):
     queue_position: int | None = None
     elapsed_seconds: float | None = None
     stream_channel: str | None = None
+    retry_count: int = 0
+    last_error: str | None = None
     result: dict[str, Any] | str | None = None
     error: str | None = None
+
+
+class QueueStatusSnapshot(BaseModel):
+    redis_connected: bool
+    queue_depth: int
+    active_job_count: int
+    failed_job_count: int
+    worker_count: int
+    worker_heartbeat_age_seconds: float | None = None
+    average_wait_time_seconds: float | None = None
+    estimated_wait_time_seconds: float | None = None

@@ -123,6 +123,17 @@ def test_streaming_endpoint_accepts_correct_api_key(monkeypatch):
     assert "hola" in response.text
 
 
+def test_queue_status_endpoint_requires_api_key(monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    client = TestClient(create_app())
+
+    response = client.get("/api/queue/status")
+
+    assert response.status_code == 401
+    assert response.json()["error"] == "authentication_failed"
+
+
 def test_auth_enabled_false_allows_unauthenticated_chat(monkeypatch):
     monkeypatch.setenv("AUTH_ENABLED", "false")
     monkeypatch.delenv("FASTAPI_API_KEY", raising=False)

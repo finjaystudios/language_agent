@@ -8,12 +8,14 @@ from rq import SimpleWorker, Worker
 from rq.job import get_current_job
 
 from app.llm.service import LLMService, create_local_llm_service
-from app.queue.config import LLM_QUEUE_NAME, LLM_WORKER_CONCURRENCY
+from app.queue.config import LLM_JOB_MAX_RETRIES, LLM_QUEUE_NAME, LLM_WORKER_CONCURRENCY
 from app.queue.models import LLMCallJob, utcnow
 from app.queue.service import (
     append_stream_event,
     get_redis_connection,
     is_cancel_requested,
+    record_completion_metrics,
+    record_wait_time,
     serialize_llm_call,
     set_job_payload,
 )
@@ -24,6 +26,10 @@ _MODEL_LOCK = threading.Lock()
 
 
 class LLMJobCancelledError(RuntimeError):
+    pass
+
+
+class NonRetryableLLMJobError(RuntimeError):
     pass
 
 
@@ -39,6 +45,13 @@ def get_worker_llm_service() -> LLMService:
         _MODEL_SERVICE = create_local_llm_service()
         logger.info("llm_worker_model_ready")
     return _MODEL_SERVICE
+
+
+def safe_error_message(error: Exception) -> str:
+    name = type(error).__name__.lower()
+    if "timeout" in name:
+        return "The language model job timed out."
+    return "The language model worker hit an internal execution error."
 
 
 def build_stream_event(llm_call: LLMCallJob, **extra: Any) -> dict[str, Any]:
@@ -77,9 +90,15 @@ def finalize_cancelled_job(
 
 
 def process_llm_call(payload: dict) -> dict:
-    llm_call = LLMCallJob.model_validate(payload)
     job = get_current_job()
+    if job is not None and job.meta.get("llm_call") is not None:
+        llm_call = LLMCallJob.model_validate(job.meta["llm_call"])
+    else:
+        llm_call = LLMCallJob.model_validate(payload)
     connection = job.connection if job is not None else get_redis_connection()
+    if job is not None:
+        llm_call.retry_count = int(job.meta.get("retry_count", llm_call.retry_count))
+        llm_call.last_error = job.meta.get("last_error", llm_call.last_error)
 
     if is_cancel_requested(llm_call.job_id, connection):
         llm_call.cancel_requested = True
@@ -92,6 +111,12 @@ def process_llm_call(payload: dict) -> dict:
 
     llm_call.status = "processing"
     llm_call.started_at = utcnow()
+    if llm_call.started_at is not None:
+        wait_seconds = max(
+            0.0,
+            (llm_call.started_at - llm_call.created_at).total_seconds(),
+        )
+        record_wait_time(wait_seconds, connection)
     if job is not None:
         set_job_payload(job, llm_call)
     if llm_call.call_type == "streaming_text_generation":
@@ -105,11 +130,16 @@ def process_llm_call(payload: dict) -> dict:
         with _MODEL_LOCK:
             service = get_worker_llm_service()
             if llm_call.call_type == "structured_json":
-                llm_call.result = service.ask_llm_sync(
-                    messages=llm_call.messages,
-                    schema=llm_call.response_schema or {},
-                    **llm_call.generation_parameters,
-                )
+                try:
+                    llm_call.result = service.ask_llm_sync(
+                        messages=llm_call.messages,
+                        schema=llm_call.response_schema or {},
+                        **llm_call.generation_parameters,
+                    )
+                except (ValueError, TypeError, KeyError) as error:
+                    raise NonRetryableLLMJobError(
+                        "The language model returned an invalid structured response."
+                    ) from error
             elif llm_call.call_type == "text_generation":
                 llm_call.result = service.generate_text_sync(
                     messages=llm_call.messages,
@@ -155,8 +185,10 @@ def process_llm_call(payload: dict) -> dict:
             )
         llm_call.status = "completed"
         llm_call.completed_at = utcnow()
+        llm_call.last_error = None
         if job is not None:
             set_job_payload(job, llm_call)
+        record_completion_metrics(llm_call, connection)
         if llm_call.call_type == "streaming_text_generation":
             append_stream_event(
                 llm_call.job_id,
@@ -166,11 +198,14 @@ def process_llm_call(payload: dict) -> dict:
         return serialize_llm_call(llm_call)
     except LLMJobCancelledError as error:
         return finalize_cancelled_job(llm_call, job, connection, str(error))
-    except Exception as error:
+    except NonRetryableLLMJobError as error:
         llm_call.status = "failed"
         llm_call.completed_at = utcnow()
+        llm_call.last_error = str(error)
         llm_call.error = str(error)
         if job is not None:
+            job.meta["retry_count"] = llm_call.retry_count
+            job.meta["last_error"] = llm_call.last_error
             set_job_payload(job, llm_call)
         if llm_call.call_type == "streaming_text_generation":
             append_stream_event(
@@ -178,11 +213,40 @@ def process_llm_call(payload: dict) -> dict:
                 build_stream_event(
                     llm_call,
                     error="llm_service_error",
-                    message="The language model failed while streaming a response.",
+                    message=str(error),
                     done=True,
                 ),
                 connection,
             )
+        return serialize_llm_call(llm_call)
+    except Exception as error:
+        llm_call.retry_count += 1
+        llm_call.last_error = safe_error_message(error)
+        should_retry = llm_call.retry_count <= LLM_JOB_MAX_RETRIES
+        llm_call.completed_at = None if should_retry else utcnow()
+        llm_call.status = "queued" if should_retry else "failed"
+        llm_call.error = None if should_retry else llm_call.last_error
+        if job is not None:
+            job.meta["retry_count"] = llm_call.retry_count
+            job.meta["last_error"] = llm_call.last_error
+            set_job_payload(job, llm_call)
+        if llm_call.call_type == "streaming_text_generation":
+            append_stream_event(
+                llm_call.job_id,
+                build_stream_event(
+                    llm_call,
+                    message=(
+                        "Retrying after a transient worker failure."
+                        if should_retry
+                        else llm_call.last_error
+                    ),
+                    error=None if should_retry else "llm_service_error",
+                    done=False if should_retry else True,
+                ),
+                connection,
+            )
+        if should_retry:
+            raise
         raise
 
 

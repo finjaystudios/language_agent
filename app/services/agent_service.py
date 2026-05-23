@@ -4,7 +4,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
-from app.api.errors import LLMServiceError, UnsupportedModeError
+from app.api.errors import APIError, LLMServiceError, UnsupportedModeError
 from app.api.models import ApiMode, ChatRequest, ChatResponse, ResponseMetadata
 from app.data_models.intent_result import IntentResult
 from app.data_models.mode_responses import BaseModeResponse
@@ -142,7 +142,7 @@ class AgentService:
                 intent=intent,
                 metadata=metadata,
             )
-        except LLMServiceError:
+        except APIError:
             logger.exception("chat_full_llm_service_error")
             raise
         except Exception as error:
@@ -219,7 +219,7 @@ class AgentService:
         except UnsupportedModeError:
             logger.warning("chat_stream_unsupported_mode_error")
             raise
-        except LLMServiceError:
+        except APIError:
             logger.exception("chat_stream_llm_service_error")
             raise
         except Exception as error:

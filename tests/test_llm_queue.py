@@ -215,6 +215,13 @@ def test_worker_streaming_publishes_mocked_token_chunks(monkeypatch):
     monkeypatch.setattr("app.queue.worker.get_current_job", lambda: FakeJob())
     monkeypatch.setattr("app.queue.worker.is_cancel_requested", lambda *args: False)
     monkeypatch.setattr(
+        "app.queue.worker.record_wait_time", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        "app.queue.worker.record_completion_metrics",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
         "app.queue.worker.append_stream_event",
         lambda _job_id, payload, _connection: events.append(payload),
     )

@@ -13,10 +13,17 @@ class APIError(Exception):
     status_code = 500
     error = "internal_error"
     message = "An internal service error occurred."
+    headers: dict[str, str] | None = None
 
-    def __init__(self, message: str | None = None, details: dict | None = None):
+    def __init__(
+        self,
+        message: str | None = None,
+        details: dict | None = None,
+        headers: dict[str, str] | None = None,
+    ):
         self.message = message or self.message
         self.details = details
+        self.headers = headers
         super().__init__(self.message)
 
 
@@ -40,9 +47,14 @@ def error_response(
     error: str,
     message: str,
     details: dict | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     payload = ErrorResponse(error=error, message=message, details=details)
-    return JSONResponse(status_code=status_code, content=payload.model_dump())
+    return JSONResponse(
+        status_code=status_code,
+        content=payload.model_dump(),
+        headers=headers,
+    )
 
 
 def _validation_status_code(exc: RequestValidationError) -> int:
@@ -66,6 +78,7 @@ async def api_error_handler(request: Request, exc: APIError) -> JSONResponse:
         error=exc.error,
         message=exc.message,
         details=exc.details,
+        headers=exc.headers,
     )
 
 
