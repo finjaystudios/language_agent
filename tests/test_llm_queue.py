@@ -130,6 +130,13 @@ def test_worker_processes_mocked_llm_call(monkeypatch):
     )
     monkeypatch.setattr("app.queue.worker.get_current_job", lambda: None)
     monkeypatch.setattr("app.queue.worker.is_cancel_requested", lambda *args: False)
+    monkeypatch.setattr(
+        "app.queue.worker.record_wait_time", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        "app.queue.worker.record_completion_metrics",
+        lambda *args, **kwargs: None,
+    )
 
     result = process_llm_call(
         LLMCallJob(
@@ -167,6 +174,13 @@ def test_worker_serializes_mocked_llm_calls(monkeypatch):
     )
     monkeypatch.setattr("app.queue.worker.get_current_job", lambda: None)
     monkeypatch.setattr("app.queue.worker.is_cancel_requested", lambda *args: False)
+    monkeypatch.setattr(
+        "app.queue.worker.record_wait_time", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        "app.queue.worker.record_completion_metrics",
+        lambda *args, **kwargs: None,
+    )
 
     payloads = [
         LLMCallJob(
