@@ -228,9 +228,10 @@ files in `public/`.
   and Learning responses.
 - `.chainlit/config.toml` sets the LanguageAgent metadata, logo URL, theme,
   sidebar settings, custom CSS, and custom JS.
-- `public/custom.css` contains the lightweight Web UI styling, and
-  `public/logo_dark.png`, `public/logo_light.png`, and `public/favicon` contain
-  the runtime brand assets.
+- `public/theme.json` contains the Chainlit theme variables, `public/style.css`
+  contains scoped UI polish, and `public/logo_dark.png`,
+  `public/logo_light.png`, and `public/favicon` contain the runtime brand
+  assets.
 
 ### Known Limitations
 

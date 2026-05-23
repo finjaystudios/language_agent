@@ -124,7 +124,7 @@ cot = "hidden"
 
 # Specify a CSS file that can be used to customize the user interface.
 # The CSS file can be served from the public directory or via an external link.
-custom_css = "/public/custom.css?v=languageagent-logo-xl"
+custom_css = "/public/style.css?v=languageagent-theme-v1"
 
 # Specify additional attributes for a custom CSS file
 # custom_css_attributes = "media=\"print\""
@@ -134,7 +134,7 @@ custom_css = "/public/custom.css?v=languageagent-logo-xl"
 custom_js = "/public/landing-status.js"
 
 # The style of alert boxes. Can be "classic" or "modern".
-alert_style = "classic"
+alert_style = "modern"
 
 # Specify additional attributes for custom JS file
 # custom_js_attributes = "async type = \"module\""

@@ -1,15 +1,21 @@
 (function () {
   const STATUS_ID = "lla-backend-status";
-  const MESSAGE_SELECTORS = [
-    '[data-testid="user-message"]',
-    '[data-testid="assistant-message"]',
-    '[data-testid="message"]',
-    ".message-content",
-  ];
+  const COMPOSER_PLACEHOLDER = "Ask your local language assistant...";
+  const CONVERSATION_START_LABELS = new Set([
+    "translate",
+    "define",
+    "learn",
+    "translate to isixhosa",
+    "define recursion",
+    "practice greetings",
+    "retry",
+  ]);
   let latestStatusData = null;
+  let conversationStarted = false;
+  let composerEnhancementEnabled = false;
 
   function hasConversationMessages() {
-    return MESSAGE_SELECTORS.some((selector) => document.querySelector(selector));
+    return conversationStarted;
   }
 
   function findComposerHost() {
@@ -90,6 +96,36 @@
     card.hidden = hasConversationMessages();
   }
 
+  function markConversationStarted() {
+    conversationStarted = true;
+    syncVisibility();
+  }
+
+  function enhanceAccessibility() {
+    const textarea = document.querySelector("textarea");
+    if (textarea && composerEnhancementEnabled) {
+      if (textarea.getAttribute("placeholder") !== COMPOSER_PLACEHOLDER) {
+        textarea.setAttribute("placeholder", COMPOSER_PLACEHOLDER);
+      }
+      if (textarea.getAttribute("aria-label") !== COMPOSER_PLACEHOLDER) {
+        textarea.setAttribute("aria-label", COMPOSER_PLACEHOLDER);
+      }
+    }
+
+    document.querySelectorAll('[data-testid="assistant-message"], [data-testid="message"], .message-content')
+      .forEach((node) => {
+        node.setAttribute("aria-live", "polite");
+        node.setAttribute("aria-atomic", "false");
+      });
+
+    document.querySelectorAll("button").forEach((button) => {
+      const text = (button.textContent || "").trim();
+      if (!button.getAttribute("aria-label") && text) {
+        button.setAttribute("aria-label", text);
+      }
+    });
+  }
+
   function updateStatusCard(data) {
     latestStatusData = data;
     const card = createStatusCard();
@@ -143,11 +179,37 @@
     createStatusCard();
     refreshStatus();
     syncVisibility();
-    document.addEventListener("submit", syncVisibility, true);
-    document.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") window.setTimeout(syncVisibility, 100);
+    enhanceAccessibility();
+    window.setTimeout(() => {
+      composerEnhancementEnabled = true;
+      enhanceAccessibility();
+    }, 3000);
+    document.addEventListener("submit", markConversationStarted, true);
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest && event.target.closest("button");
+      if (!button) return;
+      if (button.id === "chat-submit") {
+        const textarea = document.querySelector("textarea");
+        if (textarea && textarea.value.trim()) markConversationStarted();
+        return;
+      }
+      const label = (button.textContent || button.getAttribute("aria-label") || "")
+        .trim()
+        .toLowerCase();
+      if (CONVERSATION_START_LABELS.has(label)) markConversationStarted();
     }, true);
-    new MutationObserver(syncVisibility).observe(document.body, {
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        const textarea = document.querySelector("textarea");
+        if (textarea && textarea.value.trim()) {
+          window.setTimeout(markConversationStarted, 100);
+        }
+      }
+    }, true);
+    new MutationObserver(() => {
+      syncVisibility();
+      enhanceAccessibility();
+    }).observe(document.body, {
       childList: true,
       subtree: true,
     });
