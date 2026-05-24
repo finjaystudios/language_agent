@@ -2,17 +2,20 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.params import Depends as DependsMarker
 from fastapi.responses import StreamingResponse
 
 from app.application.agent_service import AgentService
 from app.application.models import ChatCommand, RequestMetadata
-from app.infrastructure.redis.queue_service import (
-    cancel_llm_call,
-    get_job_status,
-    get_queue_status,
-)
+from app.core.config import AppSettings
+from app.infrastructure.redis.queue_service import LLMQueueService
 from app.interfaces.api.auth import require_api_key
-from app.interfaces.api.dependencies import get_agent_service
+from app.interfaces.api.dependencies import (
+    get_agent_service,
+    get_job_store,
+    get_queue_client,
+    get_settings,
+)
 from app.interfaces.api.models import (
     ChatRequest,
     ChatResponse,
@@ -22,11 +25,57 @@ from app.interfaces.api.models import (
     StreamChatRequest,
     chat_response_from_result,
 )
+from app.ports.job_store import JobStore
+from app.ports.queue_client import QueueClient
 
 router = APIRouter(
     prefix="/api", tags=["chat"], dependencies=[Depends(require_api_key)]
 )
 logger = logging.getLogger(__name__)
+SETTINGS_DEP = Depends(get_settings)
+QUEUE_CLIENT_DEP = Depends(get_queue_client)
+JOB_STORE_DEP = Depends(get_job_store)
+
+
+async def get_job_status(
+    job_id: str,
+    *,
+    settings: AppSettings | None = None,
+    queue_client: QueueClient | None = None,
+    job_store: JobStore | None = None,
+):
+    return await LLMQueueService(
+        settings or get_settings(),
+        queue_client or get_queue_client(),
+        job_store or get_job_store(),
+    ).get_job_status(job_id)
+
+
+async def cancel_llm_call(
+    job_id: str,
+    *,
+    settings: AppSettings | None = None,
+    queue_client: QueueClient | None = None,
+    job_store: JobStore | None = None,
+):
+    return await LLMQueueService(
+        settings or get_settings(),
+        queue_client or get_queue_client(),
+        job_store or get_job_store(),
+    ).cancel_llm_call(job_id)
+
+
+async def get_queue_status(
+    *,
+    settings: AppSettings | None = None,
+    queue_client: QueueClient | None = None,
+    job_store: JobStore | None = None,
+):
+    return await LLMQueueService(
+        settings or get_settings(),
+        queue_client or get_queue_client(),
+        job_store or get_job_store(),
+    ).get_queue_status()
 
 
 @router.post(
@@ -145,9 +194,35 @@ async def llm_job_status(job_id: str) -> LLMJobStatusResponse:
     },
     summary="Cancel an LLM queue job",
 )
-async def cancel_llm_job(job_id: str) -> LLMJobStatusResponse:
+async def cancel_llm_job(
+    job_id: str,
+    settings: AppSettings = SETTINGS_DEP,
+    queue_client: QueueClient = QUEUE_CLIENT_DEP,
+    job_store: JobStore = JOB_STORE_DEP,
+) -> LLMJobStatusResponse:
+    resolved_settings = (
+        get_settings() if isinstance(settings, DependsMarker) else settings
+    )
+    resolved_queue_client = (
+        get_queue_client() if isinstance(queue_client, DependsMarker) else queue_client
+    )
+    resolved_job_store = (
+        get_job_store() if isinstance(job_store, DependsMarker) else job_store
+    )
     try:
-        job = await cancel_llm_call(job_id)
+        if (
+            isinstance(settings, DependsMarker)
+            and isinstance(queue_client, DependsMarker)
+            and isinstance(job_store, DependsMarker)
+        ):
+            job = await cancel_llm_call(job_id)
+        else:
+            job = await cancel_llm_call(
+                job_id,
+                settings=resolved_settings,
+                queue_client=resolved_queue_client,
+                job_store=resolved_job_store,
+            )
     except Exception as error:
         raise HTTPException(status_code=404, detail="LLM job not found.") from error
     return LLMJobStatusResponse.from_job(job)
@@ -162,6 +237,30 @@ async def cancel_llm_job(job_id: str) -> LLMJobStatusResponse:
     },
     summary="Get LLM queue health and depth",
 )
-async def queue_status() -> QueueStatusResponse:
-    queue = await get_queue_status()
+async def queue_status(
+    settings: AppSettings = SETTINGS_DEP,
+    queue_client: QueueClient = QUEUE_CLIENT_DEP,
+    job_store: JobStore = JOB_STORE_DEP,
+) -> QueueStatusResponse:
+    resolved_settings = (
+        get_settings() if isinstance(settings, DependsMarker) else settings
+    )
+    resolved_queue_client = (
+        get_queue_client() if isinstance(queue_client, DependsMarker) else queue_client
+    )
+    resolved_job_store = (
+        get_job_store() if isinstance(job_store, DependsMarker) else job_store
+    )
+    if (
+        isinstance(settings, DependsMarker)
+        and isinstance(queue_client, DependsMarker)
+        and isinstance(job_store, DependsMarker)
+    ):
+        queue = await get_queue_status()
+    else:
+        queue = await get_queue_status(
+            settings=resolved_settings,
+            queue_client=resolved_queue_client,
+            job_store=resolved_job_store,
+        )
     return QueueStatusResponse(queue=queue)

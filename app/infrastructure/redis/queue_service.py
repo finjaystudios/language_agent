@@ -1,558 +1,405 @@
 import asyncio
-import json
-from collections.abc import AsyncIterator, Callable
-from datetime import UTC, datetime
 from typing import Any
 
-from redis import Redis
-from redis.asyncio import Redis as AsyncRedis
-from rq import Queue, Retry
-from rq.job import Job, JobStatus
-from rq.registry import FailedJobRegistry, StartedJobRegistry
-from rq.worker import Worker
+from rq.job import JobStatus
 
+from app.core.config import AppSettings
 from app.domain.jobs import LLMCallJob, QueueStatusSnapshot, utcnow
-from app.infrastructure.redis.config import (
-    LLM_GENERATION_TIMEOUT_SECONDS,
-    LLM_JOB_MAX_RETRIES,
-    LLM_MAX_QUEUE_SIZE,
-    LLM_QUEUE_NAME,
-    LLM_QUEUE_TIMEOUT_SECONDS,
-    LLM_QUEUE_WAIT_TIMEOUT_SECONDS,
-    LLM_RESULT_TTL_SECONDS,
-    LLM_STATUS_POLL_INTERVAL_SECONDS,
-    LLM_STREAM_CHANNEL_PREFIX,
-    LLM_STREAM_TIMEOUT_SECONDS,
-    REDIS_URL,
-)
-from app.infrastructure.redis.errors import QueueSaturatedError
-
-QUEUE_METRICS_KEY = "llm:queue:metrics"
+from app.infrastructure.redis.job_store import RedisJobStore
+from app.infrastructure.redis.rq_queue import RQQueueClient
+from app.ports.job_store import JobStore
+from app.ports.queue_client import QueueClient
 
 
-def get_redis_connection(url: str | None = None) -> Redis:
-    return Redis.from_url(url or REDIS_URL)
+class LLMQueueService:
+    def __init__(
+        self,
+        settings: AppSettings,
+        queue_client: QueueClient,
+        job_store: JobStore,
+    ) -> None:
+        self.settings = settings
+        self.queue_client = queue_client
+        self.job_store = job_store
+
+    def estimate_wait_time_seconds(self) -> float:
+        average_generation = self.job_store.read_average_generation_time_seconds()
+        per_job_seconds = max(
+            1.0,
+            average_generation or min(30, self.settings.llm_generation_timeout_seconds),
+        )
+        return (
+            self.queue_client.get_queue_depth()
+            + self.queue_client.get_active_job_count()
+        ) * per_job_seconds
+
+    async def enqueue_llm_call(self, job_request: LLMCallJob) -> Any:
+        estimated_wait_seconds = self.estimate_wait_time_seconds()
+        if hasattr(self.queue_client, "check_backpressure"):
+            self.queue_client.check_backpressure(estimated_wait_seconds)
+        job_request.stream_channel = self.job_store.get_stream_channel(
+            job_request.job_id
+        )
+        payload = self.job_store.serialize_llm_call(job_request)  # type: ignore[attr-defined]
+        job = self.queue_client.enqueue(
+            payload,
+            job_id=job_request.job_id,
+            result_ttl=self.settings.llm_result_ttl_seconds,
+            job_timeout=self.settings.llm_generation_timeout_seconds,
+            retry_max=self.settings.llm_job_max_retries,
+        )
+        self.job_store.save_job_payload(job, job_request)
+        if job_request.call_type == "streaming_text_generation":
+            self.job_store.append_stream_event(
+                job_request.job_id,
+                {
+                    "job_id": job_request.job_id,
+                    "status": "queued",
+                    "queue_position": self.queue_client.get_job_position(
+                        job_request.job_id
+                    ),
+                    "elapsed_seconds": 0.0,
+                },
+            )
+        return job
+
+    async def get_job_result(self, job_id: str) -> LLMCallJob:
+        return await asyncio.to_thread(self.job_store.get_job_result, job_id)
+
+    async def get_job_status(self, job_id: str) -> LLMCallJob:
+        def load() -> LLMCallJob:
+            llm_call = self.job_store.get_job_result(job_id)
+            rq_status = self.queue_client.get_job_status(job_id)
+            if rq_status in {
+                "JobStatus.QUEUED",
+                "JobStatus.DEFERRED",
+                "JobStatus.SCHEDULED",
+                "queued",
+                "deferred",
+                "scheduled",
+            }:
+                llm_call.status = "queued"
+                llm_call.queue_position = self.queue_client.get_job_position(job_id)
+            elif rq_status in {
+                str(JobStatus.STARTED),
+                "started",
+            } and llm_call.status not in {
+                "streaming",
+                "cancelled",
+            }:
+                llm_call.status = "processing"
+            elif rq_status in {str(JobStatus.CANCELED), "canceled", "cancelled"}:
+                llm_call.status = "cancelled"
+            elif rq_status in {str(JobStatus.FAILED), "failed"}:
+                llm_call.status = "failed"
+            llm_call.elapsed_seconds = self.job_store._compute_elapsed_seconds(llm_call)  # type: ignore[attr-defined]
+            return llm_call
+
+        return await asyncio.to_thread(load)
+
+    async def cancel_llm_call(self, job_id: str) -> LLMCallJob:
+        def cancel() -> LLMCallJob:
+            job = self.queue_client.get_job(job_id)
+            llm_call = self.job_store.get_job_result(job_id)
+            rq_status = self.queue_client.get_job_status(job_id)
+            if llm_call.status in {"completed", "failed", "cancelled"}:
+                return llm_call
+            llm_call.cancel_requested = True
+            if rq_status in {
+                str(JobStatus.QUEUED),
+                str(JobStatus.DEFERRED),
+                str(JobStatus.SCHEDULED),
+                "queued",
+                "deferred",
+                "scheduled",
+            }:
+                self.queue_client.remove(job_id)
+                llm_call.status = "cancelled"
+                llm_call.completed_at = utcnow()
+                llm_call.error = "LLM job was cancelled before execution."
+                self.job_store.save_job_payload(job, llm_call)
+                if hasattr(job, "set_status"):
+                    job.set_status(JobStatus.CANCELED)
+                self.job_store.append_stream_event(
+                    job_id,
+                    {
+                        "job_id": job_id,
+                        "status": "cancelled",
+                        "cancel_requested": True,
+                        "message": "LLM job was cancelled before execution.",
+                        "done": True,
+                    },
+                )
+                return llm_call
+
+            self.job_store.save_job_payload(job, llm_call)
+            self.job_store.append_stream_event(
+                job_id,
+                {
+                    "job_id": job_id,
+                    "status": llm_call.status,
+                    "cancel_requested": True,
+                    "message": "Cancellation requested. Running non-streaming jobs may finish before stopping.",
+                },
+            )
+            return llm_call
+
+        return await asyncio.to_thread(cancel)
+
+    async def stream_llm_events(self, job_id: str):
+        async for event in self.job_store.stream_llm_events(
+            job_id,
+            timeout_seconds=self.settings.llm_stream_timeout_seconds,
+        ):
+            yield event
+
+    async def wait_for_job_result(self, job_id: str) -> LLMCallJob:
+        deadline = (
+            asyncio.get_running_loop().time()
+            + self.settings.llm_queue_wait_timeout_seconds
+        )
+        while True:
+            status = await self.get_job_status(job_id)
+            if status.status in {"completed", "failed", "cancelled"}:
+                return await self.get_job_result(job_id)
+            if asyncio.get_running_loop().time() >= deadline:
+                raise TimeoutError(f"Timed out waiting for LLM job '{job_id}'.")
+            await asyncio.sleep(self.settings.llm_status_poll_interval_seconds)
+
+    def get_queue_status_sync(self) -> QueueStatusSnapshot:
+        redis_connected = self.queue_client.ping()
+        return self.queue_client.build_queue_status(
+            redis_connected=redis_connected,
+            average_wait_time_seconds=self.job_store.read_average_wait_time_seconds()
+            if redis_connected
+            else None,
+            estimated_wait_time_seconds=self.estimate_wait_time_seconds()
+            if redis_connected
+            else None,
+        )
+
+    async def get_queue_status(self) -> QueueStatusSnapshot:
+        return await asyncio.to_thread(self.get_queue_status_sync)
+
+    def is_cancel_requested(self, job_id: str) -> bool:
+        return self.job_store.is_cancel_requested(job_id)
 
 
-def get_async_redis_connection(url: str | None = None) -> AsyncRedis:
-    return AsyncRedis.from_url(url or REDIS_URL)
+_SETTINGS = AppSettings.from_env
 
 
-def get_llm_queue(
-    connection: Redis | None = None,
-    queue_name: str | None = None,
-) -> Queue:
-    return Queue(
-        name=queue_name or LLM_QUEUE_NAME,
-        connection=connection or get_redis_connection(),
-        default_timeout=LLM_QUEUE_TIMEOUT_SECONDS,
+def create_queue_service(
+    settings: AppSettings | None = None,
+    queue_client: QueueClient | None = None,
+    job_store: JobStore | None = None,
+) -> LLMQueueService:
+    resolved_settings = settings or _SETTINGS()
+    resolved_queue_client = queue_client or RQQueueClient(resolved_settings)
+    resolved_job_store = job_store or RedisJobStore(
+        resolved_settings,
+        resolved_queue_client,
+    )
+    return LLMQueueService(resolved_settings, resolved_queue_client, resolved_job_store)
+
+
+def get_redis_connection(url: str | None = None):
+    from app.infrastructure.redis.connection import get_redis_connection as _get_redis
+
+    settings = _SETTINGS()
+    return _get_redis(url or settings.redis_url)
+
+
+def get_async_redis_connection(url: str | None = None):
+    from app.infrastructure.redis.connection import (
+        get_async_redis_connection as _get_async,
     )
 
-
-async def close_async_redis_connection(connection: AsyncRedis | None) -> None:
-    if connection is not None:
-        await connection.aclose()
+    settings = _SETTINGS()
+    return _get_async(url or settings.redis_url)
 
 
-def get_started_job_registry(
-    connection: Redis | None = None,
-    queue_name: str | None = None,
-) -> StartedJobRegistry:
-    return StartedJobRegistry(
-        name=queue_name or LLM_QUEUE_NAME,
-        connection=connection or get_redis_connection(),
+async def close_async_redis_connection(connection):
+    from app.infrastructure.redis.connection import (
+        close_async_redis_connection as _close,
     )
 
-
-def get_failed_job_registry(
-    connection: Redis | None = None,
-    queue_name: str | None = None,
-) -> FailedJobRegistry:
-    return FailedJobRegistry(
-        name=queue_name or LLM_QUEUE_NAME,
-        connection=connection or get_redis_connection(),
-    )
+    await _close(connection)
 
 
 def get_stream_channel(job_id: str) -> str:
-    return f"{LLM_STREAM_CHANNEL_PREFIX}:{job_id}"
+    return create_queue_service().job_store.get_stream_channel(job_id)
 
 
 def compute_elapsed_seconds(llm_call: LLMCallJob) -> float | None:
-    start_time = llm_call.started_at or llm_call.created_at
-    if start_time is None:
-        return None
-    end_time = llm_call.completed_at or datetime.now(UTC)
-    return max(0.0, (end_time - start_time).total_seconds())
+    return create_queue_service().job_store._compute_elapsed_seconds(llm_call)  # type: ignore[attr-defined]
 
 
 def serialize_llm_call(llm_call: LLMCallJob) -> dict[str, Any]:
-    llm_call.elapsed_seconds = compute_elapsed_seconds(llm_call)
-    return llm_call.model_dump(mode="json")
+    return create_queue_service().job_store.serialize_llm_call(llm_call)  # type: ignore[attr-defined]
 
 
-def set_job_payload(job: Job, llm_call: LLMCallJob) -> None:
-    job.meta["llm_call"] = serialize_llm_call(llm_call)
-    job.save_meta()
+def set_job_payload(job, llm_call: LLMCallJob) -> None:
+    create_queue_service().job_store.save_job_payload(job, llm_call)
 
 
-def record_wait_time(wait_seconds: float, connection: Redis | None = None) -> None:
-    redis_connection = connection or get_redis_connection()
-    redis_connection.hincrbyfloat(QUEUE_METRICS_KEY, "total_wait_seconds", wait_seconds)
-    redis_connection.hincrby(QUEUE_METRICS_KEY, "started_jobs", 1)
+def record_wait_time(wait_seconds: float, connection=None) -> None:
+    if connection is not None:
+        settings = _SETTINGS()
+        queue_client = RQQueueClient(settings, connection=connection)
+        job_store = RedisJobStore(settings, queue_client, connection=connection)
+        job_store.record_wait_time(wait_seconds)
+        return
+    create_queue_service().job_store.record_wait_time(wait_seconds)
 
 
-def record_completion_metrics(
-    llm_call: LLMCallJob,
-    connection: Redis | None = None,
-) -> None:
-    redis_connection = connection or get_redis_connection()
-    if llm_call.started_at is not None and llm_call.completed_at is not None:
-        generation_seconds = max(
-            0.0,
-            (llm_call.completed_at - llm_call.started_at).total_seconds(),
-        )
-        redis_connection.hincrbyfloat(
-            QUEUE_METRICS_KEY,
-            "total_generation_seconds",
-            generation_seconds,
-        )
-    redis_connection.hincrby(QUEUE_METRICS_KEY, "completed_jobs", 1)
+def record_completion_metrics(llm_call: LLMCallJob, connection=None) -> None:
+    if connection is not None:
+        settings = _SETTINGS()
+        queue_client = RQQueueClient(settings, connection=connection)
+        job_store = RedisJobStore(settings, queue_client, connection=connection)
+        job_store.record_completion_metrics(llm_call)
+        return
+    create_queue_service().job_store.record_completion_metrics(llm_call)
 
 
-def read_average_wait_time_seconds(connection: Redis | None = None) -> float | None:
-    redis_connection = connection or get_redis_connection()
-    metrics = redis_connection.hgetall(QUEUE_METRICS_KEY)
-    started_jobs_raw = metrics.get(b"started_jobs") or metrics.get("started_jobs")
-    total_wait_raw = metrics.get(b"total_wait_seconds") or metrics.get(
-        "total_wait_seconds"
-    )
-    if not started_jobs_raw or not total_wait_raw:
-        return None
-    started_jobs = int(
-        started_jobs_raw.decode()
-        if isinstance(started_jobs_raw, bytes)
-        else started_jobs_raw
-    )
-    if started_jobs <= 0:
-        return None
-    total_wait = float(
-        total_wait_raw.decode() if isinstance(total_wait_raw, bytes) else total_wait_raw
-    )
-    return total_wait / started_jobs
+def read_average_wait_time_seconds(connection=None) -> float | None:
+    return create_queue_service().job_store.read_average_wait_time_seconds()
 
 
-def read_average_generation_time_seconds(
-    connection: Redis | None = None,
-) -> float | None:
-    redis_connection = connection or get_redis_connection()
-    metrics = redis_connection.hgetall(QUEUE_METRICS_KEY)
-    completed_jobs_raw = metrics.get(b"completed_jobs") or metrics.get("completed_jobs")
-    total_generation_raw = metrics.get(b"total_generation_seconds") or metrics.get(
-        "total_generation_seconds"
-    )
-    if not completed_jobs_raw or not total_generation_raw:
-        return None
-    completed_jobs = int(
-        completed_jobs_raw.decode()
-        if isinstance(completed_jobs_raw, bytes)
-        else completed_jobs_raw
-    )
-    if completed_jobs <= 0:
-        return None
-    total_generation = float(
-        total_generation_raw.decode()
-        if isinstance(total_generation_raw, bytes)
-        else total_generation_raw
-    )
-    return total_generation / completed_jobs
+def read_average_generation_time_seconds(connection=None) -> float | None:
+    return create_queue_service().job_store.read_average_generation_time_seconds()
 
 
 def estimate_wait_time_seconds(
-    queue_depth: int,
-    active_job_count: int,
-    connection: Redis | None = None,
+    queue_depth: int, active_job_count: int, connection=None
 ) -> float:
-    average_generation = read_average_generation_time_seconds(connection)
+    average_generation = read_average_generation_time_seconds()
     per_job_seconds = max(
-        1.0, average_generation or min(30, LLM_GENERATION_TIMEOUT_SECONDS)
+        1.0,
+        average_generation or min(30, _SETTINGS().llm_generation_timeout_seconds),
     )
     return (queue_depth + active_job_count) * per_job_seconds
 
 
-def check_queue_backpressure(queue: Queue) -> None:
-    active_job_count = get_started_job_registry(queue.connection, queue.name).count
-    queue_depth = queue.count
-    if queue_depth >= LLM_MAX_QUEUE_SIZE:
-        retry_after_seconds = int(
-            max(
-                1,
-                estimate_wait_time_seconds(
-                    queue_depth, active_job_count, queue.connection
-                ),
-            )
-        )
-        raise QueueSaturatedError(retry_after_seconds=retry_after_seconds)
-
-    estimated_wait_seconds = estimate_wait_time_seconds(
-        queue_depth,
-        active_job_count,
-        queue.connection,
-    )
-    if estimated_wait_seconds > LLM_QUEUE_WAIT_TIMEOUT_SECONDS:
-        raise QueueSaturatedError(
-            message=(
-                "The language model queue is too busy to accept this request right now."
-            ),
-            retry_after_seconds=int(max(1, estimated_wait_seconds)),
-        )
+def append_stream_event(job_id: str, payload: dict[str, Any], connection=None) -> str:
+    if connection is not None:
+        settings = _SETTINGS()
+        queue_client = RQQueueClient(settings, connection=connection)
+        job_store = RedisJobStore(settings, queue_client, connection=connection)
+        return job_store.append_stream_event(job_id, payload)
+    return create_queue_service().job_store.append_stream_event(job_id, payload)
 
 
-def append_stream_event(
-    job_id: str,
-    payload: dict[str, Any],
-    connection: Redis | None = None,
-) -> str:
-    redis_connection = connection or get_redis_connection()
-    stream_name = get_stream_channel(job_id)
-    event_id = redis_connection.xadd(stream_name, {"event": json.dumps(payload)})
-    redis_connection.expire(stream_name, LLM_RESULT_TTL_SECONDS)
-    if isinstance(event_id, bytes):
-        return event_id.decode()
-    return str(event_id)
+def get_job_result(job_id: str, connection=None) -> LLMCallJob:
+    if connection is not None:
+        settings = _SETTINGS()
+        queue_client = RQQueueClient(settings, connection=connection)
+        job_store = RedisJobStore(settings, queue_client, connection=connection)
+        return job_store.get_job_result(job_id)
+    return create_queue_service().job_store.get_job_result(job_id)
 
 
-def get_job_result(
-    job_id: str,
-    connection: Redis | None = None,
-) -> LLMCallJob:
-    redis_connection = connection or get_redis_connection()
-    job = Job.fetch(job_id, connection=redis_connection)
-    payload = job.result or job.meta.get("llm_call")
-    if payload is None:
-        raise RuntimeError(f"LLM job '{job_id}' has no result payload.")
-    llm_call = LLMCallJob.model_validate(payload)
-    if llm_call.stream_channel is None:
-        llm_call.stream_channel = get_stream_channel(job_id)
-    if llm_call.status == "queued":
-        try:
-            llm_call.queue_position = get_llm_queue(redis_connection).get_job_position(
-                job_id
-            )
-        except Exception:
-            llm_call.queue_position = None
-    llm_call.elapsed_seconds = compute_elapsed_seconds(llm_call)
-    return llm_call
-
-
-def enqueue_llm_call_sync(job_request: LLMCallJob, queue: Queue | None = None) -> Job:
-    llm_queue = queue or get_llm_queue()
-    check_queue_backpressure(llm_queue)
-    job_request.stream_channel = get_stream_channel(job_request.job_id)
-    retry = (
-        Retry(max=LLM_JOB_MAX_RETRIES, interval=0) if LLM_JOB_MAX_RETRIES > 0 else None
-    )
-
-    job = llm_queue.enqueue(
-        "app.worker.jobs.process_llm_call",
-        serialize_llm_call(job_request),
-        job_id=job_request.job_id,
-        result_ttl=LLM_RESULT_TTL_SECONDS,
-        job_timeout=LLM_GENERATION_TIMEOUT_SECONDS,
-        retry=retry,
-    )
-    set_job_payload(job, job_request)
-    if job_request.call_type == "streaming_text_generation":
-        append_stream_event(
-            job_request.job_id,
-            {
-                "job_id": job_request.job_id,
-                "status": "queued",
-                "queue_position": llm_queue.get_job_position(job_request.job_id),
-                "elapsed_seconds": 0.0,
-            },
-            llm_queue.connection,
-        )
-    return job
-
-
-async def enqueue_llm_call(
-    job_request: LLMCallJob,
-    queue: Queue | None = None,
-) -> Job:
-    return await asyncio.to_thread(enqueue_llm_call_sync, job_request, queue)
-
-
-def get_job_status_sync(
-    job_id: str,
-    connection: Redis | None = None,
-) -> LLMCallJob:
-    redis_connection = connection or get_redis_connection()
-    job = Job.fetch(job_id, connection=redis_connection)
-    llm_call = get_job_result(job_id, connection=redis_connection)
-    rq_status = job.get_status(refresh=True)
-
-    if rq_status in {JobStatus.QUEUED, JobStatus.DEFERRED, JobStatus.SCHEDULED}:
-        llm_call.status = "queued"
-        try:
-            llm_call.queue_position = get_llm_queue(redis_connection).get_job_position(
-                job_id
-            )
-        except Exception:
-            llm_call.queue_position = None
-    elif rq_status == JobStatus.STARTED and llm_call.status not in {
-        "streaming",
-        "cancelled",
-    }:
-        llm_call.status = "processing"
-    elif rq_status == JobStatus.CANCELED:
-        llm_call.status = "cancelled"
-    elif rq_status == JobStatus.FAILED:
-        llm_call.status = "failed"
-
-    llm_call.elapsed_seconds = compute_elapsed_seconds(llm_call)
-    return llm_call
-
-
-async def get_job_result_async(
-    job_id: str,
-    connection: Redis | None = None,
-) -> LLMCallJob:
+async def get_job_result_async(job_id: str, connection=None) -> LLMCallJob:
     return await asyncio.to_thread(get_job_result, job_id, connection)
 
 
-async def get_job_status(
-    job_id: str,
-    connection: Redis | None = None,
-) -> LLMCallJob:
-    return await asyncio.to_thread(get_job_status_sync, job_id, connection)
-
-
-def cancel_llm_call_sync(
-    job_id: str,
-    connection: Redis | None = None,
-) -> LLMCallJob:
-    redis_connection = connection or get_redis_connection()
-    job = Job.fetch(job_id, connection=redis_connection)
-    llm_call = get_job_result(job_id, redis_connection)
-    rq_status = job.get_status(refresh=True)
-
-    if llm_call.status in {"completed", "failed", "cancelled"}:
-        return llm_call
-
-    llm_call.cancel_requested = True
-
-    if rq_status in {
-        JobStatus.QUEUED,
-        JobStatus.DEFERRED,
-        JobStatus.SCHEDULED,
-    }:
-        get_llm_queue(redis_connection).remove(job_id)
-        llm_call.status = "cancelled"
-        llm_call.completed_at = utcnow()
-        llm_call.error = "LLM job was cancelled before execution."
-        set_job_payload(job, llm_call)
-        job.set_status(JobStatus.CANCELED)
-        append_stream_event(
-            job_id,
-            {
-                "job_id": job_id,
-                "status": "cancelled",
-                "cancel_requested": True,
-                "message": "LLM job was cancelled before execution.",
-                "done": True,
-            },
-            redis_connection,
-        )
-        return llm_call
-
-    set_job_payload(job, llm_call)
-    append_stream_event(
-        job_id,
-        {
-            "job_id": job_id,
-            "status": llm_call.status,
-            "cancel_requested": True,
-            "message": "Cancellation requested. Running non-streaming jobs may finish before stopping.",
-        },
-        redis_connection,
+async def enqueue_llm_call(job_request: LLMCallJob, queue=None):
+    queue_service = create_queue_service(
+        queue_client=queue if isinstance(queue, QueueClient) else None
     )
-    return llm_call
+    return await queue_service.enqueue_llm_call(job_request)
 
 
-async def cancel_llm_call(
-    job_id: str,
-    connection: Redis | None = None,
-) -> LLMCallJob:
-    return await asyncio.to_thread(cancel_llm_call_sync, job_id, connection)
+async def get_job_status(job_id: str, connection=None) -> LLMCallJob:
+    if connection is not None:
+        settings = _SETTINGS()
+        queue_client = RQQueueClient(settings, connection=connection)
+        job_store = RedisJobStore(settings, queue_client, connection=connection)
+        return await LLMQueueService(settings, queue_client, job_store).get_job_status(
+            job_id
+        )
+    return await create_queue_service().get_job_status(job_id)
 
 
-def is_cancel_requested(
-    job_id: str,
-    connection: Redis | None = None,
-) -> bool:
-    return bool(get_job_result(job_id, connection=connection).cancel_requested)
+async def cancel_llm_call(job_id: str, connection=None) -> LLMCallJob:
+    if connection is not None:
+        settings = _SETTINGS()
+        queue_client = RQQueueClient(settings, connection=connection)
+        job_store = RedisJobStore(settings, queue_client, connection=connection)
+        return await LLMQueueService(settings, queue_client, job_store).cancel_llm_call(
+            job_id
+        )
+    return await create_queue_service().cancel_llm_call(job_id)
 
 
-def ping_redis(connection: Redis | None = None) -> bool:
-    redis_connection = connection or get_redis_connection()
-    try:
-        return bool(redis_connection.ping())
-    except Exception:
-        return False
+def is_cancel_requested(job_id: str, connection=None) -> bool:
+    if connection is not None:
+        settings = _SETTINGS()
+        queue_client = RQQueueClient(settings, connection=connection)
+        job_store = RedisJobStore(settings, queue_client, connection=connection)
+        return job_store.is_cancel_requested(job_id)
+    return create_queue_service().is_cancel_requested(job_id)
 
 
-async def ping_redis_async(connection: AsyncRedis | None = None) -> bool:
-    redis_connection = connection or get_async_redis_connection()
-    try:
-        return bool(await redis_connection.ping())
-    except Exception:
-        return False
+def ping_redis(connection=None) -> bool:
+    if connection is not None:
+        settings = _SETTINGS()
+        return RQQueueClient(settings, connection=connection).ping()
+    return create_queue_service().queue_client.ping()
 
 
-def read_stream_batch(
-    job_id: str,
-    last_id: str,
-    connection: Redis | None = None,
-    block_ms: int = 1000,
-) -> list[dict[str, Any]]:
-    redis_connection = connection or get_redis_connection()
-    stream_name = get_stream_channel(job_id)
-    records = redis_connection.xread({stream_name: last_id}, count=20, block=block_ms)
-    events: list[dict[str, Any]] = []
-    for _stream_name, stream_records in records:
-        for event_id, data in stream_records:
-            raw_event = data.get(b"event") if b"event" in data else data.get("event")
-            if isinstance(raw_event, bytes):
-                raw_event = raw_event.decode()
-            event = json.loads(raw_event)
-            event["_stream_id"] = (
-                event_id.decode() if isinstance(event_id, bytes) else str(event_id)
-            )
-            events.append(event)
-    return events
+async def ping_redis_async(connection=None) -> bool:
+    return ping_redis(connection)
 
 
 async def stream_llm_events(
-    job_id: str,
-    *,
-    connection_factory: Callable[[], AsyncRedis] | None = None,
-    timeout_seconds: int = LLM_STREAM_TIMEOUT_SECONDS,
-) -> AsyncIterator[dict[str, Any]]:
-    connection_factory = connection_factory or get_async_redis_connection
-    deadline = asyncio.get_running_loop().time() + timeout_seconds
-    last_id = "0-0"
-    redis_connection = connection_factory()
-
-    try:
-        while True:
-            stream_name = get_stream_channel(job_id)
-            records = await redis_connection.xread(
-                {stream_name: last_id},
-                count=20,
-                block=1000,
-            )
-            events: list[dict[str, Any]] = []
-            for _stream_name, stream_records in records:
-                for event_id, data in stream_records:
-                    raw_event = (
-                        data.get(b"event") if b"event" in data else data.get("event")
-                    )
-                    if isinstance(raw_event, bytes):
-                        raw_event = raw_event.decode()
-                    event = json.loads(raw_event)
-                    event["_stream_id"] = (
-                        event_id.decode()
-                        if isinstance(event_id, bytes)
-                        else str(event_id)
-                    )
-                    events.append(event)
-
-            if not events:
-                if asyncio.get_running_loop().time() >= deadline:
-                    raise TimeoutError(f"Timed out waiting for LLM stream '{job_id}'.")
-                continue
-
-            deadline = asyncio.get_running_loop().time() + timeout_seconds
-            for event in events:
-                last_id = event.pop("_stream_id")
-                yield event
-                if event.get("done") is True or event.get("status") in {
-                    "completed",
-                    "failed",
-                    "cancelled",
-                }:
-                    return
-    finally:
-        await close_async_redis_connection(redis_connection)
+    job_id: str, *, connection_factory=None, timeout_seconds=None
+):
+    queue_service = create_queue_service()
+    async for event in queue_service.job_store.stream_llm_events(
+        job_id,
+        timeout_seconds=timeout_seconds
+        or queue_service.settings.llm_stream_timeout_seconds,
+    ):
+        yield event
 
 
 async def wait_for_job_result(
     job_id: str,
     *,
-    connection_factory: Callable[[], Redis] | None = None,
-    timeout_seconds: int = LLM_QUEUE_WAIT_TIMEOUT_SECONDS,
-    poll_interval_seconds: float = LLM_STATUS_POLL_INTERVAL_SECONDS,
+    connection_factory=None,
+    timeout_seconds=None,
+    poll_interval_seconds=None,
 ) -> LLMCallJob:
-    connection_factory = connection_factory or get_redis_connection
-    deadline = asyncio.get_running_loop().time() + timeout_seconds
-
-    while True:
-        status = await get_job_status(job_id, connection_factory())
-        if status.status in {"completed", "failed", "cancelled"}:
-            result = await get_job_result_async(job_id, connection_factory())
-            return result
-
-        if asyncio.get_running_loop().time() >= deadline:
-            raise TimeoutError(f"Timed out waiting for LLM job '{job_id}'.")
-
-        await asyncio.sleep(poll_interval_seconds)
-
-
-def get_queue_status_sync(connection: Redis | None = None) -> QueueStatusSnapshot:
-    redis_connection = connection or get_redis_connection()
-    redis_connected = ping_redis(redis_connection)
-    if not redis_connected:
-        return QueueStatusSnapshot(
-            redis_connected=False,
-            queue_depth=0,
-            active_job_count=0,
-            failed_job_count=0,
-            worker_count=0,
+    queue_service = create_queue_service()
+    if timeout_seconds is not None or poll_interval_seconds is not None:
+        custom_settings = AppSettings(
+            **{
+                **queue_service.settings.__dict__,
+                "llm_queue_wait_timeout_seconds": timeout_seconds
+                or queue_service.settings.llm_queue_wait_timeout_seconds,
+                "llm_status_poll_interval_seconds": poll_interval_seconds
+                or queue_service.settings.llm_status_poll_interval_seconds,
+            }
         )
-
-    queue = get_llm_queue(redis_connection)
-    workers = Worker.all(connection=redis_connection, queue=queue)
-    worker_heartbeat_age_seconds: float | None = None
-    now = datetime.now(UTC)
-    if workers:
-        heartbeat_ages: list[float] = []
-        for worker in workers:
-            last_heartbeat = getattr(worker, "last_heartbeat", None)
-            if last_heartbeat is not None:
-                heartbeat_ages.append(max(0.0, (now - last_heartbeat).total_seconds()))
-        if heartbeat_ages:
-            worker_heartbeat_age_seconds = min(heartbeat_ages)
-
-    active_job_count = get_started_job_registry(redis_connection, queue.name).count
-    queue_depth = queue.count
-    failed_job_count = get_failed_job_registry(redis_connection, queue.name).count
-
-    return QueueStatusSnapshot(
-        redis_connected=redis_connected,
-        queue_depth=queue_depth,
-        active_job_count=active_job_count,
-        failed_job_count=failed_job_count,
-        worker_count=len(workers),
-        worker_heartbeat_age_seconds=worker_heartbeat_age_seconds,
-        average_wait_time_seconds=read_average_wait_time_seconds(redis_connection),
-        estimated_wait_time_seconds=estimate_wait_time_seconds(
-            queue_depth,
-            active_job_count,
-            redis_connection,
-        ),
-    )
+        queue_service = create_queue_service(
+            settings=custom_settings,
+            queue_client=queue_service.queue_client,
+            job_store=queue_service.job_store,
+        )
+    return await queue_service.wait_for_job_result(job_id)
 
 
-async def get_queue_status(connection: Redis | None = None) -> QueueStatusSnapshot:
-    return await asyncio.to_thread(get_queue_status_sync, connection)
+def get_queue_status_sync(connection=None) -> QueueStatusSnapshot:
+    if connection is not None:
+        settings = _SETTINGS()
+        queue_client = RQQueueClient(settings, connection=connection)
+        job_store = RedisJobStore(settings, queue_client, connection=connection)
+        return LLMQueueService(
+            settings, queue_client, job_store
+        ).get_queue_status_sync()
+    return create_queue_service().get_queue_status_sync()
+
+
+async def get_queue_status(connection=None) -> QueueStatusSnapshot:
+    return await create_queue_service().get_queue_status()

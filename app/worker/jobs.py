@@ -6,6 +6,7 @@ from redis import Redis
 from rq import SimpleWorker, Worker
 from rq.job import get_current_job
 
+from app.core.config import AppSettings
 from app.core.logging import configure_logging
 from app.domain.jobs import LLMCallJob, utcnow
 from app.infrastructure.llm.local_model import LLMService, create_local_llm_service
@@ -14,19 +15,14 @@ from app.infrastructure.redis.config import (
     LLM_QUEUE_NAME,
     LLM_WORKER_CONCURRENCY,
 )
-from app.infrastructure.redis.queue_service import (
-    append_stream_event,
-    get_redis_connection,
-    is_cancel_requested,
-    record_completion_metrics,
-    record_wait_time,
-    serialize_llm_call,
-    set_job_payload,
-)
+from app.infrastructure.redis.connection import get_redis_connection
+from app.infrastructure.redis.job_store import RedisJobStore
+from app.infrastructure.redis.rq_queue import RQQueueClient
 
 logger = logging.getLogger(__name__)
 _MODEL_SERVICE: LLMService | None = None
 _MODEL_LOCK = threading.Lock()
+_SETTINGS = AppSettings.from_env()
 
 
 class LLMJobCancelledError(RuntimeError):
@@ -49,6 +45,46 @@ def get_worker_llm_service() -> LLMService:
         _MODEL_SERVICE = create_local_llm_service()
         logger.info("llm_worker_model_ready")
     return _MODEL_SERVICE
+
+
+def get_worker_job_store(connection: Redis | None = None) -> RedisJobStore:
+    resolved_connection = connection or get_redis_connection(_SETTINGS.redis_url)
+    queue_client = RQQueueClient(_SETTINGS, connection=resolved_connection)
+    return RedisJobStore(_SETTINGS, queue_client, connection=resolved_connection)
+
+
+def serialize_llm_call(llm_call: LLMCallJob) -> dict[str, Any]:
+    return get_worker_job_store().serialize_llm_call(llm_call)
+
+
+def set_job_payload(job, llm_call: LLMCallJob) -> None:
+    get_worker_job_store(job.connection if job is not None else None).save_job_payload(
+        job,
+        llm_call,
+    )
+
+
+def record_wait_time(wait_seconds: float, connection: Redis | None = None) -> None:
+    get_worker_job_store(connection).record_wait_time(wait_seconds)
+
+
+def record_completion_metrics(
+    llm_call: LLMCallJob,
+    connection: Redis | None = None,
+) -> None:
+    get_worker_job_store(connection).record_completion_metrics(llm_call)
+
+
+def append_stream_event(
+    job_id: str,
+    payload: dict[str, Any],
+    connection: Redis | None = None,
+) -> str:
+    return get_worker_job_store(connection).append_stream_event(job_id, payload)
+
+
+def is_cancel_requested(job_id: str, connection: Redis | None = None) -> bool:
+    return get_worker_job_store(connection).is_cancel_requested(job_id)
 
 
 def safe_error_message(error: Exception) -> str:
@@ -95,11 +131,13 @@ def finalize_cancelled_job(
 
 def process_llm_call(payload: dict) -> dict:
     job = get_current_job()
+    connection = (
+        job.connection if job is not None else get_redis_connection(_SETTINGS.redis_url)
+    )
     if job is not None and job.meta.get("llm_call") is not None:
         llm_call = LLMCallJob.model_validate(job.meta["llm_call"])
     else:
         llm_call = LLMCallJob.model_validate(payload)
-    connection = job.connection if job is not None else get_redis_connection()
     if job is not None:
         llm_call.retry_count = int(job.meta.get("retry_count", llm_call.retry_count))
         llm_call.last_error = job.meta.get("last_error", llm_call.last_error)
@@ -259,7 +297,7 @@ def create_worker(connection: Redis | None = None) -> Worker:
         raise RuntimeError(
             "LLM_WORKER_CONCURRENCY must remain 1 for the local GPU worker."
         )
-    redis_connection = connection or get_redis_connection()
+    redis_connection = connection or get_redis_connection(_SETTINGS.redis_url)
     worker_class = get_worker_class()
     return worker_class([LLM_QUEUE_NAME], connection=redis_connection)
 

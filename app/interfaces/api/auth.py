@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from fastapi import Depends
 from fastapi.security import APIKeyHeader
 
+from app.core.config import parse_bool
 from app.core.errors import APIError
 
 API_KEY_HEADER_NAME = "X-API-Key"
@@ -35,15 +36,6 @@ class AuthConfig:
             enabled=parse_bool(os.getenv("AUTH_ENABLED", "true"), default=True),
             api_key=os.getenv("FASTAPI_API_KEY"),
         )
-
-
-def parse_bool(value: str, *, default: bool) -> bool:
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "t", "yes", "y", "on"}:
-        return True
-    if normalized in {"0", "false", "f", "no", "n", "off"}:
-        return False
-    return default
 
 
 def validate_api_key(provided_key: str | None, config: AuthConfig) -> None:

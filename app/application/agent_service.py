@@ -15,7 +15,6 @@ from app.core.errors import APIError, LLMServiceError
 from app.domain.intent_result import IntentResult
 from app.domain.mode_responses import BaseModeResponse
 from app.domain.session_states import SessionState
-from app.infrastructure.redis.queued_gateway import QueuedLLMService
 from app.ports.llm_gateway import LLMGateway
 
 GENERAL_RESPONSE = "I can help with translation, definitions, or language learning. Which would you like?"
@@ -52,6 +51,8 @@ class AgentService:
     @classmethod
     def from_queue(cls) -> "AgentService":
         logger.info("agent_service_from_queue_start")
+        from app.infrastructure.redis.queued_gateway import QueuedLLMService
+
         llm_service = QueuedLLMService()
         memory = ConversationMemory(max_turns=5)
         router = IntentRouter(llm_service)

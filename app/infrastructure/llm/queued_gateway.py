@@ -9,18 +9,14 @@ from app.infrastructure.redis.errors import (
     QueueWaitTimeoutError,
     StreamingTimeoutError,
 )
-from app.infrastructure.redis.queue_service import (
-    cancel_llm_call,
-    enqueue_llm_call,
-    stream_llm_events,
-    wait_for_job_result,
-)
-from app.infrastructure.redis.queued_gateway import (
-    QueuedLLMService as RedisQueuedLLMService,
-)
+from app.infrastructure.redis.queue_service import LLMQueueService
+from app.ports.llm_gateway import LLMGateway
 
 
-class QueuedLLMService(RedisQueuedLLMService):
+class QueuedLLMGateway(LLMGateway):
+    def __init__(self, queue_service: LLMQueueService) -> None:
+        self.queue_service = queue_service
+
     async def ask_llm(
         self,
         system_prompt: str,
@@ -28,9 +24,6 @@ class QueuedLLMService(RedisQueuedLLMService):
         schema: dict,
         mode: str | None = None,
     ) -> dict:
-        if not self._uses_compat_wrappers:
-            return await super().ask_llm(system_prompt, user_prompt, schema, mode=mode)
-
         job = LLMCallJob(
             job_id=str(uuid.uuid4()),
             call_type="structured_json",
@@ -43,9 +36,9 @@ class QueuedLLMService(RedisQueuedLLMService):
             generation_parameters={"temperature": 0.1, "max_tokens": 2000},
             response_schema=schema,
         )
-        await enqueue_llm_call(job)
+        await self.queue_service.enqueue_llm_call(job)
         try:
-            result = await wait_for_job_result(job.job_id)
+            result = await self.queue_service.wait_for_job_result(job.job_id)
         except TimeoutError as error:
             raise QueueWaitTimeoutError() from error
         if result.status != "completed":
@@ -66,13 +59,6 @@ class QueuedLLMService(RedisQueuedLLMService):
         user_prompt: str,
         mode: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        if not self._uses_compat_wrappers:
-            async for event in super().stream_llm(
-                system_prompt, user_prompt, mode=mode
-            ):
-                yield event
-            return
-
         job = LLMCallJob(
             job_id=str(uuid.uuid4()),
             call_type="streaming_text_generation",
@@ -84,23 +70,12 @@ class QueuedLLMService(RedisQueuedLLMService):
             mode=mode,
             generation_parameters={"temperature": 0.1, "max_tokens": 2000},
         )
-        await enqueue_llm_call(job)
+        await self.queue_service.enqueue_llm_call(job)
         try:
-            async for event in stream_llm_events(job.job_id):
+            async for event in self.queue_service.stream_llm_events(job.job_id):
                 yield event
         except TimeoutError as error:
             raise StreamingTimeoutError() from error
 
     async def cancel_job(self, job_id: str) -> LLMCallJob:
-        if not self._uses_compat_wrappers:
-            return await super().cancel_job(job_id)
-        return await cancel_llm_call(job_id)
-
-
-__all__ = [
-    "QueuedLLMService",
-    "cancel_llm_call",
-    "enqueue_llm_call",
-    "stream_llm_events",
-    "wait_for_job_result",
-]
+        return await self.queue_service.cancel_llm_call(job_id)

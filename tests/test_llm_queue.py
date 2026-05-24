@@ -276,23 +276,25 @@ def test_cancelling_queued_job_marks_it_cancelled(monkeypatch):
         messages=[],
         status="queued",
     )
-    fake_queue = SimpleNamespace(remove=lambda job_id: None)
-
     monkeypatch.setattr(
-        "app.infrastructure.redis.queue_service.Job.fetch",
-        lambda *args, **kwargs: fake_job,
+        "app.infrastructure.redis.rq_queue.RQQueueClient.get_job",
+        lambda _self, *_args, **_kwargs: fake_job,
     )
     monkeypatch.setattr(
-        "app.infrastructure.redis.queue_service.get_job_result",
-        lambda *args, **kwargs: queued_call,
+        "app.infrastructure.redis.job_store.RedisJobStore.get_job_result",
+        lambda _self, *_args, **_kwargs: queued_call,
     )
     monkeypatch.setattr(
-        "app.infrastructure.redis.queue_service.get_llm_queue",
-        lambda *_args, **_kwargs: fake_queue,
+        "app.infrastructure.redis.rq_queue.RQQueueClient.get_job_status",
+        lambda _self, *_args, **_kwargs: "queued",
     )
     monkeypatch.setattr(
-        "app.infrastructure.redis.queue_service.append_stream_event",
-        lambda _job_id, payload, _connection=None: events.append(payload),
+        "app.infrastructure.redis.rq_queue.RQQueueClient.remove",
+        lambda _self, *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.redis.job_store.RedisJobStore.append_stream_event",
+        lambda _self, _job_id, payload: events.append(payload),
     )
 
     result = asyncio.run(cancel_llm_call("queued-job", connection=object()))
@@ -319,16 +321,20 @@ def test_cancelling_running_job_sets_cancel_requested(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "app.infrastructure.redis.queue_service.Job.fetch",
-        lambda *args, **kwargs: fake_job,
+        "app.infrastructure.redis.rq_queue.RQQueueClient.get_job",
+        lambda _self, *_args, **_kwargs: fake_job,
     )
     monkeypatch.setattr(
-        "app.infrastructure.redis.queue_service.get_job_result",
-        lambda *args, **kwargs: running_call,
+        "app.infrastructure.redis.job_store.RedisJobStore.get_job_result",
+        lambda _self, *_args, **_kwargs: running_call,
     )
     monkeypatch.setattr(
-        "app.infrastructure.redis.queue_service.append_stream_event",
-        lambda _job_id, payload, _connection=None: events.append(payload),
+        "app.infrastructure.redis.rq_queue.RQQueueClient.get_job_status",
+        lambda _self, *_args, **_kwargs: "started",
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.redis.job_store.RedisJobStore.append_stream_event",
+        lambda _self, _job_id, payload: events.append(payload),
     )
 
     result = asyncio.run(cancel_llm_call("running-job", connection=object()))
