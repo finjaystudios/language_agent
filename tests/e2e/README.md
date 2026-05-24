@@ -47,6 +47,18 @@ Run one file:
 pytest tests/e2e/test_chainlit_chat.py
 ```
 
+Run only the mobile and tablet coverage:
+
+```powershell
+pytest tests/e2e/test_chainlit_mobile.py
+```
+
+Run headed mobile and tablet coverage:
+
+```powershell
+pytest tests/e2e/test_chainlit_mobile.py --headed
+```
+
 Run one test:
 
 ```powershell
@@ -58,6 +70,20 @@ Use Playwright debugging options locally as needed, for example:
 ```powershell
 pytest tests/e2e --headed --slowmo 250
 ```
+
+Run mobile Chrome emulation only:
+
+```powershell
+pytest tests/e2e/test_chainlit_mobile.py -k "mobile and not safari" --browser chromium
+```
+
+Run iPhone Safari emulation when WebKit is installed:
+
+```powershell
+pytest tests/e2e/test_chainlit_mobile.py -k safari --browser webkit
+```
+
+This suite does not currently capture screenshots or traces by default.
 
 ### Run Against an Existing Web UI
 

@@ -15,6 +15,11 @@ import requests
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WEBUI_DIR = REPO_ROOT / "webui"
 E2E_BASE_URL_ENV = "E2E_BASE_URL"
+DEVICE_PRESETS = {
+    "pixel": {"device": "Pixel 7", "label": "mobile-chrome"},
+    "iphone": {"device": "iPhone 13", "label": "mobile-safari"},
+    "tablet": {"device": "iPad Mini", "label": "tablet"},
+}
 
 
 def free_port() -> int:
@@ -245,3 +250,18 @@ def backend_requests(fake_backend: str):
 @pytest.fixture()
 def unavailable_backend_url() -> str:
     return f"http://127.0.0.1:{free_port()}"
+
+
+@pytest.fixture()
+def emulated_page(browser, playwright, request):
+    profile_name = getattr(request, "param", "pixel")
+    if profile_name not in DEVICE_PRESETS:
+        raise ValueError(f"Unknown device profile: {profile_name}")
+
+    device_preset = DEVICE_PRESETS[profile_name]
+    context = browser.new_context(**playwright.devices[device_preset["device"]])
+    page = context.new_page()
+    try:
+        yield page
+    finally:
+        context.close()
