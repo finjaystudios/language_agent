@@ -177,10 +177,34 @@ Run the browser tests:
 pytest tests/e2e
 ```
 
+Run the mobile and tablet coverage only:
+
+```powershell
+pytest tests/e2e/test_chainlit_mobile.py
+```
+
 Run them headed:
 
 ```powershell
 pytest tests/e2e --headed
+```
+
+Run headed mobile and tablet checks:
+
+```powershell
+pytest tests/e2e/test_chainlit_mobile.py --headed
+```
+
+Run mobile Chrome emulation only:
+
+```powershell
+pytest tests/e2e/test_chainlit_mobile.py -k "mobile and not safari" --browser chromium
+```
+
+Run iPhone Safari emulation when WebKit is installed:
+
+```powershell
+pytest tests/e2e/test_chainlit_mobile.py -k safari --browser webkit
 ```
 
 See `tests/e2e/README.md` for single-file and single-test commands.
@@ -197,6 +221,34 @@ The full fake-backend browser suite remains the default because it is
 deterministic and does not require the real LLM. Compose-based browser checks
 use the real backend and mounted model, so treat them as local integration
 tests.
+
+### Manual Responsive Checks
+
+Recommended viewport/device checks before shipping UI changes:
+
+- Small phone: `320px` to `375px`
+- Large phone: `425px`
+- Tablet portrait: `768px`
+- Tablet landscape: `1024px`
+- Desktop Chromium/Brave
+
+Browser device-mode workflow:
+
+1. Open the Web UI in Chromium or Brave.
+2. Open DevTools.
+3. Toggle the device toolbar.
+4. Check at least `iPhone SE`, `iPhone 12 Pro`, `Pixel 7`, `iPad Mini`, and `iPad Air`.
+5. Re-check tablet sizes in both portrait and landscape.
+
+Manual checklist:
+
+- Confirm no page-level horizontal scrolling on landing or during an active chat.
+- Confirm the logo and backend status card do not push the composer too far below the fold on phones.
+- Confirm starter prompts wrap cleanly and remain easy to tap.
+- Confirm the send button remains visible and comfortable after focusing the composer.
+- Confirm a full response and a streaming response stay readable on phone and tablet widths.
+- Confirm long content, code blocks, and tables scroll inside their own message container.
+- Confirm the settings/sidebar flow remains usable on tablet widths.
 
 ### Branding Assets
 
@@ -232,8 +284,9 @@ CSS, JavaScript, and Python callbacks:
 - `public/theme.json` defines the light and dark HSL colour variables used by
   Chainlit. Keep foreground/background pairs at WCAG AA contrast or better.
 - `public/style.css` contains scoped polish for the landing page, message
-  bubbles, composer, status card, starter buttons, action buttons, and focus
-  states. It is loaded through `custom_css` with a cache-busting query string.
+  bubbles, composer, status card, starter buttons, action buttons, focus
+  states, and responsive breakpoints for phone and tablet widths. It is loaded
+  through `custom_css` with a cache-busting query string.
 - `public/landing-status.js` owns the landing-page backend status card and
   hides it only after the user starts a conversation. It also patches the
   composer placeholder and live-region accessibility attributes.
@@ -268,6 +321,45 @@ docker compose up --build
 Hard refresh the browser after asset changes. If CSS appears stale, increment
 the query string in `.chainlit/config.toml`, for example
 `/public/style.css?v=languageagent-theme-v2`.
+
+### Mobile and Proxy Validation
+
+For local Docker/Caddy validation:
+
+1. Rebuild the Web UI image:
+
+```powershell
+docker build -f Dockerfile.webui -t local-language-agent-webui .
+```
+
+2. Validate the Compose file:
+
+```powershell
+docker compose config
+```
+
+3. Build the Compose-managed Web UI image:
+
+```powershell
+docker compose build webui
+```
+
+4. When the full stack is available locally, open:
+   - `http://localhost/`
+   - `http://<host-lan-ip>/` from a phone or tablet on the same network
+
+5. Confirm these routes are healthy through Caddy:
+   - `/public/theme.json`
+   - `/public/style.css?v=languageagent-theme-v2`
+   - `/public/landing-status.js`
+   - `/logo?theme=dark`
+   - `/favicon`
+
+For domain checks through Cloudflare Tunnel:
+
+- Open the deployed domain on a phone.
+- Confirm the composer, starter actions, status card, streaming states, and final response rendering remain usable.
+- Do not change Cloudflare settings unless there is a confirmed routing or caching problem.
 
 ### Implementation Summary
 
