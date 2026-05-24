@@ -1,18 +1,15 @@
 ## Chainlit Web UI
 
 The Web UI lives in `webui/` as a separate Chainlit application. It communicates
-with the FastAPI backend only over HTTP and is deployed separately from the
-backend in its own Docker image.
+with FastAPI over HTTP and is deployable separately from the backend.
 
-### Install Dependencies
-
-From the repository root:
+## Install
 
 ```powershell
 pip install -r webui/requirements.txt
 ```
 
-### Environment
+## Environment
 
 Example local values:
 
@@ -23,55 +20,11 @@ $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
 ```
 
-The Web UI also reads `.env` when launched through the VSCode configuration.
-Use `.env.example` as the shared template.
-Do not set `FASTAPI_API_KEY` in browser-visible content; it belongs only in the
-server process environment.
+Keep `FASTAPI_API_KEY` in the server-side Web UI environment only.
 
-### Run FastAPI Locally
+## Run Locally
 
-Terminal 1:
-
-```powershell
-$env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
-$env:AUTH_ENABLED = "true"
-$env:FASTAPI_API_KEY = "local-dev-change-me"
-python -m uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-Confirm the backend is reachable:
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/health
-```
-
-### Run FastAPI Through Docker
-
-Build the backend image:
-
-```powershell
-docker build -t local-language-agent-api .
-```
-
-Run it with the local model directory mounted:
-
-```powershell
-docker run --rm --gpus all -p 8000:8000 `
-  --env-file .env.example `
-  -e APP_HOST=0.0.0.0 `
-  -e FASTAPI_API_KEY=local-dev-change-me `
-  -e LLM_MODEL_PATH=/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf `
-  -v ${PWD}/models:/models `
-  local-language-agent-api
-```
-
-The Web UI uses the same `FASTAPI_BASE_URL` for a local uvicorn backend and for a
-Dockerized backend published to `127.0.0.1:8000`.
-Use the same `FASTAPI_API_KEY` value for the backend and Web UI process.
-
-### Run Chainlit Locally
-
-Terminal 2:
+Run FastAPI separately, then start Chainlit:
 
 ```powershell
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
@@ -86,15 +39,15 @@ Pop-Location
 
 Open `http://127.0.0.1:8001`.
 
-### Run Chainlit Through Docker
+## Run in Docker
 
-Build the Web UI image from the repository root:
+Build:
 
 ```powershell
 docker build -f Dockerfile.webui -t local-language-agent-webui .
 ```
 
-Run it against a FastAPI backend reachable from the container:
+Run:
 
 ```powershell
 docker run --rm -p 8001:8001 `
@@ -107,286 +60,54 @@ docker run --rm -p 8001:8001 `
   local-language-agent-webui
 ```
 
-When running Web UI and FastAPI containers on the same Docker network, set
-`FASTAPI_BASE_URL=http://fastapi:8000`. The Web UI image does not include or
-mount model files; it only calls the FastAPI backend over HTTP.
+When the Web UI runs beside FastAPI on the same Docker network, set
+`FASTAPI_BASE_URL=http://fastapi:8000`.
 
-The Web UI Dockerfile is `Dockerfile.webui`. The backend Dockerfile remains the
-root `Dockerfile`.
-
-### Run FastAPI and Chainlit With Compose
-
-From the repository root, copy the Compose env template and set a local shared
-API key and mounted model filename:
+## Compose
 
 ```powershell
 Copy-Item .env.compose.example .env
-```
-
-Build and run both separate containers:
-
-```powershell
 docker compose up --build
 ```
 
-Open `http://127.0.0.1:8001`. The Web UI service uses
-`FASTAPI_BASE_URL=http://fastapi:8000` inside the Compose network. Only the
-FastAPI service mounts `./models:/models:ro`; the Web UI service never mounts or
-loads model files.
+Preferred Web UI URL through Caddy:
 
-Keep `LLM_MODEL_PATH` in `.env` pointed at the container path under `/models`,
-not a relative host path such as `models/...`.
+- `http://localhost/`
 
-### Testing With Bruno and the Web UI
+Direct host port:
 
-Use Bruno to confirm the backend independently:
+- `http://127.0.0.1:8001`
 
-```powershell
-bru run bruno/local-language-agent-api --env Local
-```
+## Scope and Behavior
 
-Then use the Web UI against the same backend URL:
+- the Web UI does not load the GGUF model
+- the Web UI sends `X-API-Key` only from server-side code
+- Translation, Definition, and Learning can stream when
+  `WEBUI_STREAMING_ENABLED=true`
+- the browser never receives `FASTAPI_API_KEY`
 
-1. Open `http://127.0.0.1:8001`.
-2. Confirm the LanguageAgent landing page shows the logo, starter prompts, and
-   backend health as connected.
-3. Select `Definition - stream` and ask for a definition.
-4. Select `Translation - stream` or `Learning - stream` to test streaming.
-5. Change the Web UI key to a wrong value and send a message; the UI should show
-   a backend authentication failure without printing the key.
-6. Unset the Web UI key and send a message; the UI should show a missing backend
-   API key configuration message.
-7. Stop the backend and send another message; the UI should show a clear backend
-   unavailable message.
+## Assets and Customization
 
-### Local Browser Tests
+Runtime assets live under `webui/public/` and Chainlit configuration lives under
+`webui/.chainlit/` plus `chainlit.md`.
 
-The local Playwright tests live in `tests/e2e/`. They start a fake backend and
-the Chainlit Web UI locally, so they do not require Docker or a GGUF model.
+Relevant files:
 
-Install test dependencies and browser binaries:
+- `public/theme.json`
+- `public/style.css`
+- `public/landing-status.js`
+- `public/logo_dark.png`
+- `public/logo_light.png`
+- `public/favicon`
 
-```powershell
-pip install -r tests/e2e/requirements.txt
-python -m playwright install chromium
-```
+## Testing
 
-Run the browser tests:
+Run the Playwright suite from the repository root:
 
 ```powershell
 pytest tests/e2e
 ```
 
-Run the mobile and tablet coverage only:
-
-```powershell
-pytest tests/e2e/test_chainlit_mobile.py
-```
-
-Run them headed:
-
-```powershell
-pytest tests/e2e --headed
-```
-
-Run headed mobile and tablet checks:
-
-```powershell
-pytest tests/e2e/test_chainlit_mobile.py --headed
-```
-
-Run mobile Chrome emulation only:
-
-```powershell
-pytest tests/e2e/test_chainlit_mobile.py -k "mobile and not safari" --browser chromium
-```
-
-Run iPhone Safari emulation when WebKit is installed:
-
-```powershell
-pytest tests/e2e/test_chainlit_mobile.py -k safari --browser webkit
-```
-
-See `tests/e2e/README.md` for single-file and single-test commands.
-
-To smoke-test a Web UI that is already running, including the Docker Compose Web
-UI, set `E2E_BASE_URL` and run the smoke test:
-
-```powershell
-$env:E2E_BASE_URL = "http://127.0.0.1:8001"
-pytest tests/e2e/test_chainlit_smoke.py
-```
-
-The full fake-backend browser suite remains the default because it is
-deterministic and does not require the real LLM. Compose-based browser checks
-use the real backend and mounted model, so treat them as local integration
-tests.
-
-### Manual Responsive Checks
-
-Recommended viewport/device checks before shipping UI changes:
-
-- Small phone: `320px` to `375px`
-- Large phone: `425px`
-- Tablet portrait: `768px`
-- Tablet landscape: `1024px`
-- Desktop Chromium/Brave
-
-Browser device-mode workflow:
-
-1. Open the Web UI in Chromium or Brave.
-2. Open DevTools.
-3. Toggle the device toolbar.
-4. Check at least `iPhone SE`, `iPhone 12 Pro`, `Pixel 7`, `iPad Mini`, and `iPad Air`.
-5. Re-check tablet sizes in both portrait and landscape.
-
-Manual checklist:
-
-- Confirm no page-level horizontal scrolling on landing or during an active chat.
-- Confirm the logo and backend status card do not push the composer too far below the fold on phones.
-- Confirm starter prompts wrap cleanly and remain easy to tap.
-- Confirm the send button remains visible and comfortable after focusing the composer.
-- Confirm a full response and a streaming response stay readable on phone and tablet widths.
-- Confirm long content, code blocks, and tables scroll inside their own message container.
-- Confirm the settings/sidebar flow remains usable on tablet widths.
-
-### Branding Assets
-
-LanguageAgent branding is configured through `.chainlit/config.toml` and static
-files in `public/`.
-
-- Replace `public/logo_dark.png` and `public/logo_light.png` to update the
-  Chainlit logo. Keep transparent PNGs sized around `640x160` so Chainlit can
-  scale them cleanly. The landing page uses CSS in `public/style.css` to render
-  the same assets at a larger first-screen size.
-- Replace `public/favicon` to update the browser tab icon. The file is a PNG
-  without an extension because Chainlit looks up that exact public path.
-- Keep compact icons such as `public/languageagent-icon-32.png` and
-  `public/languageagent-icon-64.png` in `public/` if they are referenced from
-  header links or future compact UI.
-- Keep editable source designs outside the Docker image path, such as
-  `../design/languageagent-logo.svg` and `../design/languageagent-icon.svg`.
-  The Web UI Dockerfile only copies `webui/public`, and `.dockerignore`
-  excludes `design/`, so design sources are not included in the runtime image or
-  build context.
-- Update `.chainlit/config.toml` for future brand text changes: `name`,
-  `description`, `custom_meta_url`, `custom_meta_image_url`, and
-  `[[UI.header_links]]`. Keep `logo_file_url` empty when both dark and light
-  logo variants are present so Chainlit can switch between them by theme.
-- Clear the browser cache or hard refresh after replacing logos or favicons;
-  browsers often cache these assets aggressively.
-
-### Theme and Chat UX Customization
-
-The LanguageAgent theme is split between Chainlit configuration, theme tokens,
-CSS, JavaScript, and Python callbacks:
-
-- `public/theme.json` defines the light and dark HSL colour variables used by
-  Chainlit. Keep foreground/background pairs at WCAG AA contrast or better.
-- `public/style.css` contains scoped polish for the landing page, message
-  bubbles, composer, status card, starter buttons, action buttons, focus
-  states, and responsive breakpoints for phone and tablet widths. It is loaded
-  through `custom_css` with a cache-busting query string.
-- `public/landing-status.js` owns the landing-page backend status card and
-  hides it only after the user starts a conversation. It also patches the
-  composer placeholder and live-region accessibility attributes.
-- `app.py` owns starters, response mode settings, streaming/full-response
-  selection, retry actions, and thumbs up/down feedback actions.
-- `chainlit.md` controls the landing-page brand block that appears before the
-  first user message.
-
-To change quick actions, edit the `@cl.set_starters` callback in `app.py`.
-Each starter sets a prompt and optional mode metadata. To change the default
-Chain of Thought display, update `cot` in `.chainlit/config.toml`; the current
-value is `hidden` for a cleaner user-facing interface.
-
-Feedback is captured asynchronously in the Web UI process logs for now. Keep it
-free of secrets and user credentials until a dedicated backend endpoint exists.
-
-### Rebuild After UI Asset Changes
-
-After changing logos, favicons, `theme.json`, `style.css`, `landing-status.js`,
-or `.chainlit/config.toml`, rebuild the Web UI image:
-
-```powershell
-docker build -f Dockerfile.webui -t local-language-agent-webui .
-```
-
-For the full local stack:
-
-```powershell
-docker compose up --build
-```
-
-Hard refresh the browser after asset changes. If CSS appears stale, increment
-the query string in `.chainlit/config.toml`, for example
-`/public/style.css?v=languageagent-theme-v2`.
-
-### Mobile and Proxy Validation
-
-For local Docker/Caddy validation:
-
-1. Rebuild the Web UI image:
-
-```powershell
-docker build -f Dockerfile.webui -t local-language-agent-webui .
-```
-
-2. Validate the Compose file:
-
-```powershell
-docker compose config
-```
-
-3. Build the Compose-managed Web UI image:
-
-```powershell
-docker compose build webui
-```
-
-4. When the full stack is available locally, open:
-   - `http://localhost/`
-   - `http://<host-lan-ip>/` from a phone or tablet on the same network
-
-5. Confirm these routes are healthy through Caddy:
-   - `/public/theme.json`
-   - `/public/style.css?v=languageagent-theme-v2`
-   - `/public/landing-status.js`
-   - `/logo?theme=dark`
-   - `/favicon`
-
-For domain checks through Cloudflare Tunnel:
-
-- Open the deployed domain on a phone.
-- Confirm the composer, starter actions, status card, streaming states, and final response rendering remain usable.
-- Do not change Cloudflare settings unless there is a confirmed routing or caching problem.
-
-### Implementation Summary
-
-- `app.py` owns Chainlit callbacks, mode controls, starters, and UI messages.
-- `client.py` owns async HTTP calls to `/health`, `/api/chat`, and
-  `/api/chat/stream`. It sends `X-API-Key` only on protected chat requests,
-  using the server-side `FASTAPI_API_KEY` environment variable.
-- `renderer.py` formats structured backend payloads for Translation, Definition,
-  and Learning responses.
-- `.chainlit/config.toml` sets the LanguageAgent metadata, logo URL, theme,
-  sidebar settings, custom CSS, and custom JS.
-- `public/theme.json` contains the Chainlit theme variables, `public/style.css`
-  contains scoped UI polish, and `public/logo_dark.png`,
-  `public/logo_light.png`, and `public/favicon` contain the runtime brand
-  assets.
-
-### Known Limitations
-
-- The Web UI does not load the LLM directly.
-- The Web UI requires the FastAPI backend to be running for model-backed chat.
-- The Web UI requires `FASTAPI_API_KEY` to match the FastAPI backend key.
-- The FastAPI backend requires the local model to be mounted/configured.
-- The FastAPI Docker setup requires GPU access for the current model runtime.
-- The Web UI and FastAPI backend are separate applications and separate
-  processes.
-- Reverse proxy, HTTPS/TLS termination, domain deployment, and user login are
-  separate future features.
-- Browser-based CORS changes are not needed yet because Chainlit server-side
-  code calls FastAPI directly. FastAPI supports explicit `CORS_ALLOWED_ORIGINS`
-  for future browser-origin API access.
+See [`../tests/e2e/README.md`](../tests/e2e/README.md) for Playwright-only
+usage and [`../docs/mobile-ui.md`](../docs/mobile-ui.md) for responsive
+validation notes.

@@ -185,3 +185,7 @@ models/
 .chainlit/
 webui/.files/
 webui/.chainlit/translations/
+
+
+# documentation 
+docs/supporting_files/
