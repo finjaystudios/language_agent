@@ -6,37 +6,53 @@
   --lla-card-text: hsl(var(--card-foreground));
   --lla-muted-text: hsl(var(--muted-foreground));
   --lla-offline: hsl(var(--destructive));
-  --lla-offline-bg: hsl(var(--destructive) / 0.16);
   --lla-user-bubble: hsl(var(--primary) / 0.16);
   --lla-assistant-bubble: hsl(var(--card));
   --lla-focus-ring: 0 0 0 3px hsl(var(--ring) / 0.34);
-  --loading-cursor-size: 0.62rem;
+  --lla-shadow: 0 14px 34px hsl(214 30% 5% / 0.18);
+  --lla-content-max: 56rem;
   --loading-cursor-animation: lla-pulse 950ms ease-in-out infinite;
-  --stop-icon-mask: radial-gradient(circle at center, #000 56%, transparent 58%);
 }
 
-[data-testid="chat-settings"] {
-  border-color: var(--lla-border);
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
-img.logo[alt="logo"] {
-  height: auto !important;
-  max-width: calc(100vw - 48px);
-  width: clamp(560px, 32vw, 640px) !important;
+html,
+body {
+  margin: 0;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
-@media (max-width: 720px) {
-  img.logo[alt="logo"] {
-    width: min(420px, calc(100vw - 32px)) !important;
-  }
+body {
+  text-wrap: pretty;
+}
+
+main,
+aside,
+section,
+div,
+form {
+  min-width: 0;
+}
+
+a,
+button,
+textarea {
+  touch-action: manipulation;
 }
 
 textarea::placeholder {
   color: hsl(var(--muted-foreground));
 }
 
-textarea {
+textarea,
+#chat-input {
   border-color: hsl(var(--border)) !important;
+  font-size: 16px !important;
   line-height: 1.55 !important;
 }
 
@@ -49,78 +65,172 @@ a:focus-visible {
   outline-offset: 2px !important;
 }
 
-.message-content {
-  line-height: 1.6;
+[data-testid="chat-settings"] {
+  border-color: var(--lla-border);
 }
 
-.message-content code {
+img.logo[alt="logo"] {
+  height: auto !important;
+  margin-inline: auto;
+  max-width: min(100%, calc(100vw - 48px));
+  width: clamp(18rem, 32vw, 34rem) !important;
+}
+
+#welcome-screen {
+  gap: 1rem !important;
+  margin-top: 0 !important;
+  max-width: var(--lla-content-max);
+  padding-top: 0.5rem;
+}
+
+#message-composer {
+  background:
+    linear-gradient(180deg, hsl(var(--card)), hsl(var(--card) / 0.94)) !important;
   border: 1px solid var(--lla-border);
-  border-radius: 4px;
+  border-radius: calc(var(--radius) * 1.6) !important;
+  box-shadow: var(--lla-shadow);
+  margin-inline: auto;
+  max-width: var(--lla-content-max);
+  min-height: auto !important;
+  padding: 0.9rem 1rem !important;
+  width: 100%;
+}
+
+#chat-input {
+  max-height: 32vh;
+  min-height: 52px !important;
+  padding-block: 0.1rem !important;
+}
+
+#chat-submit,
+#chat-settings-header-button,
+.lla-status-refresh,
+button[aria-label*="Stop"],
+button[id*="stop"],
+button[data-testid*="stop"] {
+  min-height: 44px !important;
+  min-width: 44px !important;
+}
+
+#chat-submit {
+  background: hsl(var(--primary));
+  border-radius: 999px !important;
+  color: hsl(var(--primary-foreground));
+}
+
+#chat-submit:hover:not([disabled]) {
+  background: hsl(var(--primary) / 0.88);
+}
+
+.message-content {
+  line-height: 1.6;
+  max-width: 100%;
 }
 
 .message-content strong {
   color: var(--lla-accent);
 }
 
-[data-testid="user-message"] .message-content,
-[data-testid="assistant-message"] .message-content {
+.message-content code {
   border: 1px solid var(--lla-border);
-  border-radius: 8px;
-  padding: 0.65rem 0.8rem;
+  border-radius: calc(var(--radius) * 0.75);
+  overflow-wrap: anywhere;
 }
 
-[data-testid="user-message"] .message-content {
-  background: var(--lla-user-bubble);
+.message-content pre {
+  background: hsl(var(--background) / 0.68);
+  border: 1px solid var(--lla-border);
+  border-radius: var(--radius);
+  margin: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 0.9rem 1rem;
 }
 
-[data-testid="assistant-message"] .message-content {
+.message-content pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.message-content table {
+  border-collapse: collapse;
+  display: block;
+  margin: 0.25rem 0;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.message-content th,
+.message-content td {
+  border: 1px solid var(--lla-border);
+  padding: 0.55rem 0.7rem;
+}
+
+.message-content .prose,
+.message-content .prose > div,
+.message-content [role="article"] {
+  max-width: 100%;
+}
+
+.ai-message {
+  gap: 0.85rem;
+  max-width: min(100%, var(--lla-content-max));
+}
+
+.ai-message .message-content {
   background: var(--lla-assistant-bubble);
+  border: 1px solid var(--lla-border);
+  border-radius: calc(var(--radius) * 1.15);
+  padding: 0.85rem 1rem;
 }
 
-button[aria-label*="Translation"],
-button[aria-label*="Definition"],
-button[aria-label*="Learning"],
-button[aria-label*="Translate"],
-button[aria-label*="Define"],
-button[aria-label*="Learn"] {
-  border-color: var(--lla-border);
+.max-w-\[70\%\] {
+  max-width: min(78%, 42rem) !important;
 }
 
+.max-w-\[70\%\] .message-content {
+  background: var(--lla-user-bubble);
+  border: 1px solid var(--lla-border);
+  border-radius: calc(var(--radius) * 1.15);
+  padding: 0.85rem 1rem;
+}
+
+#starters {
+  gap: 0.65rem !important;
+  max-width: min(100%, 40rem);
+  width: 100%;
+}
+
+#starters > button,
 button[aria-label*="Translate"],
 button[aria-label*="Define"],
 button[aria-label*="Learn"],
 button[aria-label*="Retry"],
 button[aria-label*="Helpful"],
 button[aria-label*="Needs improvement"] {
-  min-height: 40px;
+  min-height: 44px;
 }
 
-button[aria-label*="Stop"],
-button[id*="stop"],
-button[data-testid*="stop"] {
-  min-height: 42px !important;
-  min-width: 42px !important;
-}
-
-button[aria-label*="Stop"] svg,
-button[id*="stop"] svg,
-button[data-testid*="stop"] svg {
-  animation: var(--loading-cursor-animation);
+#starters > button {
+  border-color: var(--lla-border);
+  flex: 0 1 auto;
 }
 
 .lla-status-card {
   align-items: center;
   border: 1px solid var(--lla-border);
-  border-radius: 8px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  border-radius: calc(var(--radius) * 1.1);
+  box-shadow: var(--lla-shadow);
   box-sizing: border-box;
   color: var(--lla-card-text);
   display: flex;
-  gap: 10px;
-  margin: 0 auto 14px;
-  max-width: 560px;
-  padding: 10px 12px;
-  width: min(560px, calc(100vw - 48px));
+  gap: 0.75rem;
+  margin: 0 auto 0.9rem;
+  max-width: min(100%, 34rem);
+  padding: 0.85rem 0.95rem;
+  width: min(34rem, calc(100vw - 32px));
 }
 
 .lla-status-card[hidden] {
@@ -131,7 +241,7 @@ button[data-testid*="stop"] svg {
   align-items: center;
   display: flex;
   flex: 1 1 auto;
-  gap: 10px;
+  gap: 0.75rem;
   min-width: 0;
 }
 
@@ -139,31 +249,29 @@ button[data-testid*="stop"] svg {
   align-items: center;
   border-radius: 999px;
   display: flex;
-  flex: 0 0 30px;
-  height: 30px;
+  flex: 0 0 2rem;
+  height: 2rem;
   justify-content: center;
-  width: 30px;
+  width: 2rem;
 }
 
 .lla-status-refresh {
   align-items: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: calc(var(--radius) * 0.8);
   color: var(--lla-muted-text);
   cursor: pointer;
   display: flex;
-  flex: 0 0 30px;
-  height: 30px;
+  flex: 0 0 44px;
   justify-content: center;
-  margin-left: 8px;
+  margin-left: 0.25rem;
   padding: 0;
   transition:
     background 120ms ease,
     border-color 120ms ease,
     color 120ms ease,
     transform 120ms ease;
-  width: 30px;
 }
 
 .lla-status-refresh:hover:not(:disabled) {
@@ -238,10 +346,141 @@ button[data-testid*="stop"] svg {
   color: hsl(var(--destructive-foreground));
 }
 
+button[aria-label*="Stop"] svg,
+button[id*="stop"] svg,
+button[data-testid*="stop"] svg {
+  animation: var(--loading-cursor-animation);
+}
+
+@media (max-width: 480px) {
+  :root {
+    --lla-content-max: 100%;
+  }
+
+  img.logo[alt="logo"] {
+    max-width: calc(100vw - 40px);
+    width: min(17rem, calc(100vw - 40px)) !important;
+  }
+
+  #welcome-screen {
+    gap: 0.85rem !important;
+    justify-content: flex-start !important;
+    padding-top: 0.25rem;
+  }
+
+  #message-composer {
+    border-radius: calc(var(--radius) * 1.4) !important;
+    padding: 0.8rem 0.85rem !important;
+  }
+
+  #chat-input {
+    max-height: 28vh;
+    min-height: 56px !important;
+  }
+
+  #starters {
+    gap: 0.5rem !important;
+  }
+
+  #starters > button,
+  button[aria-label*="Retry"],
+  button[aria-label*="Helpful"],
+  button[aria-label*="Needs improvement"] {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .lla-status-card {
+    align-items: flex-start;
+    gap: 0.65rem;
+    padding: 0.75rem 0.8rem;
+    width: min(100%, calc(100vw - 24px));
+  }
+
+  .lla-status-main {
+    align-items: flex-start;
+  }
+
+  .max-w-\[70\%\] {
+    max-width: 100% !important;
+  }
+
+  .max-w-\[70\%\] .message-content,
+  .ai-message .message-content {
+    border-radius: var(--radius);
+    padding: 0.8rem 0.9rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .flex.flex-col.mx-auto.w-full.flex-grow.p-4 {
+    padding: 0.75rem !important;
+  }
+
+  #welcome-screen {
+    max-width: 42rem;
+  }
+
+  #message-composer {
+    max-width: 42rem;
+  }
+
+  #chat-settings-header-button {
+    margin-left: auto;
+  }
+
+  #starters {
+    justify-content: stretch !important;
+  }
+
+  #starters > button {
+    flex: 1 1 calc(50% - 0.5rem);
+    justify-content: center;
+  }
+
+  .ai-message {
+    gap: 0.7rem;
+  }
+
+  .max-w-\[70\%\] {
+    max-width: min(88%, 36rem) !important;
+  }
+
+  .message-content pre,
+  .message-content table {
+    font-size: 0.92rem;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  :root {
+    --lla-content-max: 46rem;
+  }
+
+  #welcome-screen,
+  #message-composer,
+  .ai-message {
+    max-width: 46rem;
+  }
+
+  img.logo[alt="logo"] {
+    width: clamp(20rem, 40vw, 28rem) !important;
+  }
+
+  .flex.flex-col.mx-auto.w-full.flex-grow.p-4 {
+    padding-inline: 1rem !important;
+  }
+
+  .max-w-\[70\%\] {
+    max-width: min(76%, 34rem) !important;
+  }
+}
+
 @keyframes lla-spin {
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
@@ -253,6 +492,7 @@ button[data-testid*="stop"] svg {
     opacity: 0.62;
     transform: scale(0.96);
   }
+
   50% {
     opacity: 1;
     transform: scale(1.06);

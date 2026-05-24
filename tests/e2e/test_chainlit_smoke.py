@@ -39,7 +39,7 @@ def test_chainlit_landing_page_loads(
 
     for asset_path in (
         "/public/theme.json",
-        "/public/style.css?v=languageagent-theme-v1",
+        "/public/style.css?v=languageagent-theme-v2",
         "/public/landing-status.js",
         "/logo?theme=dark",
         "/favicon",
