@@ -18,7 +18,7 @@ The CLI does not use FastAPI, Redis, or Chainlit.
 
 ```powershell
 $env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
-python -m app.main
+python -m app.cli.main
 ```
 
 ## Redis
@@ -38,7 +38,7 @@ requests.
 $env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
 $env:REDIS_URL = "redis://127.0.0.1:6379/0"
 $env:LLM_STREAM_CHANNEL_PREFIX = "llm-stream"
-python -m app.queue.worker
+python -m app.worker.main
 ```
 
 ## FastAPI
@@ -50,7 +50,7 @@ $env:AUTH_ENABLED = "true"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
 $env:REDIS_URL = "redis://127.0.0.1:6379/0"
 $env:LLM_STREAM_CHANNEL_PREFIX = "llm-stream"
-python -m uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
+python -m uvicorn app.interfaces.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Useful endpoints:
@@ -64,7 +64,7 @@ Set log verbosity when needed:
 
 ```powershell
 $env:LOG_LEVEL = "DEBUG"
-python -m uvicorn app.api.main:app --reload
+python -m uvicorn app.interfaces.api.main:app --reload
 ```
 
 ## Chainlit Web UI

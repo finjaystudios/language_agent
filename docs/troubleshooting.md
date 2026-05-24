@@ -53,7 +53,7 @@ Symptoms:
 
 Checks:
 
-- confirm `app.queue.worker` is running
+- confirm `app.worker.main` is running
 - inspect `GET /api/queue/status`
 - inspect `GET /api/llm/jobs/{job_id}`
 - follow `docker compose logs -f llm-worker` or local worker logs
@@ -67,7 +67,7 @@ Symptoms:
 
 Checks:
 
-- start the worker with `python -m app.queue.worker`
+- start the worker with `python -m app.worker.main`
 - confirm it shares the same `REDIS_URL` and queue settings as FastAPI
 - confirm `LLM_WORKER_CONCURRENCY` remains `1`
 

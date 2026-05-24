@@ -1,0 +1,19 @@
+import logging
+from functools import lru_cache
+
+from app.application.agent_service import AgentService
+from app.core.errors import LLMServiceError
+
+logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def get_agent_service() -> AgentService:
+    logger.info("agent_service_dependency_resolve_start")
+    try:
+        service = AgentService.from_queue()
+        logger.info("agent_service_dependency_resolve_complete")
+        return service
+    except Exception as error:
+        logger.exception("agent_service_dependency_resolve_failed")
+        raise LLMServiceError(str(error)) from error

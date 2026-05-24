@@ -1,10 +1,1 @@
-from enum import StrEnum
-from typing import Literal
-
-OutputMode = Literal["stream", "ask"]
-
-
-class ModeOutputConfig(StrEnum):
-    translation = "stream"
-    definition = "stream"
-    learning = "stream"
+from app.application.output_modes import *  # noqa: F403

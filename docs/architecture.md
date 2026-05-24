@@ -16,10 +16,10 @@ The detailed migration sequence lives in
 
 LanguageAgent currently has multiple entry points:
 
-- CLI: `python -m app.main`
-- FastAPI: `python -m uvicorn app.api.main:app ...`
+- CLI: `python -m app.cli.main`
+- FastAPI: `python -m uvicorn app.interfaces.api.main:app ...`
 - Chainlit Web UI: `chainlit run webui/app.py ...`
-- RQ worker: `python -m app.queue.worker`
+- RQ worker: `python -m app.worker.main`
 - tests: `pytest ...`
 
 Current runtime flow:
@@ -39,31 +39,29 @@ Current backend package shape:
 
 ```text
 app/
-  api/
-  data_models/
-  llm/
-  memory/
-  orchestration/
-  queue/
-  services/
-  errors.py
-  logging_config.py
-  main.py
-  processor_selection.py
+  core/
+  domain/
+  application/
+  ports/
+  infrastructure/
+  interfaces/api/
+  cli/
+  worker/
 ```
 
 Current role summary:
 
-- `app/api/`: FastAPI routes, request/response schemas, auth, exception handlers,
-  and dependency wiring
-- `app/data_models/`: core Pydantic models for intent, responses, and session
-  state
-- `app/llm/`: local llama.cpp integration, prompt/schema loading, queued LLM
-  client
-- `app/memory/`: conversation memory
-- `app/orchestration/`: mode handlers, routing, session orchestration
-- `app/queue/`: Redis + RQ models, errors, status, stream handling, and worker
-- `app/services/agent_service.py`: application facade for FastAPI chat flows
+- `app/core/`: shared errors and logging setup
+- `app/domain/`: framework-independent models for intent, responses, session
+  state, and queue job state
+- `app/application/`: application services, memory, routers, and mode handlers
+- `app/ports/`: gateway interfaces
+- `app/infrastructure/llm/`: local model runtime plus prompt/schema assets
+- `app/infrastructure/redis/`: Redis + RQ queue adapters
+- `app/interfaces/api/`: FastAPI app, routes, schemas, auth, and dependency
+  wiring
+- `app/cli/`: CLI entry point
+- `app/worker/`: worker entry point and job execution functions
 
 ## Target Structure Summary
 
@@ -129,39 +127,38 @@ move unless those edges are removed first.
 
 ### 1. Service Layer Depends on API Layer
 
-[`app/services/agent_service.py`](C:\Projects\LocalTranslation\language_agent\app\services\agent_service.py)
+[`app/application/agent_service.py`](C:\Projects\LocalTranslation\language_agent\app\application\agent_service.py)
 imports:
 
-- `app.api.errors`
-- `app.api.models`
+- application and domain modules
+- one infrastructure adapter for queue-backed composition convenience
 
-This is the strongest architectural violation in the current codebase.
-`AgentService` is acting as an application service, but it currently returns API
-DTOs and raises API-layer errors.
+The earlier API-layer dependency has been removed. The remaining concern is that
+the service still instantiates concrete adapters via helper constructors, which
+should eventually move fully into composition roots.
 
 Impact:
 
-- blocks a clean `application/` package move
-- couples application logic to FastAPI request/response types
-- makes future interface changes ripple into core behavior
+- composition is not yet fully separated from the service class
+- application constructors still know about concrete infrastructure
 
 ### 2. Queued LLM Adapter Depends on API Errors
 
-[`app/llm/queued.py`](C:\Projects\LocalTranslation\language_agent\app\llm\queued.py)
-imports `app.api.errors.LLMServiceError`.
+[`app/infrastructure/redis/queued_gateway.py`](C:\Projects\LocalTranslation\language_agent\app\infrastructure\redis\queued_gateway.py)
+now raises core errors instead of API-layer errors.
 
-This is another downward dependency inversion. Queue-backed LLM access is an
-infrastructure concern and should raise core/application errors, not API
-exceptions.
+This dependency inversion has been corrected, but the adapter still lives close
+to queue-specific data shapes and should later be formalized behind ports more
+strictly.
 
 Impact:
 
-- infrastructure depends on interface semantics
-- queue adapter cannot be reused cleanly by non-API entry points
+- queue-backed gateway should eventually depend only on formal ports and domain
+  job models
 
 ### 3. API Dependency Wiring Lives in the Service Class
 
-[`app/api/dependencies.py`](C:\Projects\LocalTranslation\language_agent\app\api\dependencies.py)
+[`app/interfaces/api/dependencies.py`](C:\Projects\LocalTranslation\language_agent\app\interfaces\api\dependencies.py)
 constructs the service by calling `AgentService.from_queue()`.
 
 `AgentService.from_queue()` in turn instantiates `QueuedLLMService` directly.
@@ -175,8 +172,8 @@ Impact:
 
 ### 4. Mode Handlers and Router Depend on Concrete LLM Type
 
-[`app/orchestration/router.py`](C:\Projects\LocalTranslation\language_agent\app\orchestration\router.py),
-[`app/orchestration/modes/base.py`](C:\Projects\LocalTranslation\language_agent\app\orchestration\modes\base.py),
+[`app/application/intent_router.py`](C:\Projects\LocalTranslation\language_agent\app\application\intent_router.py),
+[`app/application/modes/base.py`](C:\Projects\LocalTranslation\language_agent\app\application\modes\base.py),
 and related handlers are typed around the concrete `LLMService` shape or queue
 client shape instead of an explicit port.
 
@@ -187,7 +184,7 @@ Impact:
 
 ### 5. Queue Module Mixes Too Many Concerns
 
-[`app/queue/service.py`](C:\Projects\LocalTranslation\language_agent\app\queue\service.py)
+[`app/infrastructure/redis/queue_service.py`](C:\Projects\LocalTranslation\language_agent\app\infrastructure\redis\queue_service.py)
 currently combines:
 
 - Redis connection creation
@@ -207,11 +204,11 @@ Impact:
 
 ### 6. CLI and API Orchestration Are Duplicated
 
-[`app/main.py`](C:\Projects\LocalTranslation\language_agent\app\main.py) wires
+[`app/cli/main.py`](C:\Projects\LocalTranslation\language_agent\app\cli\main.py) wires
 `LLMService`, `ConversationMemory`, `IntentRouter`, and
 `SessionOrchestrator`.
 
-[`app/services/agent_service.py`](C:\Projects\LocalTranslation\language_agent\app\services\agent_service.py)
+[`app/application/agent_service.py`](C:\Projects\LocalTranslation\language_agent\app\application\agent_service.py)
 rebuilds a similar orchestration path for HTTP.
 
 Impact:
@@ -221,7 +218,7 @@ Impact:
 
 ### 7. Import-Time Config State Exists
 
-[`app/processor_selection.py`](C:\Projects\LocalTranslation\language_agent\app\processor_selection.py)
+[`app/infrastructure/llm/runtime_config.py`](C:\Projects\LocalTranslation\language_agent\app\infrastructure\llm\runtime_config.py)
 reads env-derived values into module globals at import time.
 
 Impact:
@@ -231,13 +228,13 @@ Impact:
 
 ### 8. API Package Re-Exports App Creation
 
-[`app/api/__init__.py`](C:\Projects\LocalTranslation\language_agent\app\api\__init__.py)
-imports `app.api.main` at package import time.
+Compatibility wrappers still exist under `app/api/`, `app/queue/`, and related
+legacy paths so older imports continue to resolve during the transition.
 
 Impact:
 
-- importing `app.api` triggers app construction side effects
-- makes `app.api` an awkward package boundary for refactoring
+- dual-path imports still exist temporarily
+- cleanup is still needed once the new package paths are fully adopted
 
 ## Things That Are Already Good
 
@@ -251,10 +248,10 @@ Impact:
 
 Current practical composition roots:
 
-- CLI root: [`app/main.py`](C:\Projects\LocalTranslation\language_agent\app\main.py)
-- FastAPI root: [`app/api/main.py`](C:\Projects\LocalTranslation\language_agent\app\api\main.py)
-- FastAPI dependency assembly: [`app/api/dependencies.py`](C:\Projects\LocalTranslation\language_agent\app\api\dependencies.py)
-- worker root: [`app/queue/worker.py`](C:\Projects\LocalTranslation\language_agent\app\queue\worker.py)
+- CLI root: [`app/cli/main.py`](C:\Projects\LocalTranslation\language_agent\app\cli\main.py)
+- FastAPI root: [`app/interfaces/api/main.py`](C:\Projects\LocalTranslation\language_agent\app\interfaces\api\main.py)
+- FastAPI dependency assembly: [`app/interfaces/api/dependencies.py`](C:\Projects\LocalTranslation\language_agent\app\interfaces\api\dependencies.py)
+- worker root: [`app/worker/main.py`](C:\Projects\LocalTranslation\language_agent\app\worker\main.py)
 - Web UI root: [`webui/app.py`](C:\Projects\LocalTranslation\language_agent\webui\app.py)
 
 Target composition roots:

@@ -1,22 +1,22 @@
 import asyncio
 
-from app.api.main import create_app
 from app.api.models import (
     ChatRequest,
-    ChatResponse,
     LLMJobStatusResponse,
     QueueStatusResponse,
-    ResponseMetadata,
     StreamChatRequest,
 )
-from app.api.routes import (
+from app.application.models import ChatResult
+from app.application.models import ResponseMetadata as AppResponseMetadata
+from app.domain.jobs import LLMCallJob, QueueStatusSnapshot
+from app.interfaces.api.main import create_app
+from app.interfaces.api.routes import (
     cancel_llm_job,
     chat_full,
     chat_stream,
     llm_job_status,
     queue_status,
 )
-from app.queue.models import LLMCallJob, QueueStatusSnapshot
 
 
 class FakeAgentService:
@@ -25,10 +25,10 @@ class FakeAgentService:
 
     async def chat_full(self, request):
         self.request = request
-        return ChatResponse(
+        return ChatResult(
             mode="definition",
             response="Recursion is a function calling itself.",
-            metadata=ResponseMetadata(session_id="session-1"),
+            metadata=AppResponseMetadata(session_id="session-1"),
         )
 
     async def chat_stream(self, request):
@@ -51,7 +51,9 @@ def test_chat_full_route_delegates_to_agent_service():
 
     response = asyncio.run(chat_full(request=request, agent_service=service))
 
-    assert service.request == request
+    assert service.request.message == request.message
+    assert service.request.mode == "definition"
+    assert service.request.metadata.session_id == "session-1"
     assert response.mode == "definition"
     assert response.response == "Recursion is a function calling itself."
 
@@ -74,7 +76,8 @@ def test_chat_stream_route_returns_streaming_response():
     async def collect_events():
         return [event async for event in response.body_iterator]
 
-    assert service.request == request
+    assert service.request.message == request.message
+    assert service.request.mode == "translation"
     assert response.media_type == "text/event-stream"
     assert asyncio.run(collect_events()) == [
         'data: {"mode": "translation", "token": "hola"}\n\n',
@@ -101,7 +104,7 @@ def test_llm_job_status_route_returns_job_details(monkeypatch):
         )
 
     monkeypatch.setattr(
-        "app.api.routes.get_job_status",
+        "app.interfaces.api.routes.get_job_status",
         fake_get_job_status,
     )
 
@@ -122,7 +125,7 @@ def test_cancel_llm_job_route_returns_job_details(monkeypatch):
         )
 
     monkeypatch.setattr(
-        "app.api.routes.cancel_llm_call",
+        "app.interfaces.api.routes.cancel_llm_call",
         fake_cancel_llm_call,
     )
 
@@ -145,7 +148,7 @@ def test_queue_status_route_returns_sanitized_queue_snapshot(monkeypatch):
         )
 
     monkeypatch.setattr(
-        "app.api.routes.get_queue_status",
+        "app.interfaces.api.routes.get_queue_status",
         fake_get_queue_status,
     )
 

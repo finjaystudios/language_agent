@@ -27,7 +27,7 @@ intent routing, state updates, and final generation.
   registries.
 - RQ provides queued job execution.
 - FastAPI produces jobs.
-- `app.queue.worker` consumes jobs.
+- `app.worker.main` consumes jobs.
 - The worker owns the GGUF model lifecycle.
 
 ## Request Flow

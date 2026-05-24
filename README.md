@@ -50,19 +50,19 @@ For a host-local development workflow without Docker, see
 Run the CLI:
 
 ```powershell
-python -m app.main
+python -m app.cli.main
 ```
 
 Run the FastAPI backend:
 
 ```powershell
-python -m uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
+python -m uvicorn app.interfaces.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Run the worker:
 
 ```powershell
-python -m app.queue.worker
+python -m app.worker.main
 ```
 
 Run the Web UI:
@@ -104,7 +104,7 @@ bru run bruno/local-language-agent-api --env Local
 
 ## Current Limitations
 
-- The queue-backed chat flow depends on Redis and a separate `app.queue.worker`
+- The queue-backed chat flow depends on Redis and a separate `app.worker.main`
   process for all model-backed API requests.
 - The current Docker setup expects NVIDIA GPU support for the worker container.
 - The Web UI authenticates to FastAPI with a shared service API key, not

@@ -19,7 +19,7 @@ Local backend:
 ```powershell
 $env:AUTH_ENABLED = "true"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
-python -m uvicorn app.api.main:app --reload
+python -m uvicorn app.interfaces.api.main:app --reload
 bru run bruno/local-language-agent-api --env Local
 ```
 
