@@ -8,6 +8,8 @@ architectural material lives here.
 
 - [`architecture.md`](architecture.md): system shape, service boundaries,
   dependency direction, entry points, and deployment model
+- [`refactor-plan.md`](refactor-plan.md): staged backend migration plan for the
+  package and dependency cleanup
 - [`local-development.md`](local-development.md): run the CLI, FastAPI, Redis,
   worker, and Chainlit locally without Docker Compose
 - [`docker-compose.md`](docker-compose.md): run the full local container stack
