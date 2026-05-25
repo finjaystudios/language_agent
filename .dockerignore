@@ -47,3 +47,4 @@ build
 *.egg-info
 *.sqlite
 *.sqlite3
+docs/

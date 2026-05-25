@@ -1,19 +1,23 @@
-## Local Chainlit Web UI E2E Tests
+## Playwright E2E
 
-These tests use Playwright for Python to exercise the Chainlit Web UI from a
-browser. They start a deterministic fake backend and the local Chainlit app as
-subprocesses. They do not require Docker, GitHub Actions, or the real GGUF model.
+These tests exercise the Chainlit Web UI from a browser using Playwright for
+Python.
+
+The default workflow starts:
+
+- a deterministic fake backend
+- the local Chainlit app from `webui/`
+
+The default E2E path does not require Docker or the real GGUF model.
 
 ### Install
-
-From the repository root:
 
 ```powershell
 pip install -r tests/e2e/requirements.txt
 python -m playwright install chromium
 ```
 
-Install additional browsers for cross-browser checks when needed:
+Install additional browsers when needed:
 
 ```powershell
 python -m playwright install firefox webkit
@@ -21,128 +25,39 @@ python -m playwright install firefox webkit
 
 ### Run
 
-Run all local browser tests:
-
 ```powershell
 pytest tests/e2e
-```
-
-Run headed:
-
-```powershell
 pytest tests/e2e --headed
-```
-
-Run a specific browser:
-
-```powershell
 pytest tests/e2e --browser chromium
 pytest tests/e2e --browser firefox
 pytest tests/e2e --browser webkit
-```
-
-Run one file:
-
-```powershell
 pytest tests/e2e/test_chainlit_chat.py
-```
-
-Run only the mobile and tablet coverage:
-
-```powershell
 pytest tests/e2e/test_chainlit_mobile.py
-```
-
-Run headed mobile and tablet coverage:
-
-```powershell
-pytest tests/e2e/test_chainlit_mobile.py --headed
-```
-
-Run one test:
-
-```powershell
 pytest tests/e2e/test_chainlit_chat.py::test_definition_starter_sets_mode_and_renders_response
 ```
 
-Use Playwright debugging options locally as needed, for example:
+Useful mobile-specific variants:
 
 ```powershell
-pytest tests/e2e --headed --slowmo 250
-```
-
-Run mobile Chrome emulation only:
-
-```powershell
+pytest tests/e2e/test_chainlit_mobile.py --headed
 pytest tests/e2e/test_chainlit_mobile.py -k "mobile and not safari" --browser chromium
-```
-
-Run iPhone Safari emulation when WebKit is installed:
-
-```powershell
 pytest tests/e2e/test_chainlit_mobile.py -k safari --browser webkit
 ```
 
-This suite does not currently capture screenshots or traces by default.
-
 ### Run Against an Existing Web UI
 
-Set `E2E_BASE_URL` to point the smoke test at a Web UI that is already running.
-This is useful for validating the Dockerized Web UI without making Docker the
-default test path:
-
 ```powershell
 $env:E2E_BASE_URL = "http://localhost"
 pytest tests/e2e/test_chainlit_smoke.py
 ```
 
-When `E2E_BASE_URL` is set, tests that require the deterministic fake backend
-are skipped because they assert exact fake responses and inspect fake backend
-request records.
+When `E2E_BASE_URL` is set, tests that depend on the deterministic fake backend
+are skipped.
 
-### Docker Compose Proxy Check
+### Scope
 
-The Compose stack runs Caddy, the real Web UI, the real FastAPI backend, and the
-real model, so treat this as a local integration test. It requires the mounted
-GGUF model and GPU runtime used by the backend container.
-
-```powershell
-docker compose up --build
-```
-
-Wait until all services are healthy, then run the Playwright smoke test against
-the Caddy proxy:
-
-```powershell
-$env:E2E_BASE_URL = "http://localhost"
-pytest tests/e2e/test_chainlit_smoke.py
-```
-
-Useful logs while debugging:
-
-```powershell
-docker compose logs -f caddy
-docker compose logs -f webui
-docker compose logs -f fastapi
-```
-
-Stop the stack when finished:
-
-```powershell
-docker compose down
-```
-
-### What Starts
-
-- Fake backend: exposes `GET /health`, `POST /api/chat`, and
-  `POST /api/chat/stream`.
-- Chainlit Web UI: started from `webui/` with `FASTAPI_BASE_URL` pointed at the
-  fake backend.
-
-The tests assert the LanguageAgent title, served branding/theme assets,
-landing-page status, starters, chat input, full responses, streamed responses,
-selected mode behavior, retry and feedback actions, and readable offline errors.
-
-The fake-backend tests confirm that the Web UI sends the backend API key from
-server-side environment variables, that wrong keys produce a readable UI error,
-and that API key values are not rendered in the browser.
+- covers Chainlit browser behavior
+- covers starter actions, mode controls, streaming/full-response UX, and error
+  states
+- includes mobile and tablet coverage
+- does not replace Bruno for direct FastAPI API checks

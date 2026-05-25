@@ -1,10 +1,12 @@
-"""Load prompt templates from YAML files."""
+"""Compatibility prompt loader wrapper."""
 
 from pathlib import Path
 
 import yaml
 
-PROMPTS_DIR = Path(__file__).parent / "prompts"
+PROMPTS_DIR = (
+    Path(__file__).resolve().parent.parent / "infrastructure" / "llm" / "prompts"
+)
 
 
 def load_prompt(prompt_name: str) -> str:

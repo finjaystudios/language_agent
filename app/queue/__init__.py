@@ -1,3 +1,3 @@
-from app.queue.models import LLMCallJob, QueueStatusSnapshot
+from app.domain.jobs import LLMCallJob, QueueStatusSnapshot
 
 __all__ = ["LLMCallJob", "QueueStatusSnapshot"]

@@ -1,10 +1,12 @@
-"""Load response schemas from YAML files."""
+"""Compatibility schema loader wrapper."""
 
 from pathlib import Path
 
 import yaml
 
-SCHEMAS_DIR = Path(__file__).parent / "schemas"
+SCHEMAS_DIR = (
+    Path(__file__).resolve().parent.parent / "infrastructure" / "llm" / "schemas"
+)
 
 
 def load_schema(schema_name: str) -> dict:

@@ -10,7 +10,6 @@ from app.api.errors import (
     unexpected_exception_handler,
     validation_exception_handler,
 )
-from app.services.agent_service import AgentService
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 
@@ -99,7 +98,10 @@ def test_agent_dependency_wraps_initialisation_failure(monkeypatch):
     def fail_initialisation():
         raise RuntimeError("Redis not available")
 
-    monkeypatch.setattr(AgentService, "from_queue", fail_initialisation)
+    monkeypatch.setattr(
+        "app.interfaces.api.dependencies.create_queue_agent_service",
+        fail_initialisation,
+    )
 
     try:
         try:

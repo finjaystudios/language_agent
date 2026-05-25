@@ -1,26 +1,26 @@
-import logging
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
-from app.api.errors import LLMServiceError
-from app.queue.errors import (
+from app.core.errors import LLMServiceError
+from app.domain.jobs import LLMCallJob
+from app.infrastructure.redis.errors import (
     GenerationTimeoutError,
     QueueWaitTimeoutError,
     StreamingTimeoutError,
 )
-from app.queue.models import LLMCallJob
-from app.queue.service import (
+from app.infrastructure.redis.queue_service import (
     cancel_llm_call,
     enqueue_llm_call,
     stream_llm_events,
     wait_for_job_result,
 )
+from app.infrastructure.redis.queued_gateway import (
+    QueuedLLMService as RedisQueuedLLMService,
+)
 
-logger = logging.getLogger(__name__)
 
-
-class QueuedLLMService:
+class QueuedLLMService(RedisQueuedLLMService):
     async def ask_llm(
         self,
         system_prompt: str,
@@ -28,6 +28,9 @@ class QueuedLLMService:
         schema: dict,
         mode: str | None = None,
     ) -> dict:
+        if not self._uses_compat_wrappers:
+            return await super().ask_llm(system_prompt, user_prompt, schema, mode=mode)
+
         job = LLMCallJob(
             job_id=str(uuid.uuid4()),
             call_type="structured_json",
@@ -40,7 +43,6 @@ class QueuedLLMService:
             generation_parameters={"temperature": 0.1, "max_tokens": 2000},
             response_schema=schema,
         )
-        logger.info("queued_llm_ask_enqueue job_id=%s mode=%s", job.job_id, mode)
         await enqueue_llm_call(job)
         try:
             result = await wait_for_job_result(job.job_id)
@@ -64,6 +66,13 @@ class QueuedLLMService:
         user_prompt: str,
         mode: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
+        if not self._uses_compat_wrappers:
+            async for event in super().stream_llm(
+                system_prompt, user_prompt, mode=mode
+            ):
+                yield event
+            return
+
         job = LLMCallJob(
             job_id=str(uuid.uuid4()),
             call_type="streaming_text_generation",
@@ -75,7 +84,6 @@ class QueuedLLMService:
             mode=mode,
             generation_parameters={"temperature": 0.1, "max_tokens": 2000},
         )
-        logger.info("queued_llm_stream_enqueue job_id=%s mode=%s", job.job_id, mode)
         await enqueue_llm_call(job)
         try:
             async for event in stream_llm_events(job.job_id):
@@ -84,4 +92,15 @@ class QueuedLLMService:
             raise StreamingTimeoutError() from error
 
     async def cancel_job(self, job_id: str) -> LLMCallJob:
+        if not self._uses_compat_wrappers:
+            return await super().cancel_job(job_id)
         return await cancel_llm_call(job_id)
+
+
+__all__ = [
+    "QueuedLLMService",
+    "cancel_llm_call",
+    "enqueue_llm_call",
+    "stream_llm_events",
+    "wait_for_job_result",
+]

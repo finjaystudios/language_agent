@@ -55,7 +55,7 @@ services:
 
   llm-worker:
     image: local-language-agent-api
-    command: ["python", "-m", "app.queue.worker"]
+    command: ["python", "-m", "app.worker.main"]
     restart: unless-stopped
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}

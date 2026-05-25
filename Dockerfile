@@ -46,4 +46,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.getenv(\"APP_PORT\", \"8000\")}/health', timeout=3).read()"
 
-CMD ["sh", "-c", "python -m uvicorn app.api.main:app --host \"$APP_HOST\" --port \"$APP_PORT\""]
+CMD ["sh", "-c", "python -m uvicorn app.interfaces.api.main:app --host \"$APP_HOST\" --port \"$APP_PORT\""]
