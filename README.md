@@ -92,7 +92,7 @@ bru run bruno/local-language-agent-api --env Local
 - [`docs/local-development.md`](docs/local-development.md): host-local CLI, API, Redis, worker, and Web UI workflow
 - [`docs/docker-compose.md`](docs/docker-compose.md): full containerized stack with Caddy
 - [`docs/configuration.md`](docs/configuration.md): environment variables and where they apply
-- [`docs/llama-server.md`](docs/llama-server.md): planned llama-server backend and migration boundary
+- [`docs/llama-server.md`](docs/llama-server.md): llama-server runtime, Compose workflow, and migration boundary
 - [`docs/queue.md`](docs/queue.md): Redis + RQ design and job lifecycle
 - [`docs/reverse-proxy.md`](docs/reverse-proxy.md): Caddy routing and Cloudflare Tunnel boundary
 - [`docs/security.md`](docs/security.md): API key auth, CORS, and service boundaries

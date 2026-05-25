@@ -16,8 +16,8 @@ architectural material lives here.
   with Redis, FastAPI, the worker, Chainlit, and Caddy
 - [`configuration.md`](configuration.md): centralized environment variable
   reference
-- [`llama-server.md`](llama-server.md): planned external llama-server runtime,
-  migration boundary, and environment variables
+- [`llama-server.md`](llama-server.md): external llama-server runtime,
+  Compose workflow, and environment variables
 - [`queue.md`](queue.md): Redis + RQ design, worker lifecycle, queue status,
   streaming, retries, and cancellation
 - [`reverse-proxy.md`](reverse-proxy.md): Caddy routing, LAN access, and

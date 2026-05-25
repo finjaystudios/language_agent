@@ -12,6 +12,44 @@ services:
       timeout: 3s
       retries: 5
 
+  llama-server:
+    image: ${LLAMA_SERVER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-cuda}
+    restart: unless-stopped
+    command:
+      - -m
+      - ${LLM_MODEL_PATH:-/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "${LLAMA_SERVER_PORT:-8080}"
+      - --ctx-size
+      - "${LLM_CONTEXT_SIZE:-2048}"
+      - --n-gpu-layers
+      - "${LLM_N_GPU_LAYERS:-20}"
+      - --batch-size
+      - "${LLAMA_SERVER_BATCH_SIZE:-256}"
+      - --ubatch-size
+      - "${LLAMA_SERVER_UBATCH_SIZE:-128}"
+      - --threads
+      - "${LLM_THREADS:-4}"
+      - --parallel
+      - "1"
+    ports:
+      - "${LLAMA_SERVER_HOST_PORT:-8080}:${LLAMA_SERVER_PORT:-8080}"
+    volumes:
+      - ./models:/models:ro
+    gpus: all
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O- http://127.0.0.1:${LLAMA_SERVER_PORT:-8080}${LLAMA_SERVER_HEALTH_PATH:-/health} >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
   fastapi:
     build:
       context: .
@@ -60,6 +98,13 @@ services:
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      LLM_BACKEND: ${LLM_BACKEND:-llama_server}
+      LLAMA_SERVER_URL: ${LLAMA_SERVER_URL:-http://llama-server:8080}
+      LLAMA_SERVER_API_KEY: ${LLAMA_SERVER_API_KEY:-}
+      LLAMA_SERVER_TIMEOUT_SECONDS: ${LLAMA_SERVER_TIMEOUT_SECONDS:-180}
+      LLAMA_SERVER_STREAM_TIMEOUT_SECONDS: ${LLAMA_SERVER_STREAM_TIMEOUT_SECONDS:-180}
+      LLAMA_SERVER_MODEL_NAME: ${LLAMA_SERVER_MODEL_NAME:-}
+      LLAMA_SERVER_HEALTH_PATH: ${LLAMA_SERVER_HEALTH_PATH:-/health}
       LLM_QUEUE_NAME: ${LLM_QUEUE_NAME:-llm}
       LLM_QUEUE_TIMEOUT_SECONDS: ${LLM_QUEUE_TIMEOUT_SECONDS:-180}
       LLM_QUEUE_WAIT_TIMEOUT_SECONDS: ${LLM_QUEUE_WAIT_TIMEOUT_SECONDS:-300}
@@ -71,17 +116,23 @@ services:
       LLM_STREAM_CHANNEL_PREFIX: ${LLM_STREAM_CHANNEL_PREFIX:-llm-stream}
       LLM_STATUS_POLL_INTERVAL_SECONDS: ${LLM_STATUS_POLL_INTERVAL_SECONDS:-0.05}
       LLM_STREAM_TIMEOUT_SECONDS: ${LLM_STREAM_TIMEOUT_SECONDS:-180}
-      LLM_MODEL_PATH: ${LLM_MODEL_PATH:-/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf}
-      LLM_CONTEXT_SIZE: ${LLM_CONTEXT_SIZE:-4096}
-      LLM_N_GPU_LAYERS: ${LLM_N_GPU_LAYERS:--1}
-      LLM_THREADS: ${LLM_THREADS:-4}
-      LLM_RESERVED_VRAM_GB: ${LLM_RESERVED_VRAM_GB:-1.5}
     depends_on:
       redis:
         condition: service_healthy
-    volumes:
-      - ./models:/models:ro
-    gpus: all
+      llama-server:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, sys; backend = os.getenv('LLM_BACKEND', 'llama_cpp_python'); from app.core.config import AppSettings; from app.infrastructure.llm.llama_server_gateway import LlamaServerGateway; sys.exit(0 if backend != 'llama_server' or LlamaServerGateway(AppSettings.from_env()).check_health() else 1)",
+        ]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
 
   webui:
     build:
@@ -125,7 +176,7 @@ services:
       fastapi:
         condition: service_healthy
       llm-worker:
-        condition: service_started
+        condition: service_healthy
       webui:
         condition: service_healthy
     healthcheck:

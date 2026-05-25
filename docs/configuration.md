@@ -20,7 +20,7 @@ Compose. Use [`.env.example`](../.env.example) for local host runs and
 | Variable | Default | Used by | Purpose |
 | --- | --- | --- | --- |
 | `REDIS_URL` | `redis://127.0.0.1:6379/0` | FastAPI, worker | Redis connection URL |
-| `LLM_BACKEND` | `llama_cpp_python` | FastAPI, worker | Runtime selector. Keep the current embedded runtime by default; use `llama_server` for the planned external HTTP backend |
+| `LLM_BACKEND` | `llama_cpp_python` in code, `llama_server` in Compose example | FastAPI, worker | Runtime selector. Host-local code still defaults to the embedded runtime; the Compose workflow now defaults to the external HTTP backend |
 | `LLM_QUEUE_NAME` | `llm` | FastAPI, worker | RQ queue name |
 | `LLM_QUEUE_TIMEOUT_SECONDS` | `180` | FastAPI, worker | General queue operation timeout |
 | `LLM_QUEUE_WAIT_TIMEOUT_SECONDS` | `300` | FastAPI, worker | Maximum wait time for queued non-streaming jobs |
@@ -33,7 +33,7 @@ Compose. Use [`.env.example`](../.env.example) for local host runs and
 | `LLM_STATUS_POLL_INTERVAL_SECONDS` | `0.05` | FastAPI, worker | Poll interval for queued job status checks |
 | `LLM_STREAM_TIMEOUT_SECONDS` | `180` | FastAPI, worker | Maximum API wait time for stream events |
 
-## Worker-Only LLM Runtime
+## Local Embedded Runtime
 
 | Variable | Default | Used by | Purpose |
 | --- | --- | --- | --- |
@@ -43,9 +43,9 @@ Compose. Use [`.env.example`](../.env.example) for local host runs and
 | `LLM_THREADS` | `4` | CLI, worker | CPU thread count |
 | `LLM_RESERVED_VRAM_GB` | `1.5` | CLI, worker | VRAM headroom for automatic layer selection |
 
-`llama-cpp-python` remains the active default runtime today. The migration
-target is to keep FastAPI, Redis/RQ, and the worker unchanged at the queue
-boundary while moving model ownership into an external `llama-server` process.
+`llama-cpp-python` remains available as a legacy fallback for host-local runs
+and debugging. The Compose workflow now assumes `llama-server` owns the model
+while FastAPI, Redis/RQ, and the worker stay unchanged at the queue boundary.
 
 ## Llama-Server Runtime
 
@@ -57,6 +57,16 @@ boundary while moving model ownership into an external `llama-server` process.
 | `LLAMA_SERVER_STREAM_TIMEOUT_SECONDS` | `180` | worker | Streaming HTTP timeout for token/event reads |
 | `LLAMA_SERVER_MODEL_NAME` | empty | worker | Optional request-level model name if the server exposes multiple models |
 | `LLAMA_SERVER_HEALTH_PATH` | `/health` | worker, operations | Optional path used for future health checks or readiness probes |
+
+Compose-local `llama-server` defaults also use:
+
+| Variable | Default | Used by | Purpose |
+| --- | --- | --- | --- |
+| `LLAMA_SERVER_IMAGE` | `ghcr.io/ggml-org/llama.cpp:server-cuda` | Compose | Official upstream container image |
+| `LLAMA_SERVER_PORT` | `8080` | Compose | Internal llama-server listen port |
+| `LLAMA_SERVER_HOST_PORT` | `8080` | Compose | Optional host port for direct debugging |
+| `LLAMA_SERVER_BATCH_SIZE` | `256` | llama-server | Conservative prompt batch size for GTX 1080-class GPUs |
+| `LLAMA_SERVER_UBATCH_SIZE` | `128` | llama-server | Conservative micro-batch size for GTX 1080-class GPUs |
 
 When `LLM_BACKEND=llama_server`, the intended steady-state design is:
 
@@ -89,10 +99,12 @@ Prefer the `LLM_*` names shown in this document.
 
 - Keep `FASTAPI_API_KEY` out of browser-visible content.
 - Keep real secrets out of committed files.
-- For Compose, set `LLM_MODEL_PATH` to the in-container `/models/...` path, not
-  a relative host path.
-- For the future `llama_server` backend, point `LLAMA_SERVER_URL` at the
-  reachable server address for that environment.
+- For Compose, `LLM_MODEL_PATH` now belongs to the `llama-server` service and
+  should point at the in-container `/models/...` path.
+- For Compose-local Pascal GPUs such as a GTX 1080, start with
+  `LLM_CONTEXT_SIZE=1024` or `2048`, modest `LLM_N_GPU_LAYERS`, and conservative
+  `LLAMA_SERVER_BATCH_SIZE` / `LLAMA_SERVER_UBATCH_SIZE`.
+- Point `LLAMA_SERVER_URL` at the reachable server address for that environment.
 - The Web UI and FastAPI must share the same `FASTAPI_API_KEY` when auth is
   enabled.
 - The worker should keep `LLM_WORKER_CONCURRENCY=1` so one long-lived process

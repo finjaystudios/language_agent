@@ -1,4 +1,4 @@
-# Llama-Server Migration Boundary
+# Llama-Server Runtime
 
 ## Goal
 
@@ -41,17 +41,21 @@ FastAPI -> Redis/RQ -> worker -> HTTP llama-server -> GPU model
 - `app/domain/jobs.py`: queue job schema
 - `app/core/config.py`: shared environment-backed settings
 
-## Migration Plan
+## Compose Service
 
-1. Keep the queue contract intact and add `llama-server` configuration first.
-2. Introduce a worker-side HTTP adapter that matches the existing
-   ask/stream/cancel expectations where feasible.
-3. Switch worker job execution from `create_local_llm_service()` to the
-   `llama-server` adapter when `LLM_BACKEND=llama_server`.
-4. Preserve Redis stream publishing semantics so FastAPI streaming stays
-   compatible with the current SSE path.
-5. Remove direct `llama-cpp-python` ownership only after the HTTP path matches
-   the existing queue and streaming behavior.
+The default local Compose stack now includes a dedicated `llama-server`
+container:
+
+```text
+redis -> llm-worker -> http://llama-server:8080
+```
+
+Operational boundaries:
+
+- `llama-server` is the only default Compose service that mounts `./models`
+- `llama-server` is the only default Compose service that requests GPU access
+- `llm-worker` stays queue-backed and calls `llama-server` over HTTP
+- FastAPI and Chainlit still do not talk to `llama-server` directly
 
 ## Environment Variables
 
@@ -65,24 +69,71 @@ FastAPI -> Redis/RQ -> worker -> HTTP llama-server -> GPU model
 | `LLAMA_SERVER_MODEL_NAME` | `qwen2.5-7b-instruct` | Optional model name passed to the server |
 | `LLAMA_SERVER_HEALTH_PATH` | `/health` | Optional future readiness path |
 
-## Local Manual Command Placeholder
+Common Compose-local runtime knobs for the `llama-server` container:
 
-Replace the placeholder values with the actual model path and flags required by
-your `llama-server` build:
+| Variable | Example | Purpose |
+| --- | --- | --- |
+| `LLAMA_SERVER_IMAGE` | `ghcr.io/ggml-org/llama.cpp:server-cuda` | Upstream image to run |
+| `LLAMA_SERVER_PORT` | `8080` | Internal service port |
+| `LLAMA_SERVER_HOST_PORT` | `8080` | Optional direct host debug port |
+| `LLAMA_SERVER_BATCH_SIZE` | `256` | Conservative GTX 1080-friendly batch size |
+| `LLAMA_SERVER_UBATCH_SIZE` | `128` | Conservative GTX 1080-friendly micro-batch size |
+
+## Local Manual Command
 
 ```powershell
-llama-server --model <path-to-model.gguf> --host 0.0.0.0 --port 8080
+llama-server `
+  --model <path-to-model.gguf> `
+  --host 0.0.0.0 `
+  --port 8080 `
+  --ctx-size 2048 `
+  --n-gpu-layers 20 `
+  --batch-size 256 `
+  --ubatch-size 128 `
+  --parallel 1
 ```
 
-## Docker Compose Goal
+## Docker Compose
 
-The intended Compose end state is:
+Start only the model server, Redis, and worker while debugging:
 
-- a dedicated `llama-server` service
-- FastAPI and the worker configured with `LLAMA_SERVER_URL=http://llama-server:8080`
-- the worker still consuming Redis/RQ jobs instead of bypassing the queue
+```powershell
+docker compose up -d redis llama-server llm-worker
+```
 
-This document does not implement those Compose changes yet.
+Start the full local stack:
+
+```powershell
+docker compose up --build
+```
+
+Inspect the rendered configuration:
+
+```powershell
+docker compose config
+```
+
+Test `llama-server` directly:
+
+```powershell
+curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:8080/v1/models
+```
+
+The direct port exists for local debugging only. Caddy does not route to
+`llama-server`, and this stack does not expose it through Cloudflare.
+
+## Worker Behaviour
+
+With `LLM_BACKEND=llama_server`:
+
+- the worker no longer needs the model mount in Compose
+- the worker no longer needs local GPU execution settings in Compose
+- the worker healthcheck can fail even when the Python process is up, if
+  `llama-server` is unreachable
+
+Legacy fallback remains available by setting `LLM_BACKEND=llama_cpp_python`, but
+that is now a compatibility path rather than the default Compose runtime.
 
 ## Known Limitation
 
@@ -90,3 +141,11 @@ This document does not implement those Compose changes yet.
 GPUs such as a GTX 1080, CUDA build compatibility must be verified separately
 from the Python application because the queue/worker change does not remove that
 runtime requirement.
+
+For Pascal / GTX 1080 specifically:
+
+- the upstream CUDA image may not work if it was not built with `sm_61` support
+- if that happens, build a local `llama.cpp` CUDA image with the appropriate
+  architecture flags and set `LLAMA_SERVER_IMAGE` to that local image name
+- the upstream llama.cpp Docker docs note that local CUDA image builds may need
+  different settings depending on the GPU architecture

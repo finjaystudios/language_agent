@@ -89,6 +89,11 @@ def is_cancel_requested(job_id: str, connection: Redis | None = None) -> bool:
 
 def safe_error_message(error: Exception) -> str:
     name = type(error).__name__.lower()
+    message = str(error).lower()
+    if "unavailable" in name or "unavailable" in message:
+        return "The external llama-server is unavailable."
+    if "interrupt" in name or "interrupt" in message:
+        return "The model server interrupted generation."
     if "timeout" in name:
         return "The language model job timed out."
     return "The language model worker hit an internal execution error."
