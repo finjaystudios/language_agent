@@ -9,7 +9,7 @@ from rq.job import get_current_job
 from app.core.config import AppSettings
 from app.core.logging import configure_logging
 from app.domain.jobs import LLMCallJob, utcnow
-from app.infrastructure.llm.local_model import LLMService, create_local_llm_service
+from app.infrastructure.llm.factory import create_llm_service
 from app.infrastructure.redis.config import (
     LLM_JOB_MAX_RETRIES,
     LLM_QUEUE_NAME,
@@ -20,7 +20,7 @@ from app.infrastructure.redis.job_store import RedisJobStore
 from app.infrastructure.redis.rq_queue import RQQueueClient
 
 logger = logging.getLogger(__name__)
-_MODEL_SERVICE: LLMService | None = None
+_MODEL_SERVICE: Any | None = None
 _MODEL_LOCK = threading.Lock()
 _SETTINGS = AppSettings.from_env()
 
@@ -39,10 +39,10 @@ def get_worker_class() -> type[SimpleWorker]:
     return SimpleWorker
 
 
-def get_worker_llm_service() -> LLMService:
+def get_worker_llm_service() -> Any:
     global _MODEL_SERVICE
     if _MODEL_SERVICE is None:
-        _MODEL_SERVICE = create_local_llm_service()
+        _MODEL_SERVICE = create_llm_service(_SETTINGS)
         logger.info("llm_worker_model_ready")
     return _MODEL_SERVICE
 

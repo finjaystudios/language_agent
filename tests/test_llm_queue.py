@@ -358,6 +358,55 @@ def test_agent_service_from_queue_does_not_load_local_model(monkeypatch):
     assert isinstance(service.llm_service, QueuedLLMService)
 
 
+def test_agent_service_from_local_model_uses_runtime_factory(monkeypatch):
+    fake_gateway = object()
+
+    monkeypatch.setattr(
+        "app.infrastructure.llm.factory.create_llm_service",
+        lambda settings=None: fake_gateway,
+    )
+
+    service = AgentService.from_local_model()
+
+    assert service.llm_service is fake_gateway
+    assert service.router.llm_service is fake_gateway
+
+
+def test_worker_selects_llama_server_backend(monkeypatch):
+    from app.core.config import AppSettings
+    from app.infrastructure.llm.llama_server_gateway import LlamaServerGateway
+
+    monkeypatch.setattr("app.worker.jobs._MODEL_SERVICE", None)
+    monkeypatch.setattr(
+        "app.worker.jobs._SETTINGS",
+        AppSettings(
+            **{
+                **AppSettings.from_env().__dict__,
+                "llm_backend": "llama_server",
+                "llama_server_url": "http://llama-server:8080",
+            }
+        ),
+    )
+
+    service = process_selected_worker_service(monkeypatch)
+
+    assert isinstance(service, LlamaServerGateway)
+
+
+def process_selected_worker_service(monkeypatch):
+    from app.worker.jobs import get_worker_llm_service
+
+    class FakeClient:
+        def get(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(
+        "app.infrastructure.llm.llama_server_gateway.httpx.Client",
+        lambda *args, **kwargs: FakeClient(),
+    )
+    return get_worker_llm_service()
+
+
 def test_worker_uses_simpleworker_on_windows(monkeypatch):
     monkeypatch.setattr("app.worker.jobs.SimpleWorker", sentinel.spawn_worker)
     monkeypatch.setattr("app.worker.jobs.Worker", sentinel.worker)

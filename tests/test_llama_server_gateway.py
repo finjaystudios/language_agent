@@ -1,0 +1,252 @@
+import asyncio
+import json
+import sys
+from pathlib import Path
+
+import httpx
+import pytest
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from app.core.config import AppSettings  # noqa: E402
+from app.infrastructure.llm.llama_server_gateway import (  # noqa: E402
+    LlamaServerGateway,
+    LlamaServerGatewayError,
+    LlamaServerMalformedResponseError,
+    LlamaServerTimeoutError,
+)
+
+
+def make_settings(**overrides):
+    base = AppSettings.from_env().__dict__.copy()
+    base.update(
+        {
+            "llm_backend": "llama_server",
+            "llama_server_url": "http://llama-server:8080",
+            "llama_server_api_key": "",
+            "llama_server_timeout_seconds": 30,
+            "llama_server_stream_timeout_seconds": 30,
+            "llama_server_model_name": "",
+            "llama_server_health_path": "/health",
+        }
+    )
+    base.update(overrides)
+    return AppSettings(**base)
+
+
+def make_client(handler):
+    transport = httpx.MockTransport(handler)
+    return httpx.Client(transport=transport, base_url="http://llama-server:8080")
+
+
+def test_ask_llm_sync_parses_structured_response_and_passes_generation_params():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["headers"] = dict(request.headers)
+        captured["payload"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": '{"response":"bonjour"}'}}]},
+        )
+
+    gateway = LlamaServerGateway(make_settings(), client=make_client(handler))
+
+    result = gateway.ask_llm_sync(
+        messages=[
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "user"},
+        ],
+        schema={"type": "object"},
+        temperature=0.2,
+        max_tokens=123,
+        top_p=0.95,
+        stop=["\n\n"],
+        seed=7,
+    )
+
+    assert result == {"response": "bonjour"}
+    assert captured["payload"]["messages"][1]["content"] == "user"
+    assert captured["payload"]["temperature"] == 0.2
+    assert captured["payload"]["max_tokens"] == 123
+    assert captured["payload"]["top_p"] == 0.95
+    assert captured["payload"]["stop"] == ["\n\n"]
+    assert captured["payload"]["seed"] == 7
+    assert captured["payload"]["response_format"]["json_schema"]["schema"] == {
+        "type": "object"
+    }
+
+
+def test_generate_text_sync_returns_message_content():
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content.decode("utf-8"))
+        assert payload["stream"] is False
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "plain text response"}}]},
+        )
+
+    gateway = LlamaServerGateway(make_settings(), client=make_client(handler))
+
+    result = gateway.generate_text_sync(
+        messages=[
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "user"},
+        ],
+        temperature=0.1,
+        max_tokens=2000,
+    )
+
+    assert result == "plain text response"
+
+
+def test_stream_llm_sync_yields_openai_compatible_chunks():
+    stream_body = (
+        'data: {"choices":[{"delta":{"content":"bon"}}]}\n\n'
+        'data: {"choices":[{"delta":{"content":"jour"}}]}\n\n'
+        "data: [DONE]\n\n"
+    )
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=stream_body)
+
+    gateway = LlamaServerGateway(make_settings(), client=make_client(handler))
+
+    chunks = list(
+        gateway.stream_llm_sync(
+            messages=[
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "user"},
+            ],
+            temperature=0.1,
+            max_tokens=2000,
+        )
+    )
+
+    assert chunks == [
+        {"choices": [{"delta": {"content": "bon"}}]},
+        {"choices": [{"delta": {"content": "jour"}}]},
+    ]
+
+
+def test_llama_server_timeout_is_sanitized():
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("backend timed out")
+
+    gateway = LlamaServerGateway(make_settings(), client=make_client(handler))
+
+    with pytest.raises(LlamaServerTimeoutError) as error:
+        gateway.generate_text_sync(
+            messages=[
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "user"},
+            ],
+            temperature=0.1,
+            max_tokens=2000,
+        )
+
+    assert str(error.value) == "llama-server timed out."
+
+
+def test_llama_server_non_200_response_is_sanitized():
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"error": "upstream broke"})
+
+    gateway = LlamaServerGateway(make_settings(), client=make_client(handler))
+
+    with pytest.raises(LlamaServerGatewayError) as error:
+        gateway.generate_text_sync(
+            messages=[
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "user"},
+            ],
+            temperature=0.1,
+            max_tokens=2000,
+        )
+
+    assert str(error.value) == "llama-server returned HTTP 503."
+
+
+def test_llama_server_malformed_response_is_sanitized():
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": []})
+
+    gateway = LlamaServerGateway(make_settings(), client=make_client(handler))
+
+    with pytest.raises(LlamaServerMalformedResponseError) as error:
+        gateway.generate_text_sync(
+            messages=[
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "user"},
+            ],
+            temperature=0.1,
+            max_tokens=2000,
+        )
+
+    assert "did not contain any choices" in str(error.value)
+
+
+def test_api_key_header_is_attached_when_configured():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["authorization"] = request.headers.get("Authorization")
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "plain text response"}}]},
+        )
+
+    gateway = LlamaServerGateway(
+        make_settings(llama_server_api_key="secret-token"),
+        client=make_client(handler),
+    )
+
+    gateway.generate_text_sync(
+        messages=[
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "user"},
+        ],
+        temperature=0.1,
+        max_tokens=2000,
+    )
+
+    assert captured["authorization"] == "Bearer secret-token"
+
+
+def test_health_check_uses_lightweight_endpoint():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        return httpx.Response(200, json={"status": "ok"})
+
+    gateway = LlamaServerGateway(
+        make_settings(llama_server_health_path="/readyz"),
+        client=make_client(handler),
+    )
+
+    assert gateway.check_health() is True
+    assert captured["path"] == "/readyz"
+
+
+def test_async_gateway_preserves_application_facing_interface():
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": '{"mode":"translation"}'}}]},
+        )
+
+    gateway = LlamaServerGateway(make_settings(), client=make_client(handler))
+
+    result = asyncio.run(
+        gateway.ask_llm(
+            system_prompt="system",
+            user_prompt="user",
+            schema={"type": "object"},
+            mode="intent",
+        )
+    )
+
+    assert result == {"mode": "translation"}
