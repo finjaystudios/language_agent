@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator, Iterator
+from contextlib import suppress
 from typing import Any
 
 import httpx
@@ -43,6 +44,15 @@ class LlamaServerGateway:
         self.base_url = settings.llama_server_url.rstrip("/")
         self.client = client or httpx.Client(base_url=self.base_url)
 
+    def _request_timeout(self, timeout_seconds: int) -> httpx.Timeout:
+        return httpx.Timeout(
+            timeout_seconds,
+            connect=timeout_seconds,
+            read=timeout_seconds,
+            write=timeout_seconds,
+            pool=timeout_seconds,
+        )
+
     def _headers(self) -> dict[str, str]:
         headers = {"Accept": "application/json"}
         if self.settings.llama_server_api_key:
@@ -81,7 +91,7 @@ class LlamaServerGateway:
                 "/v1/chat/completions",
                 json=payload,
                 headers=self._headers(),
-                timeout=timeout_seconds,
+                timeout=self._request_timeout(timeout_seconds),
             )
         except httpx.TimeoutException as error:
             raise LlamaServerTimeoutError("llama-server timed out.") from error
@@ -178,7 +188,9 @@ class LlamaServerGateway:
                 "/v1/chat/completions",
                 json=payload,
                 headers=self._headers(),
-                timeout=self.settings.llama_server_stream_timeout_seconds,
+                timeout=self._request_timeout(
+                    self.settings.llama_server_stream_timeout_seconds
+                ),
             ) as response:
                 if response.status_code != 200:
                     raise LlamaServerGatewayError(
@@ -315,3 +327,7 @@ class LlamaServerGateway:
     async def cancel_job(self, job_id: str) -> None:
         logger.info("llama_server_cancel_unsupported job_id=%s", job_id)
         return None
+
+    def close(self) -> None:
+        with suppress(Exception):
+            self.client.close()

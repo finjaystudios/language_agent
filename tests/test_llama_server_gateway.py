@@ -14,6 +14,7 @@ from app.core.config import AppSettings  # noqa: E402
 from app.infrastructure.llm.llama_server_gateway import (  # noqa: E402
     LlamaServerGateway,
     LlamaServerGatewayError,
+    LlamaServerInterruptedError,
     LlamaServerMalformedResponseError,
     LlamaServerTimeoutError,
 )
@@ -129,6 +130,73 @@ def test_stream_llm_sync_yields_openai_compatible_chunks():
         {"choices": [{"delta": {"content": "bon"}}]},
         {"choices": [{"delta": {"content": "jour"}}]},
     ]
+
+
+def test_stream_llm_sync_timeout_is_sanitized():
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("stream stalled")
+
+    gateway = LlamaServerGateway(make_settings(), client=make_client(handler))
+
+    with pytest.raises(LlamaServerTimeoutError) as error:
+        list(
+            gateway.stream_llm_sync(
+                messages=[
+                    {"role": "system", "content": "system"},
+                    {"role": "user", "content": "user"},
+                ],
+                temperature=0.1,
+                max_tokens=2000,
+            )
+        )
+
+    assert str(error.value) == "llama-server timed out."
+
+
+def test_stream_llm_sync_rejects_malformed_stream_event():
+    stream_body = "data: {not-json}\n\n"
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=stream_body)
+
+    gateway = LlamaServerGateway(make_settings(), client=make_client(handler))
+
+    with pytest.raises(LlamaServerMalformedResponseError) as error:
+        list(
+            gateway.stream_llm_sync(
+                messages=[
+                    {"role": "system", "content": "system"},
+                    {"role": "user", "content": "user"},
+                ],
+                temperature=0.1,
+                max_tokens=2000,
+            )
+        )
+
+    assert str(error.value) == "llama-server returned malformed stream data."
+
+
+def test_stream_llm_sync_detects_interrupted_generation():
+    stream_body = 'data: {"choices":[{"delta":{"content":"bon"}}]}\n\n'
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=stream_body)
+
+    gateway = LlamaServerGateway(make_settings(), client=make_client(handler))
+
+    with pytest.raises(LlamaServerInterruptedError) as error:
+        list(
+            gateway.stream_llm_sync(
+                messages=[
+                    {"role": "system", "content": "system"},
+                    {"role": "user", "content": "user"},
+                ],
+                temperature=0.1,
+                max_tokens=2000,
+            )
+        )
+
+    assert str(error.value) == "llama-server interrupted generation."
 
 
 def test_llama_server_timeout_is_sanitized():

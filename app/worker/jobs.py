@@ -129,6 +129,12 @@ def finalize_cancelled_job(
     return serialize_llm_call(llm_call)
 
 
+def close_stream_iterator(stream) -> None:
+    close = getattr(stream, "close", None)
+    if callable(close):
+        close()
+
+
 def process_llm_call(payload: dict) -> dict:
     job = get_current_job()
     connection = (
@@ -197,24 +203,28 @@ def process_llm_call(payload: dict) -> dict:
                     connection,
                 )
                 parts: list[str] = []
-                for chunk in service.stream_llm_sync(
+                stream = service.stream_llm_sync(
                     messages=llm_call.messages,
                     **llm_call.generation_parameters,
-                ):
-                    delta = chunk["choices"][0].get("delta", {})
-                    token = delta.get("content")
-                    if token:
-                        parts.append(token)
-                        append_stream_event(
-                            llm_call.job_id,
-                            build_stream_event(llm_call, token=token),
-                            connection,
-                        )
-                    if is_cancel_requested(llm_call.job_id, connection):
-                        llm_call.cancel_requested = True
-                        raise LLMJobCancelledError(
-                            "LLM streaming job was cancelled during generation."
-                        )
+                )
+                try:
+                    for chunk in stream:
+                        delta = chunk["choices"][0].get("delta", {})
+                        token = delta.get("content")
+                        if token:
+                            parts.append(token)
+                            append_stream_event(
+                                llm_call.job_id,
+                                build_stream_event(llm_call, token=token),
+                                connection,
+                            )
+                        if is_cancel_requested(llm_call.job_id, connection):
+                            llm_call.cancel_requested = True
+                            raise LLMJobCancelledError(
+                                "LLM streaming job was cancelled during generation."
+                            )
+                finally:
+                    close_stream_iterator(stream)
                 llm_call.result = "".join(parts)
 
         if is_cancel_requested(llm_call.job_id, connection):

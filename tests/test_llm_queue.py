@@ -4,6 +4,7 @@ import time
 from types import SimpleNamespace
 from unittest.mock import sentinel
 
+import pytest
 from app.application.agent_service import AgentService
 from app.application.models import ChatCommand
 from app.data_models.intent_result import IntentResult
@@ -258,6 +259,128 @@ def test_worker_streaming_publishes_mocked_token_chunks(monkeypatch):
         "jour",
     ]
     assert events[-1]["done"] is True
+
+
+def test_worker_streaming_cancellation_closes_stream_and_marks_cancelled(monkeypatch):
+    events = []
+    state = {"cancel_checks": 0, "closed": False}
+
+    class FakeStream:
+        def __iter__(self):
+            yield {"choices": [{"delta": {"content": "bon"}}]}
+            yield {"choices": [{"delta": {"content": "jour"}}]}
+
+        def close(self):
+            state["closed"] = True
+
+    class FakeService:
+        def stream_llm_sync(self, *, messages, temperature, max_tokens):
+            return FakeStream()
+
+    class FakeJob:
+        def __init__(self):
+            self.connection = object()
+            self.meta = {}
+
+        def save_meta(self):
+            return None
+
+    def fake_is_cancel_requested(*_args):
+        state["cancel_checks"] += 1
+        return state["cancel_checks"] >= 3
+
+    monkeypatch.setattr("app.worker.jobs.get_worker_llm_service", lambda: FakeService())
+    monkeypatch.setattr("app.worker.jobs.get_current_job", lambda: FakeJob())
+    monkeypatch.setattr("app.worker.jobs.is_cancel_requested", fake_is_cancel_requested)
+    monkeypatch.setattr(
+        "app.worker.jobs.record_wait_time", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        "app.worker.jobs.record_completion_metrics",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "app.worker.jobs.append_stream_event",
+        lambda _job_id, payload, _connection: events.append(payload),
+    )
+
+    result = process_llm_call(
+        LLMCallJob(
+            job_id="cancel-stream-job",
+            call_type="streaming_text_generation",
+            messages=[
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "user"},
+            ],
+            generation_parameters={"temperature": 0.1, "max_tokens": 2000},
+        ).model_dump(mode="json")
+    )
+
+    assert result["status"] == "cancelled"
+    assert result["cancel_requested"] is True
+    assert state["closed"] is True
+    assert [event.get("token") for event in events if event.get("token")] == [
+        "bon",
+        "jour",
+    ]
+    assert events[-1]["done"] is True
+    assert events[-1]["status"] == "cancelled"
+
+
+def test_worker_streaming_failure_publishes_safe_error(monkeypatch):
+    from app.infrastructure.llm.llama_server_gateway import (
+        LlamaServerMalformedResponseError,
+    )
+
+    events = []
+
+    class FakeService:
+        def stream_llm_sync(self, *, messages, temperature, max_tokens):
+            raise LlamaServerMalformedResponseError("bad stream event")
+
+    class FakeJob:
+        def __init__(self):
+            self.connection = object()
+            self.meta = {}
+
+        def save_meta(self):
+            return None
+
+    monkeypatch.setattr("app.worker.jobs.LLM_JOB_MAX_RETRIES", 0)
+    monkeypatch.setattr("app.worker.jobs.get_worker_llm_service", lambda: FakeService())
+    monkeypatch.setattr("app.worker.jobs.get_current_job", lambda: FakeJob())
+    monkeypatch.setattr("app.worker.jobs.is_cancel_requested", lambda *args: False)
+    monkeypatch.setattr(
+        "app.worker.jobs.record_wait_time", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        "app.worker.jobs.record_completion_metrics",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "app.worker.jobs.append_stream_event",
+        lambda _job_id, payload, _connection: events.append(payload),
+    )
+
+    with pytest.raises(LlamaServerMalformedResponseError):
+        process_llm_call(
+            LLMCallJob(
+                job_id="bad-stream-job",
+                call_type="streaming_text_generation",
+                messages=[
+                    {"role": "system", "content": "system"},
+                    {"role": "user", "content": "user"},
+                ],
+                generation_parameters={"temperature": 0.1, "max_tokens": 2000},
+            ).model_dump(mode="json")
+        )
+
+    assert events[-1]["done"] is True
+    assert events[-1]["error"] == "llm_service_error"
+    assert (
+        events[-1]["message"]
+        == "The language model worker hit an internal execution error."
+    )
 
 
 def test_cancelling_queued_job_marks_it_cancelled(monkeypatch):
