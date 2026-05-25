@@ -108,9 +108,41 @@ Forbidden dependency directions:
 - domain -> Chainlit
 - domain -> Redis/RQ
 - application -> FastAPI route modules
+- application -> Chainlit modules
 - worker -> FastAPI route modules
 - webui -> backend internals
 - FastAPI routes -> local model runtime directly
+- CLI -> FastAPI route modules
+
+## Ports and Adapters
+
+The backend now follows a lightweight Ports and Adapters split:
+
+- `application/` depends on ports such as `LLMGateway`, `JobStore`, and
+  `QueueClient`
+- `infrastructure/llm/` implements the local-model adapter
+- `infrastructure/redis/` implements Redis/RQ queue, job-state, and streaming
+  adapters
+- `interfaces/api/` wires concrete implementations into FastAPI dependencies
+- `worker/` wires the local model runtime into the RQ job executor
+
+Operationally, that means:
+
+- FastAPI enqueues work through queue-backed adapters
+- the worker is the only runtime that loads and executes the GGUF model
+- the Web UI remains an HTTP client of FastAPI only
+
+## What Not to Import
+
+Keep these boundaries explicit during future work:
+
+- `app/domain/` must not import `fastapi`, `chainlit`, `redis`, or `rq`
+- `app/application/` must not import FastAPI route modules or Chainlit modules
+- `app/interfaces/api/` must not import worker job modules
+- `app/worker/` must not import FastAPI route handlers or API schemas
+- `webui/` must not import anything from `app/`
+- FastAPI routes and dependencies must not call
+  `app.infrastructure.llm.local_model` directly
 
 ## Audit Result
 
@@ -125,116 +157,65 @@ move unless those edges are removed first.
 
 ## Current Dependency Risks
 
-### 1. Service Layer Depends on API Layer
+### 1. Composition Still Exists in More Than One Place
 
 [`app/application/agent_service.py`](C:\Projects\LocalTranslation\language_agent\app\application\agent_service.py)
-imports:
-
-- application and domain modules
-- one infrastructure adapter for queue-backed composition convenience
-
-The earlier API-layer dependency has been removed. The remaining concern is that
-the service still instantiates concrete adapters via helper constructors, which
-should eventually move fully into composition roots.
+still exposes convenience constructors for local-model and queue-backed startup.
+The earlier API-layer dependency has been removed, but those constructors still
+select concrete adapters inside the service layer.
 
 Impact:
 
-- composition is not yet fully separated from the service class
-- application constructors still know about concrete infrastructure
+- application-level convenience constructors still know about infrastructure
+- future entry points could drift if composition logic is duplicated
 
-### 2. Queued LLM Adapter Depends on API Errors
-
-[`app/infrastructure/redis/queued_gateway.py`](C:\Projects\LocalTranslation\language_agent\app\infrastructure\redis\queued_gateway.py)
-now raises core errors instead of API-layer errors.
-
-This dependency inversion has been corrected, but the adapter still lives close
-to queue-specific data shapes and should later be formalized behind ports more
-strictly.
-
-Impact:
-
-- queue-backed gateway should eventually depend only on formal ports and domain
-  job models
-
-### 3. API Dependency Wiring Lives in the Service Class
-
-[`app/interfaces/api/dependencies.py`](C:\Projects\LocalTranslation\language_agent\app\interfaces\api\dependencies.py)
-constructs the service by calling `AgentService.from_queue()`.
-
-`AgentService.from_queue()` in turn instantiates `QueuedLLMService` directly.
-That means the service class owns infrastructure selection instead of receiving
-its dependencies from a composition root.
-
-Impact:
-
-- composition is spread across API dependency code and the service class
-- application code knows too much about concrete adapters
-
-### 4. Mode Handlers and Router Depend on Concrete LLM Type
-
-[`app/application/intent_router.py`](C:\Projects\LocalTranslation\language_agent\app\application\intent_router.py),
-[`app/application/modes/base.py`](C:\Projects\LocalTranslation\language_agent\app\application\modes\base.py),
-and related handlers are typed around the concrete `LLMService` shape or queue
-client shape instead of an explicit port.
-
-Impact:
-
-- local model and queued model access are not formalized behind one interface
-- difficult to substitute fakes or future model-server adapters cleanly
-
-### 5. Queue Module Mixes Too Many Concerns
+### 2. Queue Coordination Still Has a Broad Surface
 
 [`app/infrastructure/redis/queue_service.py`](C:\Projects\LocalTranslation\language_agent\app\infrastructure\redis\queue_service.py)
-currently combines:
+has been split behind ports, but it still owns several responsibilities:
 
-- Redis connection creation
-- RQ queue access
 - enqueue logic
 - status polling
-- stream transport
-- queue metrics
 - cancellation
-- health/status snapshots
+- queue health and metrics
+- stream/result compatibility helpers
 
 Impact:
 
-- high change surface
-- hard to separate ports from adapters
-- likely hotspot for future cyclic risk once files start moving
+- it remains the highest-change adapter surface
+- future queue changes should be kept inside `infrastructure/redis/`
 
-### 6. CLI and API Orchestration Are Duplicated
+### 3. Compatibility Wrappers Still Exist
 
-[`app/cli/main.py`](C:\Projects\LocalTranslation\language_agent\app\cli\main.py) wires
-`LLMService`, `ConversationMemory`, `IntentRouter`, and
-`SessionOrchestrator`.
-
-[`app/application/agent_service.py`](C:\Projects\LocalTranslation\language_agent\app\application\agent_service.py)
-rebuilds a similar orchestration path for HTTP.
-
-Impact:
-
-- two composition styles for similar behavior
-- drift risk between CLI and API feature behavior
-
-### 7. Import-Time Config State Exists
-
-[`app/infrastructure/llm/runtime_config.py`](C:\Projects\LocalTranslation\language_agent\app\infrastructure\llm\runtime_config.py)
-reads env-derived values into module globals at import time.
-
-Impact:
-
-- configuration is less explicit than it should be
-- future composition roots will have less control over runtime settings
-
-### 8. API Package Re-Exports App Creation
-
-Compatibility wrappers still exist under `app/api/`, `app/queue/`, and related
-legacy paths so older imports continue to resolve during the transition.
+Compatibility wrappers still exist under `app/api/`, `app/queue/`, `app/llm/`,
+and related legacy paths so older imports continue to resolve during the
+transition.
 
 Impact:
 
 - dual-path imports still exist temporarily
-- cleanup is still needed once the new package paths are fully adopted
+- full cleanup is blocked until downstream callers stop using legacy paths
+
+### 4. Import-Time Runtime Configuration Still Exists
+
+[`app/infrastructure/llm/runtime_config.py`](C:\Projects\LocalTranslation\language_agent\app\infrastructure\llm\runtime_config.py)
+still reads env-derived values into module globals at import time.
+
+Impact:
+
+- configuration remains less explicit than it should be
+- later composition-root cleanup should move more runtime choices behind
+  `AppSettings` or worker-local config
+
+### 5. Tests and Tooling Still Use Some Legacy Import Paths
+
+Some tests and wrappers still import through compatibility paths such as
+`app.api.*` and `app.llm.queued`.
+
+Impact:
+
+- the runtime boundaries are cleaner than the import graph seen by every caller
+- wrapper removal should be a separate, low-risk cleanup once all callers migrate
 
 ## Things That Are Already Good
 
@@ -253,6 +234,14 @@ Current practical composition roots:
 - FastAPI dependency assembly: [`app/interfaces/api/dependencies.py`](C:\Projects\LocalTranslation\language_agent\app\interfaces\api\dependencies.py)
 - worker root: [`app/worker/main.py`](C:\Projects\LocalTranslation\language_agent\app\worker\main.py)
 - Web UI root: [`webui/app.py`](C:\Projects\LocalTranslation\language_agent\webui\app.py)
+
+Current dependency-injection responsibilities:
+
+- `get_settings()`: environment-backed shared settings
+- `get_queue_client()`: Redis/RQ queue adapter
+- `get_job_store()`: Redis-backed job/result store adapter
+- `get_llm_gateway()`: queue-backed LLM gateway
+- `get_agent_service()`: application facade for API requests
 
 Target composition roots:
 

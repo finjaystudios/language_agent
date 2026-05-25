@@ -1,5 +1,56 @@
 # Troubleshooting
 
+## Import Errors After Refactor
+
+Symptoms:
+
+- startup fails with `ModuleNotFoundError`
+- local scripts still refer to older `app.api.*`, `app.queue.*`, or similar
+  paths
+- worker or API startup fails after switching branches
+
+Checks:
+
+- prefer the current entry points:
+  - `python -m app.cli.main`
+  - `python -m uvicorn app.interfaces.api.main:app --reload`
+  - `python -m app.worker.main`
+- confirm your shell is running from the repository root
+- update local scripts or IDE launch profiles that still point at older module
+  paths
+- if a compatibility wrapper import works in one place and fails in another,
+  standardize on the new path under `app/interfaces`, `app/infrastructure`,
+  `app/application`, or `app/worker`
+
+## Worker Cannot Import App Modules
+
+Symptoms:
+
+- `python -m app.worker.main` fails before connecting to Redis
+- errors mention missing `app.*` modules from the worker process
+
+Checks:
+
+- start the worker from the repository root, not from inside `app/worker`
+- confirm the active Python environment has the project dependencies installed
+- avoid invoking worker internals as loose files; use `python -m app.worker.main`
+- if you use Docker, confirm the image copied the full `app/` package
+
+## Model Loading Location
+
+Symptoms:
+
+- FastAPI appears to try loading the GGUF model
+- multiple processes consume GPU memory
+- the wrong service owns `LLM_MODEL_PATH`
+
+Checks:
+
+- only the CLI and the worker should load the local model runtime
+- FastAPI should enqueue through Redis + RQ, not import the local model adapter
+- the Web UI should call FastAPI over HTTP only
+- for Compose, confirm only `llm-worker` mounts `./models`
+
 ## Model Not Found
 
 Symptoms:
