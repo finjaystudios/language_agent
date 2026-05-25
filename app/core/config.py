@@ -48,7 +48,7 @@ class AppSettings:
             fastapi_api_key=os.getenv("FASTAPI_API_KEY"),
             cors_allowed_origins=parse_csv_env(os.getenv("CORS_ALLOWED_ORIGINS", "")),
             redis_url=os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0"),
-            llm_backend=os.getenv("LLM_BACKEND", "llama_cpp_python"),
+            llm_backend=os.getenv("LLM_BACKEND", "llama_server"),
             llm_queue_name=os.getenv("LLM_QUEUE_NAME", "llm"),
             llm_queue_timeout_seconds=queue_timeout,
             llm_queue_wait_timeout_seconds=int(

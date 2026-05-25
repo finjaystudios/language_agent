@@ -6,7 +6,7 @@ LanguageAgent is a local-first language assistant with multiple runtime surfaces
 - FastAPI backend for HTTP access
 - Chainlit Web UI for browser interaction
 - Redis + RQ queue for serialized LLM work
-- Dedicated GPU worker that owns the model runtime
+- Dedicated GPU worker that brokers queued calls to `llama-server`
 
 The current system separates the API, Web UI, queue, and worker so model-backed
 requests can be queued and executed by one long-lived worker process instead of
@@ -15,9 +15,9 @@ loading the model in every service.
 ## Service Overview
 
 ```text
-CLI -> local model runtime
+CLI -> legacy local llama-cpp-python runtime
 
-Browser -> Chainlit Web UI -> FastAPI -> Redis + RQ -> GPU worker -> local model
+Browser -> Chainlit Web UI -> FastAPI -> Redis + RQ -> GPU worker -> llama-server -> GPU model
                                   ^
                                   |
                                 Caddy
@@ -26,7 +26,7 @@ Browser -> Chainlit Web UI -> FastAPI -> Redis + RQ -> GPU worker -> local model
 - The CLI calls local services directly.
 - The Web UI does not load the model and does not import backend internals.
 - Every FastAPI LLM call goes through Redis + RQ.
-- The worker is the only service allowed to execute the GGUF model.
+- In the default runtime, `llama-server` is the only service allowed to load the GGUF model.
 
 ## Quick Start
 
@@ -107,7 +107,7 @@ bru run bruno/local-language-agent-api --env Local
 
 - The queue-backed chat flow depends on Redis and a separate `app.worker.main`
   process for all model-backed API requests.
-- The current Docker setup expects NVIDIA GPU support for the worker container.
+- The current Docker setup expects NVIDIA GPU support for the `llama-server` container.
 - The Web UI authenticates to FastAPI with a shared service API key, not
   per-user identity.
 - Cloudflare Tunnel is documented as an external boundary and is not part of

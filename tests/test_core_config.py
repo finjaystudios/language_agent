@@ -22,7 +22,7 @@ def test_app_settings_default_llama_server_config(monkeypatch):
 
     settings = AppSettings.from_env()
 
-    assert settings.llm_backend == "llama_cpp_python"
+    assert settings.llm_backend == "llama_server"
     assert settings.llama_server_url == "http://localhost:8080"
     assert settings.llama_server_api_key == ""
     assert settings.llama_server_timeout_seconds == 180

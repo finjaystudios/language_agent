@@ -42,7 +42,7 @@ the in-container mount path under `/models`, for example:
 /models/Qwen2.5-7B-Instruct-Q4_K_M.gguf
 ```
 
-The default Compose flow now sets `LLM_BACKEND=llama_server`, so the worker
+The default Compose flow sets `LLM_BACKEND=llama_server`, so the worker
 calls `http://llama-server:8080` over the internal Compose network.
 
 GTX 1080 / Pascal note:
@@ -141,6 +141,18 @@ docker compose down
 ```
 
 ## Compose-Native Checks
+
+Manual validation checklist:
+
+1. `docker compose up -d redis llama-server llm-worker`
+2. `curl http://127.0.0.1:8080/health`
+3. `docker compose up -d fastapi webui caddy`
+4. Submit an authenticated `/api/chat` request
+5. Submit an authenticated `/api/chat/stream` request
+6. Confirm `docker compose logs -f llm-worker` shows worker activity
+7. Confirm `docker compose logs -f llama-server` shows model-server requests
+8. Confirm Web UI works at `http://localhost/`
+9. Confirm Caddy still proxies `http://localhost/api/health`
 
 Backend status route through the Web UI server:
 

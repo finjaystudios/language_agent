@@ -6,7 +6,7 @@ FastAPI does not call the model directly. Every model-backed LLM call goes
 through Redis + RQ and is executed by a separate worker process.
 
 ```text
-FastAPI -> enqueue LLM call in Redis + RQ -> worker -> local model
+FastAPI -> enqueue LLM call in Redis + RQ -> worker -> llama-server
 ```
 
 This queue boundary is intentionally at the LLM-call level, not the top-level
@@ -16,7 +16,7 @@ intent routing, state updates, and final generation.
 ## Why the Queue Exists
 
 - Serialize GPU-backed model execution by default
-- Keep the model loaded in one long-lived worker process
+- Keep queued model execution behind one long-lived worker process
 - Isolate API request handling from model execution latency
 - Expose queue status, retries, and cancellation
 - Support streaming over Redis-backed event transport
@@ -28,7 +28,7 @@ intent routing, state updates, and final generation.
 - RQ provides queued job execution.
 - FastAPI produces jobs.
 - `app.worker.main` consumes jobs.
-- The worker owns the GGUF model lifecycle.
+- `llama-server` owns the GGUF model lifecycle in the default runtime.
 
 ## Request Flow
 
@@ -47,8 +47,8 @@ client -> FastAPI /api/chat/stream -> enqueue streaming job -> worker publishes 
 ## Single Worker Ownership
 
 The worker uses `SimpleWorker` and requires `LLM_WORKER_CONCURRENCY=1`. That is
-intentional: one long-lived worker process keeps one loaded model instance
-instead of spawning multiple independent model owners.
+intentional: one long-lived worker process stays the single queue consumer and
+stream publisher instead of spawning multiple independent model callers.
 
 ## API Endpoints
 
@@ -123,7 +123,7 @@ the public API.
 
 Queued jobs can be cancelled immediately. Streaming jobs check for cancellation
 during generation and stop between generated chunks when possible. Non-streaming
-jobs cannot always be interrupted mid-call by the current local runtime.
+jobs cannot always be interrupted mid-call by the current runtime.
 
 Example cancellation flow:
 

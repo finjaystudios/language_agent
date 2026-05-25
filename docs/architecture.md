@@ -25,9 +25,9 @@ LanguageAgent currently has multiple entry points:
 Current runtime flow:
 
 ```text
-CLI -> local model runtime
+CLI -> legacy local llama-cpp-python runtime
 
-Browser -> Chainlit Web UI -> FastAPI -> Redis + RQ -> GPU worker -> local model
+Browser -> Chainlit Web UI -> FastAPI -> Redis + RQ -> GPU worker -> llama-server -> GPU model
                                   ^
                                   |
                                 Caddy
@@ -86,7 +86,7 @@ Recommended responsibilities:
 - `application/`: use cases, `AgentService`, intent coordination, prompt
   coordination, queue-aware orchestration contracts
 - `ports/`: abstract interfaces such as LLM gateway and job/status store
-- `infrastructure/`: Redis/RQ adapter, local model adapter, prompt/schema file
+- `infrastructure/`: Redis/RQ adapter, llama-server and legacy local-model adapters, prompt/schema file
   loaders, environment-backed config
 - `interfaces/api/`: FastAPI app, routes, API schemas, auth, exception mapping
 - `cli/`: CLI composition root and CLI-only presentation
@@ -120,16 +120,19 @@ The backend now follows a lightweight Ports and Adapters split:
 
 - `application/` depends on ports such as `LLMGateway`, `JobStore`, and
   `QueueClient`
-- `infrastructure/llm/` implements the local-model adapter
+- `infrastructure/llm/` implements the default llama-server adapter and the
+  legacy local-model adapter
 - `infrastructure/redis/` implements Redis/RQ queue, job-state, and streaming
   adapters
 - `interfaces/api/` wires concrete implementations into FastAPI dependencies
-- `worker/` wires the local model runtime into the RQ job executor
+- `worker/` wires the selected runtime into the RQ job executor
 
 Operationally, that means:
 
 - FastAPI enqueues work through queue-backed adapters
-- the worker is the only runtime that loads and executes the GGUF model
+- `llama-server` is the default runtime that loads and executes the GGUF model
+- the worker is the only backend process that calls the model runtime on behalf
+  of queued jobs
 - the Web UI remains an HTTP client of FastAPI only
 
 ## What Not to Import
@@ -143,6 +146,7 @@ Keep these boundaries explicit during future work:
 - `webui/` must not import anything from `app/`
 - FastAPI routes and dependencies must not call
   `app.infrastructure.llm.local_model` directly
+- FastAPI routes and dependencies must not call `llama-server` directly
 
 ## Audit Result
 
@@ -222,7 +226,7 @@ Impact:
 - FastAPI routes do not call the local model runtime directly
 - worker code does not import FastAPI route modules
 - Web UI code does not import backend internals
-- the worker owns model loading and execution
+- the queue boundary already isolates HTTP handling from model execution
 - queue-backed execution is already separated from the HTTP process
 
 ## Entry Points and Composition Roots
@@ -248,7 +252,7 @@ Target composition roots:
 - `cli/main.py`: assemble local-model adapter and CLI presentation
 - `interfaces/api/dependencies.py`: assemble application services with queue
   adapters
-- `worker/main.py`: assemble the local-model adapter and queue job executor
+- `worker/main.py`: assemble the selected runtime adapter and queue job executor
 - `webui/app.py`: keep separate and HTTP-only
 
 ## Recommended Home for Key Concepts
@@ -262,7 +266,8 @@ Target composition roots:
 | agent service | `application/agent_service.py` | facade over router, handlers, and LLM gateway port |
 | LLM gateway port | `ports/llm_gateway.py` | contract for ask/stream/cancel behavior |
 | Redis/RQ adapter | `infrastructure/redis/` | queue adapter, job state adapter, stream adapter |
-| local model adapter | `infrastructure/llm/local_model.py` | wraps llama.cpp runtime |
+| default runtime adapter | `infrastructure/llm/llama_server_gateway.py` | wraps the OpenAI-compatible llama-server HTTP API |
+| legacy local model adapter | `infrastructure/llm/local_model.py` | wraps llama.cpp runtime |
 | worker entry point | `worker/main.py` | composition root only |
 | CLI entry point | `cli/main.py` | composition root only |
 

@@ -85,6 +85,9 @@ Checks:
   with `sm_61` support
 - reduce `LLM_CONTEXT_SIZE`, `LLM_N_GPU_LAYERS`, `LLAMA_SERVER_BATCH_SIZE`, and
   `LLAMA_SERVER_UBATCH_SIZE` if the server fails during model load
+- if you see `CUDA error: no kernel image is available for execution on the device`,
+  treat that as a GPU-architecture build mismatch and rebuild or replace the
+  `llama-server` binary/image with `sm_61` support
 
 ## Redis Unavailable
 

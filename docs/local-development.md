@@ -70,6 +70,7 @@ Legacy fallback:
 ```powershell
 $env:LLM_BACKEND = "llama_cpp_python"
 $env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+python -m pip install -r requirements-legacy-llama-cpp.txt
 python -m app.worker.main
 ```
 

@@ -20,7 +20,7 @@ Compose. Use [`.env.example`](../.env.example) for local host runs and
 | Variable | Default | Used by | Purpose |
 | --- | --- | --- | --- |
 | `REDIS_URL` | `redis://127.0.0.1:6379/0` | FastAPI, worker | Redis connection URL |
-| `LLM_BACKEND` | `llama_cpp_python` in code, `llama_server` in Compose example | FastAPI, worker | Runtime selector. Host-local code still defaults to the embedded runtime; the Compose workflow now defaults to the external HTTP backend |
+| `LLM_BACKEND` | `llama_server` | FastAPI, worker | Runtime selector. `llama_server` is now the default runtime for host-local and Compose flows |
 | `LLM_QUEUE_NAME` | `llm` | FastAPI, worker | RQ queue name |
 | `LLM_QUEUE_TIMEOUT_SECONDS` | `180` | FastAPI, worker | General queue operation timeout |
 | `LLM_QUEUE_WAIT_TIMEOUT_SECONDS` | `300` | FastAPI, worker | Maximum wait time for queued non-streaming jobs |
@@ -43,9 +43,9 @@ Compose. Use [`.env.example`](../.env.example) for local host runs and
 | `LLM_THREADS` | `4` | CLI, worker | CPU thread count |
 | `LLM_RESERVED_VRAM_GB` | `1.5` | CLI, worker | VRAM headroom for automatic layer selection |
 
-`llama-cpp-python` remains available as a legacy fallback for host-local runs
-and debugging. The Compose workflow now assumes `llama-server` owns the model
-while FastAPI, Redis/RQ, and the worker stay unchanged at the queue boundary.
+`llama-cpp-python` is now a legacy fallback only. The default host-local and
+Compose workflows assume `llama-server` owns the model while FastAPI, Redis/RQ,
+and the worker stay unchanged at the queue boundary.
 
 ## Llama-Server Runtime
 
@@ -74,6 +74,10 @@ When `LLM_BACKEND=llama_server`, the intended steady-state design is:
 - The worker stays queue-backed and makes HTTP requests to `llama-server`.
 - FastAPI endpoints and the Web UI remain unchanged.
 - Redis/RQ still serializes all model-backed calls.
+
+When `LLM_BACKEND=llama_cpp_python`, the embedded runtime is legacy-only and
+requires the optional package listed in
+[`../requirements-legacy-llama-cpp.txt`](../requirements-legacy-llama-cpp.txt).
 
 The code also accepts some legacy fallback names internally:
 

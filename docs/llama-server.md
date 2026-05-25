@@ -6,6 +6,9 @@ Move GGUF model ownership out of the Python worker process and into an external
 `llama-server` process without changing the FastAPI API surface, Chainlit Web
 UI flow, or the Redis/RQ queue boundary.
 
+`llama-server` is now the default runtime for production-style local inference.
+The embedded `llama-cpp-python` path remains legacy-only.
+
 ## Target Architecture
 
 Current runtime:
@@ -40,6 +43,9 @@ FastAPI -> Redis/RQ -> worker -> HTTP llama-server -> GPU model
 - `app/worker/jobs.py`: worker job execution path and current direct model load
 - `app/domain/jobs.py`: queue job schema
 - `app/core/config.py`: shared environment-backed settings
+
+No FastAPI route or application service imports `llama_cpp`. The queue-backed
+worker/runtime boundary remains the only model-execution integration point.
 
 ## Compose Service
 
@@ -133,7 +139,22 @@ With `LLM_BACKEND=llama_server`:
   `llama-server` is unreachable
 
 Legacy fallback remains available by setting `LLM_BACKEND=llama_cpp_python`, but
-that is now a compatibility path rather than the default Compose runtime.
+that is now a compatibility path rather than the default runtime. It also
+requires the optional dependency in
+[`../requirements-legacy-llama-cpp.txt`](../requirements-legacy-llama-cpp.txt).
+
+## Manual Validation Checklist
+
+1. Start `llama-server`.
+2. Check `llama-server` health with `curl http://127.0.0.1:8080/health`.
+3. Start Redis.
+4. Start the worker.
+5. Start FastAPI.
+6. Submit a queued request to `/api/chat`.
+7. Confirm worker logs show calls to `llama-server`.
+8. Open the Web UI and confirm a normal chat response works.
+9. Confirm `/api/chat/stream` and Web UI streaming both work.
+10. Confirm Caddy still serves `http://localhost/` and `http://localhost/api/health`.
 
 ## Known Limitation
 
@@ -149,3 +170,5 @@ For Pascal / GTX 1080 specifically:
   architecture flags and set `LLAMA_SERVER_IMAGE` to that local image name
 - the upstream llama.cpp Docker docs note that local CUDA image builds may need
   different settings depending on the GPU architecture
+- the older `CUDA error: no kernel image is available for execution on the device`
+  issue is usually a sign that the binary or image was not built for `sm_61`

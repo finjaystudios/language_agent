@@ -14,7 +14,6 @@ from app.application.conversation_memory import ConversationMemory  # noqa: E402
 from app.application.intent_router import IntentRouter  # noqa: E402
 from app.application.session_orchestrator import SessionOrchestrator  # noqa: E402
 from app.core.logging import configure_logging  # noqa: E402
-from app.infrastructure.llm.local_model import LLMService  # noqa: E402
 from app.infrastructure.llm.runtime_config import (  # noqa: E402
     N_CTX,
     N_THREADS,
@@ -32,6 +31,14 @@ logger = logging.getLogger(__name__)
 async def main():
     configure_logging()
     logger.info("cli_start")
+    try:
+        from app.infrastructure.llm.local_model import LLMService  # noqa: E402
+    except ImportError as error:
+        raise RuntimeError(
+            "The legacy embedded llama-cpp-python CLI runtime is not installed. "
+            "Use llama-server for the default runtime, or install the optional "
+            "legacy dependency to keep using `python -m app.cli.main`."
+        ) from error
     model_path = require_model_path()
     assert_model_file_exists(model_path)
     logger.info("cli_gpu_visibility_check_start")
