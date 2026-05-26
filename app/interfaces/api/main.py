@@ -32,8 +32,7 @@ def create_app() -> FastAPI:
         version=SERVICE_VERSION,
         description=(
             "HTTP API for the local language agent. The API exposes health "
-            "metadata, full chat responses, and Server-Sent Events streaming "
-            "without changing the existing CLI behavior."
+            "metadata, full chat responses, and Server-Sent Events streaming."
         ),
     )
 

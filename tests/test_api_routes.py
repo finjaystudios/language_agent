@@ -1,15 +1,15 @@
 import asyncio
 
-from app.api.models import (
+from app.application.models import ChatResult
+from app.application.models import ResponseMetadata as AppResponseMetadata
+from app.domain.jobs import LLMCallJob, QueueStatusSnapshot
+from app.interfaces.api.main import create_app
+from app.interfaces.api.models import (
     ChatRequest,
     LLMJobStatusResponse,
     QueueStatusResponse,
     StreamChatRequest,
 )
-from app.application.models import ChatResult
-from app.application.models import ResponseMetadata as AppResponseMetadata
-from app.domain.jobs import LLMCallJob, QueueStatusSnapshot
-from app.interfaces.api.main import create_app
 from app.interfaces.api.routes import (
     cancel_llm_job,
     chat_full,

@@ -2,7 +2,6 @@
 
 LanguageAgent is a local-first language assistant with multiple runtime surfaces:
 
-- CLI for direct local use
 - FastAPI backend for HTTP access
 - Chainlit Web UI for browser interaction
 - Redis + RQ queue for serialized LLM work
@@ -15,15 +14,12 @@ loading the model in every service.
 ## Service Overview
 
 ```text
-CLI -> legacy local llama-cpp-python runtime
-
 Browser -> Chainlit Web UI -> FastAPI -> Redis + RQ -> GPU worker -> llama-server -> GPU model
                                   ^
                                   |
                                 Caddy
 ```
 
-- The CLI calls local services directly.
 - The Web UI does not load the model and does not import backend internals.
 - Every FastAPI LLM call goes through Redis + RQ.
 - In the default runtime, `llama-server` is the only service allowed to load the GGUF model.
@@ -46,12 +42,6 @@ For a host-local development workflow without Docker, see
 [`docs/local-development.md`](docs/local-development.md).
 
 ## Common Commands
-
-Run the CLI:
-
-```powershell
-python -m app.cli.main
-```
 
 Run the FastAPI backend:
 
@@ -89,7 +79,7 @@ bru run bruno/local-language-agent-api --env Local
 
 - [`docs/README.md`](docs/README.md): documentation index
 - [`docs/architecture.md`](docs/architecture.md): service boundaries and dependency direction
-- [`docs/local-development.md`](docs/local-development.md): host-local CLI, API, Redis, worker, and Web UI workflow
+- [`docs/local-development.md`](docs/local-development.md): host-local API, Redis, worker, and Web UI workflow
 - [`docs/docker-compose.md`](docs/docker-compose.md): full containerized stack with Caddy
 - [`docs/configuration.md`](docs/configuration.md): environment variables and where they apply
 - [`docs/llama-server.md`](docs/llama-server.md): llama-server runtime, Compose workflow, and migration boundary

@@ -27,25 +27,11 @@ Compose. Use [`.env.example`](../.env.example) for local host runs and
 | `LLM_GENERATION_TIMEOUT_SECONDS` | `180` | FastAPI, worker | Per-job generation timeout |
 | `LLM_RESULT_TTL_SECONDS` | `300` | FastAPI, worker | Retention for completed job metadata and stream data |
 | `LLM_MAX_QUEUE_SIZE` | `100` | FastAPI, worker | Backpressure threshold before `429` |
-| `LLM_WORKER_CONCURRENCY` | `1` | worker | Worker concurrency; must remain `1` for the local GPU worker |
+| `LLM_WORKER_CONCURRENCY` | `1` | worker | Worker concurrency; must remain `1` for the queue-backed worker |
 | `LLM_JOB_MAX_RETRIES` | `2` | FastAPI, worker | Retry count for transient worker failures |
 | `LLM_STREAM_CHANNEL_PREFIX` | `llm-stream` | FastAPI, worker | Redis Stream prefix for streaming events |
 | `LLM_STATUS_POLL_INTERVAL_SECONDS` | `0.05` | FastAPI, worker | Poll interval for queued job status checks |
 | `LLM_STREAM_TIMEOUT_SECONDS` | `180` | FastAPI, worker | Maximum API wait time for stream events |
-
-## Local Embedded Runtime
-
-| Variable | Default | Used by | Purpose |
-| --- | --- | --- | --- |
-| `LLM_MODEL_PATH` | `models/Qwen2.5-7B-Instruct-Q4_K_M.gguf` locally, `/models/model.gguf` style in Docker | CLI, worker | GGUF model path |
-| `LLM_CONTEXT_SIZE` | `4096` | CLI, worker | Context window size |
-| `LLM_N_GPU_LAYERS` | `-1` | CLI, worker | GPU layer offload override |
-| `LLM_THREADS` | `4` | CLI, worker | CPU thread count |
-| `LLM_RESERVED_VRAM_GB` | `1.5` | CLI, worker | VRAM headroom for automatic layer selection |
-
-`llama-cpp-python` is now a legacy fallback only. The default host-local and
-Compose workflows assume `llama-server` owns the model while FastAPI, Redis/RQ,
-and the worker stay unchanged at the queue boundary.
 
 ## Llama-Server Runtime
 
@@ -66,8 +52,12 @@ Compose-local `llama-server` defaults also use:
 | `LLAMA_SERVER_IMAGE` | `ghcr.io/ggml-org/llama.cpp:server-cuda` | Compose | Official upstream container image |
 | `LLAMA_SERVER_PORT` | `8080` | Compose | Internal llama-server listen port |
 | `LLAMA_SERVER_HOST_PORT` | `8080` | Compose | Optional host port for direct debugging |
+| `LLAMA_SERVER_MODEL_PATH` | `/models/Qwen3-4B-Q4_K_M.gguf` | Compose llama-server service | In-container GGUF model path |
+| `LLAMA_SERVER_CONTEXT_SIZE` | `2048` | Compose llama-server service | Conservative context size for Pascal-class GPUs |
+| `LLAMA_SERVER_N_GPU_LAYERS` | `20` | Compose llama-server service | Conservative GPU offload setting for Pascal-class GPUs |
 | `LLAMA_SERVER_BATCH_SIZE` | `256` | llama-server | Conservative prompt batch size for GTX 1080-class GPUs |
 | `LLAMA_SERVER_UBATCH_SIZE` | `128` | llama-server | Conservative micro-batch size for GTX 1080-class GPUs |
+| `LLAMA_SERVER_THREADS` | `4` | Compose llama-server service | CPU thread count for llama-server |
 
 When `LLM_BACKEND=llama_server`, the intended steady-state design is:
 
@@ -95,18 +85,8 @@ This is not multi-model routing yet. All current profiles target the same
 loaded Qwen3 profile model, `Qwen3-4B-Q4_K_M`, and the worker still sends every
 request through the Redis/RQ queue before reaching `llama-server`.
 
-When `LLM_BACKEND=llama_cpp_python`, the embedded runtime is legacy-only and
-requires the optional package listed in
-[`../requirements-legacy-llama-cpp.txt`](../requirements-legacy-llama-cpp.txt).
-
-The code also accepts some legacy fallback names internally:
-
-- `MODEL_PATH`
-- `LLM_N_CTX`
-- `LLM_GPU_LAYERS`
-- `LLM_QUEUE_POLL_INTERVAL_SECONDS`
-
-Prefer the `LLM_*` names shown in this document.
+The embedded `llama-cpp-python` runtime was removed from the active code path.
+`LLM_BACKEND` remains as a guardrail setting and must stay `llama_server`.
 
 ## Web UI
 
@@ -123,11 +103,12 @@ Prefer the `LLM_*` names shown in this document.
 
 - Keep `FASTAPI_API_KEY` out of browser-visible content.
 - Keep real secrets out of committed files.
-- For Compose, `LLM_MODEL_PATH` now belongs to the `llama-server` service and
-  should point at the in-container `/models/...` path.
+- For Compose, `LLAMA_SERVER_MODEL_PATH` belongs to the `llama-server` service
+  and should point at the in-container `/models/...` path.
 - For Compose-local Pascal GPUs such as a GTX 1080, start with
-  `LLM_CONTEXT_SIZE=1024` or `2048`, modest `LLM_N_GPU_LAYERS`, and conservative
-  `LLAMA_SERVER_BATCH_SIZE` / `LLAMA_SERVER_UBATCH_SIZE`.
+  `LLAMA_SERVER_CONTEXT_SIZE=1024` or `2048`, modest
+  `LLAMA_SERVER_N_GPU_LAYERS`, and conservative `LLAMA_SERVER_BATCH_SIZE` /
+  `LLAMA_SERVER_UBATCH_SIZE`.
 - Point `LLAMA_SERVER_URL` at the reachable server address for that environment.
 - Keep `MODEL_PROFILES_PATH` in sync with the file copied into the runtime
   image or available on the host.

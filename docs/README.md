@@ -10,8 +10,8 @@ architectural material lives here.
   dependency direction, entry points, and deployment model
 - [`refactor-plan.md`](refactor-plan.md): staged backend migration plan for the
   package and dependency cleanup
-- [`local-development.md`](local-development.md): run the CLI, FastAPI, Redis,
-  worker, and Chainlit locally without Docker Compose
+- [`local-development.md`](local-development.md): run FastAPI, Redis, the
+  worker, llama-server, and Chainlit locally without Docker Compose
 - [`docker-compose.md`](docker-compose.md): run the full local container stack
   with Redis, FastAPI, the worker, Chainlit, and Caddy
 - [`configuration.md`](configuration.md): centralized environment variable

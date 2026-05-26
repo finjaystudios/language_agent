@@ -30,9 +30,9 @@ STREAM_FLUSH_CHAR_LIMIT = 96
 MODE_AUTO = "auto"
 STREAMING_MODES = {"translation", "definition", "learning"}
 STREAM_STATUS_MESSAGES = {
-    "queued": "Your request is queued and waiting for the local model.",
-    "processing": "The local model is preparing your response.",
-    "streaming": "The local model is streaming your response.",
+    "queued": "Your request is queued and waiting for the model worker.",
+    "processing": "The worker is preparing your response with llama-server.",
+    "streaming": "The worker is streaming your response from llama-server.",
     "cancelled": "This response was cancelled before completion.",
 }
 MODE_OPTIONS = {

@@ -1,14 +1,14 @@
 from collections.abc import AsyncIterator
 
-from app.api.dependencies import get_agent_service
-from app.api.main import create_app
-from app.api.models import ChatResponse, ResponseMetadata
+from app.application.models import ChatResult, ResponseMetadata
+from app.interfaces.api.dependencies import get_agent_service
+from app.interfaces.api.main import create_app
 from fastapi.testclient import TestClient
 
 
 class FakeAgentService:
     async def chat_full(self, request):
-        return ChatResponse(
+        return ChatResult(
             mode=request.mode or "general",
             response="Authenticated response.",
             metadata=ResponseMetadata(session_id="auth-test"),

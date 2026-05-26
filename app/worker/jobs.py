@@ -34,8 +34,8 @@ class NonRetryableLLMJobError(RuntimeError):
 
 
 def get_worker_class() -> type[SimpleWorker]:
-    # Keep LLM execution inside one long-lived process so the loaded GPU model
-    # is reused across jobs instead of being re-created in forked work horses.
+    # Keep queued LLM execution inside one long-lived process so one worker
+    # serializes model-server calls and stream publishing across jobs.
     return SimpleWorker
 
 
@@ -313,7 +313,7 @@ def process_llm_call(payload: dict) -> dict:
 def create_worker(connection: Redis | None = None) -> Worker:
     if LLM_WORKER_CONCURRENCY != 1:
         raise RuntimeError(
-            "LLM_WORKER_CONCURRENCY must remain 1 for the local GPU worker."
+            "LLM_WORKER_CONCURRENCY must remain 1 for the queue-backed LLM worker."
         )
     redis_connection = connection or get_redis_connection(_SETTINGS.redis_url)
     worker_class = get_worker_class()

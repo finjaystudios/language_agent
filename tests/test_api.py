@@ -1,6 +1,6 @@
 import asyncio
 
-from app.api.main import create_app
+from app.interfaces.api.main import create_app
 
 
 def route_response(app, path: str) -> dict[str, str]:

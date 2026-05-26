@@ -1,5 +1,6 @@
 import pytest
-from app.api.models import (
+from app.domain.intent_result import IntentResult
+from app.interfaces.api.models import (
     ApiMode,
     ChatRequest,
     ChatResponse,
@@ -7,7 +8,6 @@ from app.api.models import (
     IntentClassificationRequest,
     StreamChatRequest,
 )
-from app.data_models.intent_result import IntentResult
 from pydantic import ValidationError
 
 
