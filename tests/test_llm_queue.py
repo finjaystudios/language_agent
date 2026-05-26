@@ -83,6 +83,7 @@ def test_queued_gateway_enqueues_and_waits(monkeypatch):
     assert captured["job"].call_type == "structured_json"
     assert captured["job"].messages[0]["role"] == "system"
     assert captured["job"].messages[1]["content"] == "user"
+    assert captured["job"].generation_parameters == {}
 
 
 def test_chat_full_translation_creates_multiple_llm_jobs():
@@ -125,9 +126,11 @@ def test_chat_full_translation_creates_multiple_llm_jobs():
 
 def test_worker_processes_mocked_llm_call(monkeypatch):
     class FakeService:
-        def ask_llm_sync(self, *, messages, schema, temperature, max_tokens):
+        def ask_llm_sync(self, *, messages, schema, mode=None, **generation_parameters):
             assert messages[1]["content"] == "user"
             assert schema == {"type": "object"}
+            assert mode == "intent"
+            assert generation_parameters == {}
             return {"response": "done"}
 
     monkeypatch.setattr("app.worker.jobs.get_worker_llm_service", lambda: FakeService())
@@ -150,7 +153,8 @@ def test_worker_processes_mocked_llm_call(monkeypatch):
                 {"role": "user", "content": "user"},
             ],
             response_schema={"type": "object"},
-            generation_parameters={"temperature": 0.1, "max_tokens": 2000},
+            mode="intent",
+            generation_parameters={},
         ).model_dump(mode="json")
     )
 
@@ -163,7 +167,7 @@ def test_worker_serializes_mocked_llm_calls(monkeypatch):
     state_lock = threading.Lock()
 
     class FakeService:
-        def generate_text_sync(self, *, messages, temperature, max_tokens):
+        def generate_text_sync(self, *, messages, mode=None, **generation_parameters):
             with state_lock:
                 state["active"] += 1
                 state["max_active"] = max(state["max_active"], state["active"])
@@ -191,7 +195,7 @@ def test_worker_serializes_mocked_llm_calls(monkeypatch):
                 {"role": "system", "content": "system"},
                 {"role": "user", "content": f"user-{index}"},
             ],
-            generation_parameters={"temperature": 0.1, "max_tokens": 2000},
+            generation_parameters={},
         ).model_dump(mode="json")
         for index in range(2)
     ]
@@ -212,7 +216,8 @@ def test_worker_streaming_publishes_mocked_token_chunks(monkeypatch):
     events = []
 
     class FakeService:
-        def stream_llm_sync(self, *, messages, temperature, max_tokens):
+        def stream_llm_sync(self, *, messages, mode=None, **generation_parameters):
+            assert mode is None
             yield {"choices": [{"delta": {"content": "bon"}}]}
             yield {"choices": [{"delta": {"content": "jour"}}]}
 
@@ -247,7 +252,7 @@ def test_worker_streaming_publishes_mocked_token_chunks(monkeypatch):
                 {"role": "system", "content": "system"},
                 {"role": "user", "content": "user"},
             ],
-            generation_parameters={"temperature": 0.1, "max_tokens": 2000},
+            generation_parameters={},
         ).model_dump(mode="json")
     )
 
@@ -274,7 +279,7 @@ def test_worker_streaming_cancellation_closes_stream_and_marks_cancelled(monkeyp
             state["closed"] = True
 
     class FakeService:
-        def stream_llm_sync(self, *, messages, temperature, max_tokens):
+        def stream_llm_sync(self, *, messages, mode=None, **generation_parameters):
             return FakeStream()
 
     class FakeJob:
@@ -312,7 +317,7 @@ def test_worker_streaming_cancellation_closes_stream_and_marks_cancelled(monkeyp
                 {"role": "system", "content": "system"},
                 {"role": "user", "content": "user"},
             ],
-            generation_parameters={"temperature": 0.1, "max_tokens": 2000},
+            generation_parameters={},
         ).model_dump(mode="json")
     )
 
@@ -335,7 +340,7 @@ def test_worker_streaming_failure_publishes_safe_error(monkeypatch):
     events = []
 
     class FakeService:
-        def stream_llm_sync(self, *, messages, temperature, max_tokens):
+        def stream_llm_sync(self, *, messages, mode=None, **generation_parameters):
             raise LlamaServerMalformedResponseError("bad stream event")
 
     class FakeJob:
@@ -371,7 +376,7 @@ def test_worker_streaming_failure_publishes_safe_error(monkeypatch):
                     {"role": "system", "content": "system"},
                     {"role": "user", "content": "user"},
                 ],
-                generation_parameters={"temperature": 0.1, "max_tokens": 2000},
+                generation_parameters={},
             ).model_dump(mode="json")
         )
 

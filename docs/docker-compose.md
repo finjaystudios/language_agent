@@ -44,6 +44,8 @@ the in-container mount path under `/models`, for example:
 
 The default Compose flow sets `LLM_BACKEND=llama_server`, so the worker
 calls `http://llama-server:8080` over the internal Compose network.
+The worker also reads `MODEL_PROFILES_PATH=config/model_profiles.yml`, and the
+backend image now copies that YAML file into `/app/config/`.
 
 GTX 1080 / Pascal note:
 

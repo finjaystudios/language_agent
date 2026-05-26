@@ -187,6 +187,7 @@ def process_llm_call(payload: dict) -> dict:
                     llm_call.result = service.ask_llm_sync(
                         messages=llm_call.messages,
                         schema=llm_call.response_schema or {},
+                        mode=llm_call.mode,
                         **llm_call.generation_parameters,
                     )
                 except (ValueError, TypeError, KeyError) as error:
@@ -196,6 +197,7 @@ def process_llm_call(payload: dict) -> dict:
             elif llm_call.call_type == "text_generation":
                 llm_call.result = service.generate_text_sync(
                     messages=llm_call.messages,
+                    mode=llm_call.mode,
                     **llm_call.generation_parameters,
                 )
             else:
@@ -210,6 +212,7 @@ def process_llm_call(payload: dict) -> dict:
                 parts: list[str] = []
                 stream = service.stream_llm_sync(
                     messages=llm_call.messages,
+                    mode=llm_call.mode,
                     **llm_call.generation_parameters,
                 )
                 try:

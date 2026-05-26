@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from collections.abc import AsyncIterator, Iterator
 from contextlib import suppress
 from typing import Any
@@ -10,8 +11,12 @@ from typing import Any
 import httpx
 
 from app.core.config import AppSettings
+from app.core.model_profiles import ModelProfile, ModelProfiles, get_model_profiles
 
 logger = logging.getLogger(__name__)
+_THINK_OPEN_TAG = "<think>"
+_THINK_CLOSE_TAG = "</think>"
+_THINK_BLOCK_PATTERN = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
 
 
 class LlamaServerGatewayError(RuntimeError):
@@ -39,10 +44,14 @@ class LlamaServerGateway:
         self,
         settings: AppSettings,
         client: httpx.Client | None = None,
+        model_profiles: ModelProfiles | None = None,
     ) -> None:
         self.settings = settings
         self.base_url = settings.llama_server_url.rstrip("/")
         self.client = client or httpx.Client(base_url=self.base_url)
+        self.model_profiles = model_profiles or get_model_profiles(
+            settings.model_profiles_path
+        )
 
     def _request_timeout(self, timeout_seconds: int) -> httpx.Timeout:
         return httpx.Timeout(
@@ -59,20 +68,67 @@ class LlamaServerGateway:
             headers["Authorization"] = f"Bearer {self.settings.llama_server_api_key}"
         return headers
 
+    def _apply_prompt_control(
+        self,
+        messages: list[dict[str, str]],
+        prompt_control: str,
+    ) -> list[dict[str, str]]:
+        normalized_messages = [dict(message) for message in messages]
+        if not prompt_control:
+            return normalized_messages
+        for message in normalized_messages:
+            if message.get("role") == "system":
+                content = message.get("content", "")
+                if prompt_control not in content.splitlines():
+                    message["content"] = (
+                        f"{content.rstrip()}\n\n{prompt_control}"
+                        if content.strip()
+                        else prompt_control
+                    )
+                return normalized_messages
+        return [{"role": "system", "content": prompt_control}, *normalized_messages]
+
+    def _profile_for_mode(self, mode: str | None) -> ModelProfile:
+        return self.model_profiles.select(mode)
+
+    def _merge_generation_parameters(
+        self,
+        profile: ModelProfile,
+        generation_parameters: dict[str, Any],
+        *,
+        stream: bool,
+    ) -> dict[str, Any]:
+        resolved = profile.generation_parameters()
+        for key, value in generation_parameters.items():
+            if value is not None:
+                resolved[key] = value
+        resolved["stream"] = stream
+        if "model" not in resolved or not resolved["model"]:
+            if self.settings.llama_server_model_name:
+                resolved["model"] = self.settings.llama_server_model_name
+            else:
+                resolved.pop("model", None)
+        return resolved
+
     def _build_payload(
         self,
         *,
         messages: list[dict[str, str]],
+        mode: str | None,
         stream: bool,
         schema: dict[str, Any] | None = None,
         **generation_parameters: Any,
     ) -> dict[str, Any]:
-        payload: dict[str, Any] = {"messages": messages, "stream": stream}
-        if self.settings.llama_server_model_name:
-            payload["model"] = self.settings.llama_server_model_name
-        for key, value in generation_parameters.items():
-            if value is not None:
-                payload[key] = value
+        profile = self._profile_for_mode(mode)
+        payload: dict[str, Any] = self._merge_generation_parameters(
+            profile,
+            generation_parameters,
+            stream=stream,
+        )
+        payload["messages"] = self._apply_prompt_control(
+            messages,
+            profile.prompt_control,
+        )
         if schema is not None:
             payload["response_format"] = {
                 "type": "json_schema",
@@ -126,17 +182,24 @@ class LlamaServerGateway:
             raise LlamaServerMalformedResponseError(
                 "llama-server response did not contain text content."
             )
-        return content
+        return self._strip_think_blocks(content).strip()
+
+    def _strip_think_blocks(self, content: str) -> str:
+        stripped = _THINK_BLOCK_PATTERN.sub("", content)
+        stripped = stripped.replace(_THINK_OPEN_TAG, "").replace(_THINK_CLOSE_TAG, "")
+        return stripped
 
     def ask_llm_sync(
         self,
         *,
         messages: list[dict[str, str]],
         schema: dict[str, Any],
+        mode: str | None = None,
         **generation_parameters: Any,
     ) -> dict[str, Any]:
         payload = self._build_payload(
             messages=messages,
+            mode=mode,
             stream=False,
             schema=schema,
             **generation_parameters,
@@ -157,10 +220,12 @@ class LlamaServerGateway:
         self,
         *,
         messages: list[dict[str, str]],
+        mode: str | None = None,
         **generation_parameters: Any,
     ) -> str:
         payload = self._build_payload(
             messages=messages,
+            mode=mode,
             stream=False,
             **generation_parameters,
         )
@@ -174,14 +239,17 @@ class LlamaServerGateway:
         self,
         *,
         messages: list[dict[str, str]],
+        mode: str | None = None,
         **generation_parameters: Any,
     ) -> Iterator[dict[str, Any]]:
         payload = self._build_payload(
             messages=messages,
+            mode=mode,
             stream=True,
             **generation_parameters,
         )
         saw_terminal_event = False
+        think_filter = _ThinkStreamFilter()
         try:
             with self.client.stream(
                 "POST",
@@ -224,7 +292,9 @@ class LlamaServerGateway:
                         continue
                     token = delta.get("content")
                     if isinstance(token, str) and token:
-                        yield {"choices": [{"delta": {"content": token}}]}
+                        visible_token = think_filter.feed(token)
+                        if visible_token:
+                            yield {"choices": [{"delta": {"content": visible_token}}]}
         except httpx.TimeoutException as error:
             raise LlamaServerTimeoutError("llama-server timed out.") from error
         except httpx.ConnectError as error:
@@ -234,6 +304,9 @@ class LlamaServerGateway:
 
         if not saw_terminal_event:
             raise LlamaServerInterruptedError("llama-server interrupted generation.")
+        trailing_content = think_filter.flush()
+        if trailing_content:
+            yield {"choices": [{"delta": {"content": trailing_content}}]}
 
     def check_health(self) -> bool:
         health_path = self.settings.llama_server_health_path or "/health"
@@ -268,8 +341,7 @@ class LlamaServerGateway:
             self.ask_llm_sync,
             messages=messages,
             schema=schema,
-            temperature=0.1,
-            max_tokens=2000,
+            mode=mode,
         )
         logger.info("llama_server_ask_complete mode=%s", mode)
         return result
@@ -298,8 +370,7 @@ class LlamaServerGateway:
             try:
                 for chunk in self.stream_llm_sync(
                     messages=messages,
-                    temperature=0.1,
-                    max_tokens=2000,
+                    mode=mode,
                 ):
                     delta = chunk["choices"][0].get("delta", {})
                     token = delta.get("content")
@@ -331,3 +402,55 @@ class LlamaServerGateway:
     def close(self) -> None:
         with suppress(Exception):
             self.client.close()
+
+
+class _ThinkStreamFilter:
+    def __init__(self) -> None:
+        self._buffer = ""
+        self._inside_think = False
+
+    def _overlap_suffix(self, text: str, tag: str) -> str:
+        limit = min(len(text), len(tag) - 1)
+        for size in range(limit, 0, -1):
+            if text[-size:].lower() == tag[:size]:
+                return text[-size:]
+        return ""
+
+    def feed(self, chunk: str) -> str:
+        text = self._buffer + chunk
+        self._buffer = ""
+        visible_parts: list[str] = []
+
+        while text:
+            if self._inside_think:
+                close_index = text.lower().find(_THINK_CLOSE_TAG)
+                if close_index == -1:
+                    self._buffer = self._overlap_suffix(text, _THINK_CLOSE_TAG)
+                    return ""
+                text = text[close_index + len(_THINK_CLOSE_TAG) :]
+                self._inside_think = False
+                continue
+
+            open_index = text.lower().find(_THINK_OPEN_TAG)
+            if open_index == -1:
+                tail = self._overlap_suffix(text, _THINK_OPEN_TAG)
+                if tail:
+                    visible_parts.append(text[: -len(tail)])
+                    self._buffer = tail
+                else:
+                    visible_parts.append(text)
+                return "".join(visible_parts)
+
+            visible_parts.append(text[:open_index])
+            text = text[open_index + len(_THINK_OPEN_TAG) :]
+            self._inside_think = True
+
+        return "".join(visible_parts)
+
+    def flush(self) -> str:
+        if self._inside_think:
+            self._buffer = ""
+            return ""
+        trailing = self._buffer
+        self._buffer = ""
+        return trailing

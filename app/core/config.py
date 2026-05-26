@@ -39,6 +39,7 @@ class AppSettings:
     llama_server_stream_timeout_seconds: int
     llama_server_model_name: str
     llama_server_health_path: str
+    model_profiles_path: str
 
     @classmethod
     def from_env(cls) -> "AppSettings":
@@ -83,4 +84,7 @@ class AppSettings:
             ),
             llama_server_model_name=os.getenv("LLAMA_SERVER_MODEL_NAME", ""),
             llama_server_health_path=os.getenv("LLAMA_SERVER_HEALTH_PATH", "/health"),
+            model_profiles_path=os.getenv(
+                "MODEL_PROFILES_PATH", "config/model_profiles.yml"
+            ),
         )

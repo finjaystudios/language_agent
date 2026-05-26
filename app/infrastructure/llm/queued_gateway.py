@@ -33,7 +33,7 @@ class QueuedLLMGateway(LLMGateway):
                 {"role": "user", "content": user_prompt},
             ],
             mode=mode,
-            generation_parameters={"temperature": 0.1, "max_tokens": 2000},
+            generation_parameters={},
             response_schema=schema,
         )
         await self.queue_service.enqueue_llm_call(job)
@@ -68,7 +68,7 @@ class QueuedLLMGateway(LLMGateway):
                 {"role": "user", "content": user_prompt},
             ],
             mode=mode,
-            generation_parameters={"temperature": 0.1, "max_tokens": 2000},
+            generation_parameters={},
         )
         await self.queue_service.enqueue_llm_call(job)
         try:

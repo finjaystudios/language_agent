@@ -29,6 +29,8 @@ intent routing, state updates, and final generation.
 - FastAPI produces jobs.
 - `app.worker.main` consumes jobs.
 - `llama-server` owns the GGUF model lifecycle in the default runtime.
+- YAML model profiles tune per-mode llama-server request parameters without
+  changing the queue boundary or the active model.
 
 ## Request Flow
 
@@ -86,6 +88,9 @@ include:
 Streaming jobs publish status and token events into Redis Streams using
 `LLM_STREAM_CHANNEL_PREFIX`. FastAPI reads those events and forwards them as
 `text/event-stream`.
+
+The worker selects the profile from `MODEL_PROFILES_PATH` based on the queued
+job `mode`. Unknown or missing modes fall back to the `default` profile.
 
 Event shapes include:
 

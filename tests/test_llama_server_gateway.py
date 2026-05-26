@@ -31,6 +31,7 @@ def make_settings(**overrides):
             "llama_server_stream_timeout_seconds": 30,
             "llama_server_model_name": "",
             "llama_server_health_path": "/health",
+            "model_profiles_path": "config/model_profiles.yml",
         }
     )
     base.update(overrides)
@@ -42,7 +43,7 @@ def make_client(handler):
     return httpx.Client(transport=transport, base_url="http://llama-server:8080")
 
 
-def test_ask_llm_sync_parses_structured_response_and_passes_generation_params():
+def test_ask_llm_sync_uses_mode_profile_and_parses_structured_response():
     captured = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -61,18 +62,20 @@ def test_ask_llm_sync_parses_structured_response_and_passes_generation_params():
             {"role": "user", "content": "user"},
         ],
         schema={"type": "object"},
-        temperature=0.2,
-        max_tokens=123,
-        top_p=0.95,
+        mode="translation",
         stop=["\n\n"],
         seed=7,
     )
 
     assert result == {"response": "bonjour"}
+    assert captured["payload"]["messages"][0]["content"].endswith("/no_think")
     assert captured["payload"]["messages"][1]["content"] == "user"
-    assert captured["payload"]["temperature"] == 0.2
-    assert captured["payload"]["max_tokens"] == 123
-    assert captured["payload"]["top_p"] == 0.95
+    assert captured["payload"]["model"] == "qwen3-4b-q4-k-m"
+    assert captured["payload"]["temperature"] == 0.3
+    assert captured["payload"]["max_tokens"] == 512
+    assert captured["payload"]["top_p"] == 0.8
+    assert captured["payload"]["top_k"] == 20
+    assert captured["payload"]["min_p"] == 0.0
     assert captured["payload"]["stop"] == ["\n\n"]
     assert captured["payload"]["seed"] == 7
     assert captured["payload"]["response_format"]["json_schema"]["schema"] == {
@@ -80,13 +83,21 @@ def test_ask_llm_sync_parses_structured_response_and_passes_generation_params():
     }
 
 
-def test_generate_text_sync_returns_message_content():
+def test_generate_text_sync_strips_think_content():
     def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content.decode("utf-8"))
         assert payload["stream"] is False
         return httpx.Response(
             200,
-            json={"choices": [{"message": {"content": "plain text response"}}]},
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": "<think>hidden reasoning</think>plain text response"
+                        }
+                    }
+                ]
+            },
         )
 
     gateway = LlamaServerGateway(make_settings(), client=make_client(handler))
@@ -96,16 +107,16 @@ def test_generate_text_sync_returns_message_content():
             {"role": "system", "content": "system"},
             {"role": "user", "content": "user"},
         ],
-        temperature=0.1,
-        max_tokens=2000,
+        mode="definition",
     )
 
     assert result == "plain text response"
 
 
-def test_stream_llm_sync_yields_openai_compatible_chunks():
+def test_stream_llm_sync_yields_openai_compatible_chunks_without_think_content():
     stream_body = (
-        'data: {"choices":[{"delta":{"content":"bon"}}]}\n\n'
+        'data: {"choices":[{"delta":{"content":"<thi"}}]}\n\n'
+        'data: {"choices":[{"delta":{"content":"nk>hidden</think>bon"}}]}\n\n'
         'data: {"choices":[{"delta":{"content":"jour"}}]}\n\n'
         "data: [DONE]\n\n"
     )
@@ -121,8 +132,7 @@ def test_stream_llm_sync_yields_openai_compatible_chunks():
                 {"role": "system", "content": "system"},
                 {"role": "user", "content": "user"},
             ],
-            temperature=0.1,
-            max_tokens=2000,
+            mode="learning",
         )
     )
 
@@ -145,8 +155,7 @@ def test_stream_llm_sync_timeout_is_sanitized():
                     {"role": "system", "content": "system"},
                     {"role": "user", "content": "user"},
                 ],
-                temperature=0.1,
-                max_tokens=2000,
+                mode="general",
             )
         )
 
@@ -168,8 +177,7 @@ def test_stream_llm_sync_rejects_malformed_stream_event():
                     {"role": "system", "content": "system"},
                     {"role": "user", "content": "user"},
                 ],
-                temperature=0.1,
-                max_tokens=2000,
+                mode="general",
             )
         )
 
@@ -191,8 +199,7 @@ def test_stream_llm_sync_detects_interrupted_generation():
                     {"role": "system", "content": "system"},
                     {"role": "user", "content": "user"},
                 ],
-                temperature=0.1,
-                max_tokens=2000,
+                mode="general",
             )
         )
 
@@ -211,8 +218,7 @@ def test_llama_server_timeout_is_sanitized():
                 {"role": "system", "content": "system"},
                 {"role": "user", "content": "user"},
             ],
-            temperature=0.1,
-            max_tokens=2000,
+            mode="general",
         )
 
     assert str(error.value) == "llama-server timed out."
@@ -230,8 +236,7 @@ def test_llama_server_non_200_response_is_sanitized():
                 {"role": "system", "content": "system"},
                 {"role": "user", "content": "user"},
             ],
-            temperature=0.1,
-            max_tokens=2000,
+            mode="general",
         )
 
     assert str(error.value) == "llama-server returned HTTP 503."
@@ -249,8 +254,7 @@ def test_llama_server_malformed_response_is_sanitized():
                 {"role": "system", "content": "system"},
                 {"role": "user", "content": "user"},
             ],
-            temperature=0.1,
-            max_tokens=2000,
+            mode="general",
         )
 
     assert "did not contain any choices" in str(error.value)
@@ -276,8 +280,7 @@ def test_api_key_header_is_attached_when_configured():
             {"role": "system", "content": "system"},
             {"role": "user", "content": "user"},
         ],
-        temperature=0.1,
-        max_tokens=2000,
+        mode="general",
     )
 
     assert captured["authorization"] == "Bearer secret-token"
@@ -318,3 +321,27 @@ def test_async_gateway_preserves_application_facing_interface():
     )
 
     assert result == {"mode": "translation"}
+
+
+def test_prompt_control_is_inserted_when_no_system_message_exists():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "plain text response"}}]},
+        )
+
+    gateway = LlamaServerGateway(make_settings(), client=make_client(handler))
+
+    gateway.generate_text_sync(
+        messages=[{"role": "user", "content": "user"}],
+        mode="learning",
+    )
+
+    assert captured["payload"]["messages"][0] == {
+        "role": "system",
+        "content": "/think",
+    }
+    assert captured["payload"]["messages"][1]["role"] == "user"

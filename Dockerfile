@@ -25,6 +25,7 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     && python -m pip install --no-compile -r requirements.txt
 
 COPY app ./app
+COPY config ./config
 
 EXPOSE 8000
 

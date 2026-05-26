@@ -74,6 +74,7 @@ Operational boundaries:
 | `LLAMA_SERVER_STREAM_TIMEOUT_SECONDS` | `180` | Streaming worker HTTP timeout |
 | `LLAMA_SERVER_MODEL_NAME` | `qwen2.5-7b-instruct` | Optional model name passed to the server |
 | `LLAMA_SERVER_HEALTH_PATH` | `/health` | Optional future readiness path |
+| `MODEL_PROFILES_PATH` | `config/model_profiles.yml` | YAML file for per-mode generation settings |
 
 Common Compose-local runtime knobs for the `llama-server` container:
 
@@ -128,6 +129,26 @@ curl http://127.0.0.1:8080/v1/models
 
 The direct port exists for local debugging only. Caddy does not route to
 `llama-server`, and this stack does not expose it through Cloudflare.
+
+## Model Profiles
+
+The worker now loads one YAML model-profile file at startup and uses it to tune
+per-mode llama-server requests while keeping a single loaded model:
+`Qwen3-4B-Q4_K_M`.
+
+Current built-in profiles:
+
+- `default`
+- `intent`
+- `translation`
+- `definition`
+- `learning`
+- `general`
+
+This is not multi-model routing. The selected profile changes generation
+controls such as `temperature`, `top_p`, `top_k`, `min_p`, `max_tokens`, and
+Qwen3 reasoning hints via `/think` or `/no_think`, but all requests still hit
+the same llama-server instance and the same loaded GGUF model.
 
 ## Worker Behaviour
 

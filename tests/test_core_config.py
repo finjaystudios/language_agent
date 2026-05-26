@@ -17,6 +17,7 @@ def test_app_settings_default_llama_server_config(monkeypatch):
         "LLAMA_SERVER_STREAM_TIMEOUT_SECONDS",
         "LLAMA_SERVER_MODEL_NAME",
         "LLAMA_SERVER_HEALTH_PATH",
+        "MODEL_PROFILES_PATH",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -29,6 +30,7 @@ def test_app_settings_default_llama_server_config(monkeypatch):
     assert settings.llama_server_stream_timeout_seconds == 180
     assert settings.llama_server_model_name == ""
     assert settings.llama_server_health_path == "/health"
+    assert settings.model_profiles_path == "config/model_profiles.yml"
 
 
 def test_app_settings_reads_llama_server_env(monkeypatch):
@@ -39,6 +41,7 @@ def test_app_settings_reads_llama_server_env(monkeypatch):
     monkeypatch.setenv("LLAMA_SERVER_STREAM_TIMEOUT_SECONDS", "90")
     monkeypatch.setenv("LLAMA_SERVER_MODEL_NAME", "qwen2.5-7b-instruct")
     monkeypatch.setenv("LLAMA_SERVER_HEALTH_PATH", "/v1/models")
+    monkeypatch.setenv("MODEL_PROFILES_PATH", "config/custom-model-profiles.yml")
 
     settings = AppSettings.from_env()
 
@@ -49,3 +52,4 @@ def test_app_settings_reads_llama_server_env(monkeypatch):
     assert settings.llama_server_stream_timeout_seconds == 90
     assert settings.llama_server_model_name == "qwen2.5-7b-instruct"
     assert settings.llama_server_health_path == "/v1/models"
+    assert settings.model_profiles_path == "config/custom-model-profiles.yml"

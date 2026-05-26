@@ -39,6 +39,7 @@ class LLMService:
         *,
         messages: list[dict[str, str]],
         schema: dict,
+        mode: str | None = None,
         temperature: float = 0.1,
         max_tokens: int = 2000,
     ) -> dict:
@@ -58,6 +59,7 @@ class LLMService:
         self,
         *,
         messages: list[dict[str, str]],
+        mode: str | None = None,
         temperature: float = 0.1,
         max_tokens: int = 2000,
     ) -> str:
@@ -72,6 +74,7 @@ class LLMService:
         self,
         *,
         messages: list[dict[str, str]],
+        mode: str | None = None,
         temperature: float = 0.1,
         max_tokens: int = 1200,
     ):

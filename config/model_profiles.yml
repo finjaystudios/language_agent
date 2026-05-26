@@ -1,0 +1,71 @@
+model:
+  active_model_id: qwen3-4b-q4-k-m
+  active_model_name: Qwen3-4B-Q4_K_M
+  backend: llama_server
+
+profiles:
+  default:
+    model: qwen3-4b-q4-k-m
+    reasoning: "off"
+    prompt_control: "/no_think"
+    temperature: 0.7
+    top_p: 0.8
+    top_k: 20
+    min_p: 0
+    max_tokens: 512
+    stream: false
+
+  intent:
+    model: qwen3-4b-q4-k-m
+    reasoning: "off"
+    prompt_control: "/no_think"
+    temperature: 0.1
+    top_p: 0.8
+    top_k: 20
+    min_p: 0
+    max_tokens: 128
+    stream: false
+
+  translation:
+    model: qwen3-4b-q4-k-m
+    reasoning: "off"
+    prompt_control: "/no_think"
+    temperature: 0.3
+    top_p: 0.8
+    top_k: 20
+    min_p: 0
+    max_tokens: 512
+    stream: false
+
+  definition:
+    model: qwen3-4b-q4-k-m
+    reasoning: "off"
+    prompt_control: "/no_think"
+    temperature: 0.4
+    top_p: 0.8
+    top_k: 20
+    min_p: 0
+    max_tokens: 512
+    stream: false
+
+  learning:
+    model: qwen3-4b-q4-k-m
+    reasoning: "on"
+    prompt_control: "/think"
+    temperature: 0.6
+    top_p: 0.95
+    top_k: 20
+    min_p: 0
+    max_tokens: 1024
+    stream: true
+
+  general:
+    model: qwen3-4b-q4-k-m
+    reasoning: "off"
+    prompt_control: "/no_think"
+    temperature: 0.7
+    top_p: 0.8
+    top_k: 20
+    min_p: 0
+    max_tokens: 768
+    stream: true
