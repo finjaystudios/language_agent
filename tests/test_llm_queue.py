@@ -121,7 +121,7 @@ def test_chat_full_translation_creates_multiple_llm_jobs():
     )
 
     assert response.response == "bonjour"
-    assert [call["mode"] for call in gateway.calls] == ["translation", "translation"]
+    assert [call["mode"] for call in gateway.calls] == ["session_state", "translation"]
 
 
 def test_worker_processes_mocked_llm_call(monkeypatch):
