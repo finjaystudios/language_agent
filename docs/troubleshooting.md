@@ -12,7 +12,6 @@ Symptoms:
 Checks:
 
 - prefer the current entry points:
-  - `python -m app.cli.main`
   - `python -m uvicorn app.interfaces.api.main:app --reload`
   - `python -m app.worker.main`
 - confirm your shell is running from the repository root
@@ -40,16 +39,15 @@ Checks:
 
 Symptoms:
 
-- FastAPI appears to try loading the GGUF model
+- FastAPI or the worker appears to try loading the GGUF model directly
 - multiple processes consume GPU memory
-- the wrong service owns `LLM_MODEL_PATH`
+- the wrong service owns the model path or GPU settings
 
 Checks:
 
 - in the default Compose path, only `llama-server` should load the GGUF model
-- only the CLI and legacy `llama_cpp_python` worker path should load the local
-  model runtime directly
-- FastAPI should enqueue through Redis + RQ, not import the local model adapter
+- FastAPI should enqueue through Redis + RQ, not import model runtime code
+- the worker should call `llama-server` over HTTP, not load GGUF files itself
 - the Web UI should call FastAPI over HTTP only
 - for Compose, confirm only `llama-server` mounts `./models`
 
@@ -57,14 +55,14 @@ Checks:
 
 Symptoms:
 
-- worker startup fails
-- CLI startup fails
-- errors mention `LLM_MODEL_PATH` or a missing GGUF file
+- `llama-server` fails to start
+- health checks fail before requests complete
+- errors mention a missing GGUF file or bad model path
 
 Checks:
 
-- confirm `LLM_MODEL_PATH` points at a real file
-- for host-local runs, use a repo path such as `models/...`
+- confirm `LLAMA_SERVER_MODEL_PATH` points at a real file inside the container
+- for host-local runs, pass a real path to the `llama-server --model ...` command
 - for Compose, use the in-container `/models/...` path for `llama-server`
 - confirm `./models` is mounted into the `llama-server` container
 
@@ -72,7 +70,6 @@ Checks:
 
 Symptoms:
 
-- CLI or worker fails during GPU checks
 - `llama-server` fails to start or crashes on first request
 - model initialization fails before requests complete
 
@@ -83,8 +80,9 @@ Checks:
 - confirm the `llama-server` container, not FastAPI or Web UI, owns model execution
 - for GTX 1080 / Pascal, confirm the `llama-server` binary or image was built
   with `sm_61` support
-- reduce `LLM_CONTEXT_SIZE`, `LLM_N_GPU_LAYERS`, `LLAMA_SERVER_BATCH_SIZE`, and
-  `LLAMA_SERVER_UBATCH_SIZE` if the server fails during model load
+- reduce `LLAMA_SERVER_CONTEXT_SIZE`, `LLAMA_SERVER_N_GPU_LAYERS`,
+  `LLAMA_SERVER_BATCH_SIZE`, and `LLAMA_SERVER_UBATCH_SIZE` if the server fails
+  during model load
 - if you see `CUDA error: no kernel image is available for execution on the device`,
   treat that as a GPU-architecture build mismatch and rebuild or replace the
   `llama-server` binary/image with `sm_61` support

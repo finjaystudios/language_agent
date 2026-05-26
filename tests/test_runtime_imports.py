@@ -15,7 +15,6 @@ def test_normal_runtime_imports_do_not_require_llama_cpp(monkeypatch):
         "app.application.agent_service",
         "app.worker.jobs",
         "app.infrastructure.llm.factory",
-        "app.cli.main",
     ):
         sys.modules.pop(module_name, None)
         importlib.import_module(module_name)

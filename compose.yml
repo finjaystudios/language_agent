@@ -17,21 +17,21 @@ services:
     restart: unless-stopped
     command:
       - -m
-      - ${LLM_MODEL_PATH:-/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf}
+      - ${LLAMA_SERVER_MODEL_PATH:-/models/Qwen3-4B-Q4_K_M.gguf}
       - --host
       - 0.0.0.0
       - --port
       - "${LLAMA_SERVER_PORT:-8082}"
       - --ctx-size
-      - "${LLM_CONTEXT_SIZE:-4096}"
+      - "${LLAMA_SERVER_CONTEXT_SIZE:-2048}"
       - --n-gpu-layers
-      - "${LLM_N_GPU_LAYERS:--1}"
+      - "${LLAMA_SERVER_N_GPU_LAYERS:-20}"
       - --batch-size
       - "${LLAMA_SERVER_BATCH_SIZE:-256}"
       - --ubatch-size
       - "${LLAMA_SERVER_UBATCH_SIZE:-128}"
       - --threads
-      - "${LLM_THREADS:-4}"
+      - "${LLAMA_SERVER_THREADS:-4}"
       - --parallel
       - "1"
     ports:
@@ -128,7 +128,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import os, sys; backend = os.getenv('LLM_BACKEND', 'llama_cpp_python'); from app.core.config import AppSettings; from app.infrastructure.llm.llama_server_gateway import LlamaServerGateway; sys.exit(0 if backend != 'llama_server' or LlamaServerGateway(AppSettings.from_env()).check_health() else 1)",
+          "import sys; from app.core.config import AppSettings; from app.infrastructure.llm.llama_server_gateway import LlamaServerGateway; sys.exit(0 if LlamaServerGateway(AppSettings.from_env()).check_health() else 1)",
         ]
       interval: 30s
       timeout: 10s

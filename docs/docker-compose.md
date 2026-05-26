@@ -35,11 +35,11 @@ Create a local `.env` file:
 Copy-Item .env.compose.example .env
 ```
 
-For Compose, `LLM_MODEL_PATH` now belongs to `llama-server` and must point at
+For Compose, `LLAMA_SERVER_MODEL_PATH` now belongs to `llama-server` and must point at
 the in-container mount path under `/models`, for example:
 
 ```text
-/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf
+/models/Qwen3-4B-Q4_K_M.gguf
 ```
 
 The default Compose flow sets `LLM_BACKEND=llama_server`, so the worker
@@ -53,8 +53,8 @@ GTX 1080 / Pascal note:
   if it was not built with `sm_61` support
 - if that happens, build a local CUDA image with the right architecture and set
   `LLAMA_SERVER_IMAGE` in `.env`
-- start conservatively with `LLM_CONTEXT_SIZE=1024` or `2048`,
-  `LLM_N_GPU_LAYERS=20`, `LLAMA_SERVER_BATCH_SIZE=256`, and
+- start conservatively with `LLAMA_SERVER_CONTEXT_SIZE=1024` or `2048`,
+  `LLAMA_SERVER_N_GPU_LAYERS=20`, `LLAMA_SERVER_BATCH_SIZE=256`, and
   `LLAMA_SERVER_UBATCH_SIZE=128`
 
 Build and start the stack:

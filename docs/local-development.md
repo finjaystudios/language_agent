@@ -12,15 +12,6 @@ Compose.
 
 Use [`.env.example`](../.env.example) as the host-local configuration template.
 
-## CLI
-
-The CLI does not use FastAPI, Redis, or Chainlit.
-
-```powershell
-$env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
-python -m app.cli.main
-```
-
 ## Redis
 
 Start Redis locally:
@@ -48,7 +39,7 @@ Start `llama-server` locally before the worker:
 
 ```powershell
 llama-server `
-  --model models/Qwen2.5-7B-Instruct-Q4_K_M.gguf `
+  --model models/Qwen3-4B-Q4_K_M.gguf `
   --host 127.0.0.1 `
   --port 8080 `
   --ctx-size 2048 `
@@ -63,15 +54,6 @@ Validate it directly:
 ```powershell
 curl http://127.0.0.1:8080/health
 curl http://127.0.0.1:8080/v1/models
-```
-
-Legacy fallback:
-
-```powershell
-$env:LLM_BACKEND = "llama_cpp_python"
-$env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
-python -m pip install -r requirements-legacy-llama-cpp.txt
-python -m app.worker.main
 ```
 
 ## FastAPI

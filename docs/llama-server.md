@@ -7,15 +7,9 @@ Move GGUF model ownership out of the Python worker process and into an external
 UI flow, or the Redis/RQ queue boundary.
 
 `llama-server` is now the default runtime for production-style local inference.
-The embedded `llama-cpp-python` path remains legacy-only.
+Embedded `llama-cpp-python` inference has been removed from the active runtime.
 
 ## Target Architecture
-
-Current runtime:
-
-```text
-FastAPI -> Redis/RQ -> worker -> embedded llama-cpp-python -> GPU model
-```
 
 Target runtime:
 
@@ -36,16 +30,15 @@ FastAPI -> Redis/RQ -> worker -> HTTP llama-server -> GPU model
 ## Current Code Surfaces
 
 - `app/ports/llm_gateway.py`: application-facing LLM contract
-- `app/infrastructure/llm/local_model.py`: current embedded
-  `llama-cpp-python` adapter
 - `app/infrastructure/llm/queued_gateway.py`: queue-backed LLM gateway used by
   FastAPI/application code
-- `app/worker/jobs.py`: worker job execution path and current direct model load
+- `app/worker/jobs.py`: worker job execution path
 - `app/domain/jobs.py`: queue job schema
 - `app/core/config.py`: shared environment-backed settings
 
-No FastAPI route or application service imports `llama_cpp`. The queue-backed
-worker/runtime boundary remains the only model-execution integration point.
+No FastAPI route, application service, or worker module loads GGUF models
+directly. The queue-backed worker/runtime boundary remains the only
+model-execution integration point.
 
 ## Compose Service
 
@@ -67,7 +60,7 @@ Operational boundaries:
 
 | Variable | Example | Purpose |
 | --- | --- | --- |
-| `LLM_BACKEND` | `llama_server` | Select the external HTTP runtime once implemented |
+| `LLM_BACKEND` | `llama_server` | Runtime selector; only `llama_server` is supported |
 | `LLAMA_SERVER_URL` | `http://localhost:8080` or `http://llama-server:8080` | Base URL for `llama-server` |
 | `LLAMA_SERVER_API_KEY` | empty by default | Optional auth secret for the server |
 | `LLAMA_SERVER_TIMEOUT_SECONDS` | `180` | Non-streaming worker HTTP timeout |
@@ -83,8 +76,12 @@ Common Compose-local runtime knobs for the `llama-server` container:
 | `LLAMA_SERVER_IMAGE` | `ghcr.io/ggml-org/llama.cpp:server-cuda` | Upstream image to run |
 | `LLAMA_SERVER_PORT` | `8080` | Internal service port |
 | `LLAMA_SERVER_HOST_PORT` | `8080` | Optional direct host debug port |
+| `LLAMA_SERVER_MODEL_PATH` | `/models/Qwen3-4B-Q4_K_M.gguf` | In-container GGUF model path |
+| `LLAMA_SERVER_CONTEXT_SIZE` | `2048` | Conservative context size |
+| `LLAMA_SERVER_N_GPU_LAYERS` | `20` | Conservative GPU offload setting |
 | `LLAMA_SERVER_BATCH_SIZE` | `256` | Conservative GTX 1080-friendly batch size |
 | `LLAMA_SERVER_UBATCH_SIZE` | `128` | Conservative GTX 1080-friendly micro-batch size |
+| `LLAMA_SERVER_THREADS` | `4` | CPU thread count |
 
 ## Local Manual Command
 
@@ -158,11 +155,6 @@ With `LLM_BACKEND=llama_server`:
 - the worker no longer needs local GPU execution settings in Compose
 - the worker healthcheck can fail even when the Python process is up, if
   `llama-server` is unreachable
-
-Legacy fallback remains available by setting `LLM_BACKEND=llama_cpp_python`, but
-that is now a compatibility path rather than the default runtime. It also
-requires the optional dependency in
-[`../requirements-legacy-llama-cpp.txt`](../requirements-legacy-llama-cpp.txt).
 
 ## Manual Validation Checklist
 

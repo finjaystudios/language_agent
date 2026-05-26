@@ -4,6 +4,7 @@ import time
 from types import SimpleNamespace
 from unittest.mock import sentinel
 
+import app.worker.jobs as worker_jobs
 import pytest
 from app.application.agent_service import AgentService
 from app.application.models import ChatCommand
@@ -11,7 +12,6 @@ from app.data_models.intent_result import IntentResult
 from app.domain.jobs import LLMCallJob
 from app.infrastructure.redis.queued_gateway import QueuedLLMService
 from app.memory.short_term import ConversationMemory
-from app.worker.jobs import get_worker_class, process_llm_call
 
 
 class FakeRouter:
@@ -133,18 +133,17 @@ def test_worker_processes_mocked_llm_call(monkeypatch):
             assert generation_parameters == {}
             return {"response": "done"}
 
-    monkeypatch.setattr("app.worker.jobs.get_worker_llm_service", lambda: FakeService())
-    monkeypatch.setattr("app.worker.jobs.get_current_job", lambda: None)
-    monkeypatch.setattr("app.worker.jobs.is_cancel_requested", lambda *args: False)
+    monkeypatch.setattr(worker_jobs, "get_worker_llm_service", lambda: FakeService())
+    monkeypatch.setattr(worker_jobs, "get_current_job", lambda: None)
+    monkeypatch.setattr(worker_jobs, "is_cancel_requested", lambda *args: False)
+    monkeypatch.setattr(worker_jobs, "record_wait_time", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        "app.worker.jobs.record_wait_time", lambda *args, **kwargs: None
-    )
-    monkeypatch.setattr(
-        "app.worker.jobs.record_completion_metrics",
+        worker_jobs,
+        "record_completion_metrics",
         lambda *args, **kwargs: None,
     )
 
-    result = process_llm_call(
+    result = worker_jobs.process_llm_call(
         LLMCallJob(
             job_id="job-1",
             call_type="structured_json",
@@ -176,14 +175,13 @@ def test_worker_serializes_mocked_llm_calls(monkeypatch):
                 state["active"] -= 1
             return messages[1]["content"]
 
-    monkeypatch.setattr("app.worker.jobs.get_worker_llm_service", lambda: FakeService())
-    monkeypatch.setattr("app.worker.jobs.get_current_job", lambda: None)
-    monkeypatch.setattr("app.worker.jobs.is_cancel_requested", lambda *args: False)
+    monkeypatch.setattr(worker_jobs, "get_worker_llm_service", lambda: FakeService())
+    monkeypatch.setattr(worker_jobs, "get_current_job", lambda: None)
+    monkeypatch.setattr(worker_jobs, "is_cancel_requested", lambda *args: False)
+    monkeypatch.setattr(worker_jobs, "record_wait_time", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        "app.worker.jobs.record_wait_time", lambda *args, **kwargs: None
-    )
-    monkeypatch.setattr(
-        "app.worker.jobs.record_completion_metrics",
+        worker_jobs,
+        "record_completion_metrics",
         lambda *args, **kwargs: None,
     )
 
@@ -201,7 +199,7 @@ def test_worker_serializes_mocked_llm_calls(monkeypatch):
     ]
 
     threads = [
-        threading.Thread(target=process_llm_call, args=(payload,))
+        threading.Thread(target=worker_jobs.process_llm_call, args=(payload,))
         for payload in payloads
     ]
     for thread in threads:
@@ -229,22 +227,22 @@ def test_worker_streaming_publishes_mocked_token_chunks(monkeypatch):
         def save_meta(self):
             return None
 
-    monkeypatch.setattr("app.worker.jobs.get_worker_llm_service", lambda: FakeService())
-    monkeypatch.setattr("app.worker.jobs.get_current_job", lambda: FakeJob())
-    monkeypatch.setattr("app.worker.jobs.is_cancel_requested", lambda *args: False)
+    monkeypatch.setattr(worker_jobs, "get_worker_llm_service", lambda: FakeService())
+    monkeypatch.setattr(worker_jobs, "get_current_job", lambda: FakeJob())
+    monkeypatch.setattr(worker_jobs, "is_cancel_requested", lambda *args: False)
+    monkeypatch.setattr(worker_jobs, "record_wait_time", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        "app.worker.jobs.record_wait_time", lambda *args, **kwargs: None
-    )
-    monkeypatch.setattr(
-        "app.worker.jobs.record_completion_metrics",
+        worker_jobs,
+        "record_completion_metrics",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(
-        "app.worker.jobs.append_stream_event",
+        worker_jobs,
+        "append_stream_event",
         lambda _job_id, payload, _connection: events.append(payload),
     )
 
-    result = process_llm_call(
+    result = worker_jobs.process_llm_call(
         LLMCallJob(
             job_id="stream-job",
             call_type="streaming_text_generation",
@@ -294,22 +292,22 @@ def test_worker_streaming_cancellation_closes_stream_and_marks_cancelled(monkeyp
         state["cancel_checks"] += 1
         return state["cancel_checks"] >= 3
 
-    monkeypatch.setattr("app.worker.jobs.get_worker_llm_service", lambda: FakeService())
-    monkeypatch.setattr("app.worker.jobs.get_current_job", lambda: FakeJob())
-    monkeypatch.setattr("app.worker.jobs.is_cancel_requested", fake_is_cancel_requested)
+    monkeypatch.setattr(worker_jobs, "get_worker_llm_service", lambda: FakeService())
+    monkeypatch.setattr(worker_jobs, "get_current_job", lambda: FakeJob())
+    monkeypatch.setattr(worker_jobs, "is_cancel_requested", fake_is_cancel_requested)
+    monkeypatch.setattr(worker_jobs, "record_wait_time", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        "app.worker.jobs.record_wait_time", lambda *args, **kwargs: None
-    )
-    monkeypatch.setattr(
-        "app.worker.jobs.record_completion_metrics",
+        worker_jobs,
+        "record_completion_metrics",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(
-        "app.worker.jobs.append_stream_event",
+        worker_jobs,
+        "append_stream_event",
         lambda _job_id, payload, _connection: events.append(payload),
     )
 
-    result = process_llm_call(
+    result = worker_jobs.process_llm_call(
         LLMCallJob(
             job_id="cancel-stream-job",
             call_type="streaming_text_generation",
@@ -351,24 +349,24 @@ def test_worker_streaming_failure_publishes_safe_error(monkeypatch):
         def save_meta(self):
             return None
 
-    monkeypatch.setattr("app.worker.jobs.LLM_JOB_MAX_RETRIES", 0)
-    monkeypatch.setattr("app.worker.jobs.get_worker_llm_service", lambda: FakeService())
-    monkeypatch.setattr("app.worker.jobs.get_current_job", lambda: FakeJob())
-    monkeypatch.setattr("app.worker.jobs.is_cancel_requested", lambda *args: False)
+    monkeypatch.setattr(worker_jobs, "LLM_JOB_MAX_RETRIES", 0)
+    monkeypatch.setattr(worker_jobs, "get_worker_llm_service", lambda: FakeService())
+    monkeypatch.setattr(worker_jobs, "get_current_job", lambda: FakeJob())
+    monkeypatch.setattr(worker_jobs, "is_cancel_requested", lambda *args: False)
+    monkeypatch.setattr(worker_jobs, "record_wait_time", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        "app.worker.jobs.record_wait_time", lambda *args, **kwargs: None
-    )
-    monkeypatch.setattr(
-        "app.worker.jobs.record_completion_metrics",
+        worker_jobs,
+        "record_completion_metrics",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(
-        "app.worker.jobs.append_stream_event",
+        worker_jobs,
+        "append_stream_event",
         lambda _job_id, payload, _connection: events.append(payload),
     )
 
     with pytest.raises(LlamaServerMalformedResponseError):
-        process_llm_call(
+        worker_jobs.process_llm_call(
             LLMCallJob(
                 job_id="bad-stream-job",
                 call_type="streaming_text_generation",
@@ -472,41 +470,20 @@ def test_cancelling_running_job_sets_cancel_requested(monkeypatch):
     assert events[-1]["cancel_requested"] is True
 
 
-def test_agent_service_from_queue_does_not_load_local_model(monkeypatch):
-    def fail_local_model_load():
-        raise AssertionError("Local model should not load in the API process.")
-
-    monkeypatch.setattr(
-        "app.infrastructure.llm.local_model.create_local_llm_service",
-        fail_local_model_load,
-    )
-
+def test_agent_service_from_queue_uses_queued_gateway():
     service = AgentService.from_queue()
 
     assert isinstance(service.llm_service, QueuedLLMService)
-
-
-def test_agent_service_from_local_model_uses_runtime_factory(monkeypatch):
-    fake_gateway = object()
-
-    monkeypatch.setattr(
-        "app.infrastructure.llm.factory.create_llm_service",
-        lambda settings=None: fake_gateway,
-    )
-
-    service = AgentService.from_local_model()
-
-    assert service.llm_service is fake_gateway
-    assert service.router.llm_service is fake_gateway
 
 
 def test_worker_selects_llama_server_backend(monkeypatch):
     from app.core.config import AppSettings
     from app.infrastructure.llm.llama_server_gateway import LlamaServerGateway
 
-    monkeypatch.setattr("app.worker.jobs._MODEL_SERVICE", None)
+    monkeypatch.setattr(worker_jobs, "_MODEL_SERVICE", None)
     monkeypatch.setattr(
-        "app.worker.jobs._SETTINGS",
+        worker_jobs,
+        "_SETTINGS",
         AppSettings(
             **{
                 **AppSettings.from_env().__dict__,
@@ -522,8 +499,6 @@ def test_worker_selects_llama_server_backend(monkeypatch):
 
 
 def process_selected_worker_service(monkeypatch):
-    from app.worker.jobs import get_worker_llm_service
-
     class FakeClient:
         def get(self, *args, **kwargs):
             return None
@@ -532,18 +507,18 @@ def process_selected_worker_service(monkeypatch):
         "app.infrastructure.llm.llama_server_gateway.httpx.Client",
         lambda *args, **kwargs: FakeClient(),
     )
-    return get_worker_llm_service()
+    return worker_jobs.get_worker_llm_service()
 
 
 def test_worker_uses_simpleworker_on_windows(monkeypatch):
-    monkeypatch.setattr("app.worker.jobs.SimpleWorker", sentinel.spawn_worker)
-    monkeypatch.setattr("app.worker.jobs.Worker", sentinel.worker)
+    monkeypatch.setattr(worker_jobs, "SimpleWorker", sentinel.spawn_worker)
+    monkeypatch.setattr(worker_jobs, "Worker", sentinel.worker)
 
-    assert get_worker_class() is sentinel.spawn_worker
+    assert worker_jobs.get_worker_class() is sentinel.spawn_worker
 
 
 def test_worker_uses_simpleworker_off_windows(monkeypatch):
-    monkeypatch.setattr("app.worker.jobs.SimpleWorker", sentinel.spawn_worker)
-    monkeypatch.setattr("app.worker.jobs.Worker", sentinel.worker)
+    monkeypatch.setattr(worker_jobs, "SimpleWorker", sentinel.spawn_worker)
+    monkeypatch.setattr(worker_jobs, "Worker", sentinel.worker)
 
-    assert get_worker_class() is sentinel.spawn_worker
+    assert worker_jobs.get_worker_class() is sentinel.spawn_worker

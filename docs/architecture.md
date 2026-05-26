@@ -5,18 +5,16 @@
 This document captures:
 
 - the current runtime and package shape
-- the target Ports and Adapters direction
-- the dependency audit results
 - the composition roots for each entry point
+- the dependency and cleanup audit results
 
 The detailed migration sequence lives in
 [`refactor-plan.md`](refactor-plan.md).
 
 ## Runtime Shape
 
-LanguageAgent currently has multiple entry points:
+LanguageAgent currently has these runtime entry points:
 
-- CLI: `python -m app.cli.main`
 - FastAPI: `python -m uvicorn app.interfaces.api.main:app ...`
 - Chainlit Web UI: `chainlit run webui/app.py ...`
 - RQ worker: `python -m app.worker.main`
@@ -25,8 +23,6 @@ LanguageAgent currently has multiple entry points:
 Current runtime flow:
 
 ```text
-CLI -> legacy local llama-cpp-python runtime
-
 Browser -> Chainlit Web UI -> FastAPI -> Redis + RQ -> GPU worker -> llama-server -> GPU model
                                   ^
                                   |
@@ -45,7 +41,6 @@ app/
   ports/
   infrastructure/
   interfaces/api/
-  cli/
   worker/
 ```
 
@@ -56,40 +51,24 @@ Current role summary:
   state, and queue job state
 - `app/application/`: application services, memory, routers, and mode handlers
 - `app/ports/`: gateway interfaces
-- `app/infrastructure/llm/`: local model runtime plus prompt/schema assets
+- `app/infrastructure/llm/`: llama-server adapter plus prompt/schema assets
 - `app/infrastructure/redis/`: Redis + RQ queue adapters
 - `app/interfaces/api/`: FastAPI app, routes, schemas, auth, and dependency
   wiring
-- `app/cli/`: CLI entry point
 - `app/worker/`: worker entry point and job execution functions
 
 ## Target Structure Summary
 
-Recommended target package shape:
-
-```text
-src/language_agent/
-  core/
-  domain/
-  application/
-  ports/
-  infrastructure/
-  interfaces/api/
-  cli/
-  worker/
-```
-
-Recommended responsibilities:
+Current responsibilities:
 
 - `core/`: cross-cutting config, logging, shared errors, small utility helpers
 - `domain/`: domain models, mode/state concepts, pure domain rules
 - `application/`: use cases, `AgentService`, intent coordination, prompt
   coordination, queue-aware orchestration contracts
 - `ports/`: abstract interfaces such as LLM gateway and job/status store
-- `infrastructure/`: Redis/RQ adapter, llama-server and legacy local-model adapters, prompt/schema file
+- `infrastructure/`: Redis/RQ adapter, llama-server adapter, prompt/schema file
   loaders, environment-backed config
 - `interfaces/api/`: FastAPI app, routes, API schemas, auth, exception mapping
-- `cli/`: CLI composition root and CLI-only presentation
 - `worker/`: worker composition root and worker job execution entry point
 
 ## Dependency Direction Rules
@@ -111,8 +90,7 @@ Forbidden dependency directions:
 - application -> Chainlit modules
 - worker -> FastAPI route modules
 - webui -> backend internals
-- FastAPI routes -> local model runtime directly
-- CLI -> FastAPI route modules
+- FastAPI routes -> llama-server directly
 
 ## Ports and Adapters
 
@@ -120,8 +98,7 @@ The backend now follows a lightweight Ports and Adapters split:
 
 - `application/` depends on ports such as `LLMGateway`, `JobStore`, and
   `QueueClient`
-- `infrastructure/llm/` implements the default llama-server adapter and the
-  legacy local-model adapter
+- `infrastructure/llm/` implements the llama-server adapter
 - `infrastructure/redis/` implements Redis/RQ queue, job-state, and streaming
   adapters
 - `interfaces/api/` wires concrete implementations into FastAPI dependencies
@@ -135,6 +112,16 @@ Operationally, that means:
   of queued jobs
 - the Web UI remains an HTTP client of FastAPI only
 
+## Cleanup Summary
+
+- `llama-server` is the only supported model runtime.
+- Embedded `llama-cpp-python` inference was removed from active code, tests,
+  and docs.
+- The worker is now strictly a queue consumer, policy layer, and streaming
+  publisher that talks to `llama-server` over HTTP.
+- Redis/RQ remains responsible for backpressure, status tracking, cancellation,
+  retries, and stream delivery.
+
 ## What Not to Import
 
 Keep these boundaries explicit during future work:
@@ -144,8 +131,6 @@ Keep these boundaries explicit during future work:
 - `app/interfaces/api/` must not import worker job modules
 - `app/worker/` must not import FastAPI route handlers or API schemas
 - `webui/` must not import anything from `app/`
-- FastAPI routes and dependencies must not call
-  `app.infrastructure.llm.local_model` directly
 - FastAPI routes and dependencies must not call `llama-server` directly
 
 ## Audit Result
@@ -164,9 +149,7 @@ move unless those edges are removed first.
 ### 1. Composition Still Exists in More Than One Place
 
 [`app/application/agent_service.py`](C:\Projects\LocalTranslation\language_agent\app\application\agent_service.py)
-still exposes convenience constructors for local-model and queue-backed startup.
-The earlier API-layer dependency has been removed, but those constructors still
-select concrete adapters inside the service layer.
+still exposes a queue-backed convenience constructor.
 
 Impact:
 
@@ -200,18 +183,7 @@ Impact:
 - dual-path imports still exist temporarily
 - full cleanup is blocked until downstream callers stop using legacy paths
 
-### 4. Import-Time Runtime Configuration Still Exists
-
-[`app/infrastructure/llm/runtime_config.py`](C:\Projects\LocalTranslation\language_agent\app\infrastructure\llm\runtime_config.py)
-still reads env-derived values into module globals at import time.
-
-Impact:
-
-- configuration remains less explicit than it should be
-- later composition-root cleanup should move more runtime choices behind
-  `AppSettings` or worker-local config
-
-### 5. Tests and Tooling Still Use Some Legacy Import Paths
+### 4. Tests and Tooling Still Use Some Legacy Import Paths
 
 Some tests and wrappers still import through compatibility paths such as
 `app.api.*` and `app.llm.queued`.
@@ -223,7 +195,7 @@ Impact:
 
 ## Things That Are Already Good
 
-- FastAPI routes do not call the local model runtime directly
+- FastAPI routes do not call the model runtime directly
 - worker code does not import FastAPI route modules
 - Web UI code does not import backend internals
 - the queue boundary already isolates HTTP handling from model execution
@@ -233,7 +205,6 @@ Impact:
 
 Current practical composition roots:
 
-- CLI root: [`app/cli/main.py`](C:\Projects\LocalTranslation\language_agent\app\cli\main.py)
 - FastAPI root: [`app/interfaces/api/main.py`](C:\Projects\LocalTranslation\language_agent\app\interfaces\api\main.py)
 - FastAPI dependency assembly: [`app/interfaces/api/dependencies.py`](C:\Projects\LocalTranslation\language_agent\app\interfaces\api\dependencies.py)
 - worker root: [`app/worker/main.py`](C:\Projects\LocalTranslation\language_agent\app\worker\main.py)
@@ -249,7 +220,6 @@ Current dependency-injection responsibilities:
 
 Target composition roots:
 
-- `cli/main.py`: assemble local-model adapter and CLI presentation
 - `interfaces/api/dependencies.py`: assemble application services with queue
   adapters
 - `worker/main.py`: assemble the selected runtime adapter and queue job executor
@@ -267,9 +237,7 @@ Target composition roots:
 | LLM gateway port | `ports/llm_gateway.py` | contract for ask/stream/cancel behavior |
 | Redis/RQ adapter | `infrastructure/redis/` | queue adapter, job state adapter, stream adapter |
 | default runtime adapter | `infrastructure/llm/llama_server_gateway.py` | wraps the OpenAI-compatible llama-server HTTP API |
-| legacy local model adapter | `infrastructure/llm/local_model.py` | wraps llama.cpp runtime |
 | worker entry point | `worker/main.py` | composition root only |
-| CLI entry point | `cli/main.py` | composition root only |
 
 ## Migration Principle
 

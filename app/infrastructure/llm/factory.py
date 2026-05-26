@@ -10,10 +10,4 @@ def create_llm_service(settings: AppSettings | None = None) -> Any:
     resolved_settings = settings or AppSettings.from_env()
     if resolved_settings.llm_backend == "llama_server":
         return LlamaServerGateway(resolved_settings)
-    if resolved_settings.llm_backend == "llama_cpp_python":
-        from app.infrastructure.llm.local_model import create_local_llm_service
-
-        return create_local_llm_service()
-    raise RuntimeError(
-        "Unsupported LLM_BACKEND. Expected 'llama_cpp_python' or 'llama_server'."
-    )
+    raise RuntimeError("Unsupported LLM_BACKEND. Only 'llama_server' is supported.")
