@@ -1,8 +1,8 @@
 import asyncio
 import json
 
-from app.api.dependencies import get_agent_service
-from app.api.errors import (
+from app.interfaces.api.dependencies import get_agent_service
+from app.interfaces.api.errors import (
     LLMServiceError,
     QueueSaturatedError,
     api_error_handler,

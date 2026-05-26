@@ -172,26 +172,15 @@ Impact:
 - it remains the highest-change adapter surface
 - future queue changes should be kept inside `infrastructure/redis/`
 
-### 3. Compatibility Wrappers Still Exist
+### 3. Refactor-Planning Docs Still Reference Removed Paths
 
-Compatibility wrappers still exist under `app/api/`, `app/queue/`, `app/llm/`,
-and related legacy paths so older imports continue to resolve during the
-transition.
-
-Impact:
-
-- dual-path imports still exist temporarily
-- full cleanup is blocked until downstream callers stop using legacy paths
-
-### 4. Tests and Tooling Still Use Some Legacy Import Paths
-
-Some tests and wrappers still import through compatibility paths such as
-`app.api.*` and `app.llm.queued`.
+Some planning documents still mention removed compatibility paths from the
+transition period.
 
 Impact:
 
-- the runtime boundaries are cleaner than the import graph seen by every caller
-- wrapper removal should be a separate, low-risk cleanup once all callers migrate
+- active runtime code now uses canonical modules only
+- follow-up doc cleanup should stay limited to planning/history material
 
 ## Things That Are Already Good
 

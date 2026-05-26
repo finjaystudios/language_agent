@@ -2,12 +2,12 @@ import asyncio
 import logging
 
 import pytest
-from app.api.errors import LLMServiceError
-from app.api.models import ChatRequest, StreamChatRequest
-from app.data_models.intent_result import IntentResult
-from app.data_models.mode_responses import DefinitionResponse, TranslationResponse
+from app.application.agent_service import AgentService
+from app.application.models import ChatCommand
+from app.core.errors import LLMServiceError
+from app.domain.intent_result import IntentResult
+from app.domain.mode_responses import DefinitionResponse, TranslationResponse
 from app.memory.short_term import ConversationMemory
-from app.services.agent_service import AgentService
 from pydantic import ValidationError
 
 
@@ -106,7 +106,7 @@ def test_chat_full_uses_supplied_mode_without_intent_classification():
 
     response = asyncio.run(
         service.chat_full(
-            ChatRequest(
+            ChatCommand(
                 message="Define recursion in simple terms",
                 mode="definition",
                 metadata={"session_id": "session-1"},
@@ -131,10 +131,10 @@ def test_chat_full_logs_major_stages(caplog):
     service = make_service(intent)
     service.handlers = {"definition": FakeDefinitionHandler()}
 
-    with caplog.at_level(logging.INFO, logger="app.services.agent_service"):
+    with caplog.at_level(logging.INFO, logger="app.application.agent_service"):
         asyncio.run(
             service.chat_full(
-                ChatRequest(message="Define recursion", mode="definition")
+                ChatCommand(message="Define recursion", mode="definition")
             )
         )
 
@@ -156,7 +156,7 @@ def test_chat_full_uses_intent_routing_when_mode_is_omitted():
     service.handlers = {"definition": FakeDefinitionHandler()}
 
     response = asyncio.run(
-        service.chat_full(ChatRequest(message="Define recursion in simple terms"))
+        service.chat_full(ChatCommand(message="Define recursion in simple terms"))
     )
 
     assert response.mode == "definition"
@@ -175,7 +175,7 @@ def test_chat_full_calls_handle_not_stream_for_streaming_cli_modes():
     service.handlers = {"translation": handler}
 
     response = asyncio.run(
-        service.chat_full(ChatRequest(message="Translate hello", mode="translation"))
+        service.chat_full(ChatCommand(message="Translate hello", mode="translation"))
     )
 
     assert response.mode == "translation"
@@ -195,7 +195,7 @@ def test_chat_full_returns_clarification_without_calling_handler():
     handler = FakeDefinitionHandler()
     service.handlers = {"definition": handler}
 
-    response = asyncio.run(service.chat_full(ChatRequest(message="Define it")))
+    response = asyncio.run(service.chat_full(ChatCommand(message="Define it")))
 
     assert response.mode == "definition"
     assert response.response == "Which term should I define?"
@@ -215,7 +215,7 @@ def test_chat_stream_yields_sse_tokens_and_done_event():
 
     async def collect_events():
         stream = await service.chat_stream(
-            StreamChatRequest(message="Translate hello", mode="translation")
+            ChatCommand(message="Translate hello", mode="translation")
         )
         return [event async for event in stream]
 
@@ -241,7 +241,7 @@ def test_chat_stream_supports_definition_mode():
 
     async def collect_events():
         stream = await service.chat_stream(
-            StreamChatRequest(message="Define recursion", mode="definition")
+            ChatCommand(message="Define recursion", mode="definition")
         )
         return [event async for event in stream]
 
@@ -266,7 +266,7 @@ def test_chat_stream_returns_general_fallback_when_no_mode_handler_exists():
     service.handlers = {}
 
     async def collect_events():
-        stream = await service.chat_stream(StreamChatRequest(message="Hello"))
+        stream = await service.chat_stream(ChatCommand(message="Hello"))
         return [event async for event in stream]
 
     events = asyncio.run(collect_events())
@@ -277,9 +277,9 @@ def test_chat_stream_returns_general_fallback_when_no_mode_handler_exists():
     ]
 
 
-def test_stream_chat_request_rejects_invalid_body():
+def test_chat_command_rejects_empty_message():
     with pytest.raises(ValidationError):
-        StreamChatRequest(message="", mode="translation")
+        ChatCommand(message="", mode="translation")
 
 
 def test_chat_full_wraps_llm_runtime_failure():
@@ -294,7 +294,7 @@ def test_chat_full_wraps_llm_runtime_failure():
 
     async def define_with_failure():
         await service.chat_full(
-            ChatRequest(message="Define recursion", mode="definition")
+            ChatCommand(message="Define recursion", mode="definition")
         )
 
     with pytest.raises(LLMServiceError) as error:
@@ -315,7 +315,7 @@ def test_chat_stream_runtime_failure_returns_sanitized_sse_error():
 
     async def collect_events():
         stream = await service.chat_stream(
-            StreamChatRequest(message="Translate hello", mode="translation")
+            ChatCommand(message="Translate hello", mode="translation")
         )
         return [event async for event in stream]
 

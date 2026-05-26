@@ -1,5 +1,5 @@
 import pytest
-from app.llm import prompt_loader
+from app.infrastructure.llm import prompt_loader
 
 
 def test_load_prompt_returns_prompt_text_from_yaml(tmp_path, monkeypatch):

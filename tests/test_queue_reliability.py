@@ -1,12 +1,13 @@
 import asyncio
 
 import httpx
-from app.api.dependencies import get_agent_service
-from app.api.errors import QueueSaturatedError
-from app.api.main import create_app
-from app.data_models.intent_result import IntentResult
+from app.application.agent_service import AgentService
+from app.domain.intent_result import IntentResult
+from app.infrastructure.redis.errors import QueueSaturatedError
+from app.infrastructure.redis.queued_gateway import QueuedLLMService
+from app.interfaces.api.dependencies import get_agent_service
+from app.interfaces.api.main import create_app
 from app.memory.short_term import ConversationMemory
-from app.services.agent_service import AgentService
 
 
 class FakeRouter:
@@ -54,12 +55,13 @@ class SerialGateway:
 
 
 def test_chat_endpoint_returns_429_when_queue_is_saturated(monkeypatch):
-    from app.llm.queued import QueuedLLMService
-
     async def fail_enqueue(_job):
         raise QueueSaturatedError(retry_after_seconds=9)
 
-    monkeypatch.setattr("app.llm.queued.enqueue_llm_call", fail_enqueue)
+    monkeypatch.setattr(
+        "app.infrastructure.redis.queued_gateway.enqueue_llm_call",
+        fail_enqueue,
+    )
 
     service = QueuedLLMService()
 

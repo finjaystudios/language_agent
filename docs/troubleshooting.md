@@ -5,8 +5,7 @@
 Symptoms:
 
 - startup fails with `ModuleNotFoundError`
-- local scripts still refer to older `app.api.*`, `app.queue.*`, or similar
-  paths
+- local scripts still refer to removed compatibility paths from older branches
 - worker or API startup fails after switching branches
 
 Checks:
@@ -15,11 +14,8 @@ Checks:
   - `python -m uvicorn app.interfaces.api.main:app --reload`
   - `python -m app.worker.main`
 - confirm your shell is running from the repository root
-- update local scripts or IDE launch profiles that still point at older module
-  paths
-- if a compatibility wrapper import works in one place and fails in another,
-  standardize on the new path under `app/interfaces`, `app/infrastructure`,
-  `app/application`, or `app/worker`
+- update local scripts or IDE launch profiles to the canonical paths under
+  `app/interfaces`, `app/infrastructure`, `app/application`, or `app/worker`
 
 ## Worker Cannot Import App Modules
 

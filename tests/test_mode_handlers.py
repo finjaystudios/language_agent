@@ -1,9 +1,9 @@
 import asyncio
 
-from app.data_models.session_states import SessionState
-from app.orchestration.modes.definition import DefinitionHandler
-from app.orchestration.modes.learning import LearningHandler
-from app.orchestration.modes.translation import TranslationHandler
+from app.application.modes.definition import DefinitionHandler
+from app.application.modes.learning import LearningHandler
+from app.application.modes.translation import TranslationHandler
+from app.domain.session_states import SessionState
 
 
 class FakeLLM:

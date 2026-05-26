@@ -1,5 +1,5 @@
-from app.api.config import parse_csv_env
-from app.api.main import create_app
+from app.core.config import parse_csv_env
+from app.interfaces.api.main import create_app
 from fastapi.testclient import TestClient
 
 

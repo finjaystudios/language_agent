@@ -8,7 +8,7 @@ import app.worker.jobs as worker_jobs
 import pytest
 from app.application.agent_service import AgentService
 from app.application.models import ChatCommand
-from app.data_models.intent_result import IntentResult
+from app.domain.intent_result import IntentResult
 from app.domain.jobs import LLMCallJob
 from app.infrastructure.redis.queued_gateway import QueuedLLMService
 from app.memory.short_term import ConversationMemory
