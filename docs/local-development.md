@@ -31,13 +31,46 @@ docker run --rm -p 6379:6379 redis:7-alpine
 
 ## Worker
 
-The worker owns the model runtime and must be running for FastAPI chat
-requests.
+The worker must be running for FastAPI chat requests. In the preferred local
+workflow, the worker calls an external `llama-server` process over HTTP.
 
 ```powershell
-$env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+$env:LLM_BACKEND = "llama_server"
+$env:LLAMA_SERVER_URL = "http://127.0.0.1:8080"
 $env:REDIS_URL = "redis://127.0.0.1:6379/0"
 $env:LLM_STREAM_CHANNEL_PREFIX = "llm-stream"
+python -m app.worker.main
+```
+
+## Llama-Server
+
+Start `llama-server` locally before the worker:
+
+```powershell
+llama-server `
+  --model models/Qwen2.5-7B-Instruct-Q4_K_M.gguf `
+  --host 127.0.0.1 `
+  --port 8080 `
+  --ctx-size 2048 `
+  --n-gpu-layers 20 `
+  --batch-size 256 `
+  --ubatch-size 128 `
+  --parallel 1
+```
+
+Validate it directly:
+
+```powershell
+curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:8080/v1/models
+```
+
+Legacy fallback:
+
+```powershell
+$env:LLM_BACKEND = "llama_cpp_python"
+$env:LLM_MODEL_PATH = "models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+python -m pip install -r requirements-legacy-llama-cpp.txt
 python -m app.worker.main
 ```
 
@@ -86,9 +119,10 @@ Open `http://127.0.0.1:8001`.
 ## Typical Host-Local Workflow
 
 1. Start Redis.
-2. Start the worker.
-3. Start FastAPI.
-4. Start Chainlit.
+2. Start `llama-server`.
+3. Start the worker.
+4. Start FastAPI.
+5. Start Chainlit.
 
 At that point:
 

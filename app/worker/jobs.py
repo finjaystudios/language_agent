@@ -9,7 +9,7 @@ from rq.job import get_current_job
 from app.core.config import AppSettings
 from app.core.logging import configure_logging
 from app.domain.jobs import LLMCallJob, utcnow
-from app.infrastructure.llm.local_model import LLMService, create_local_llm_service
+from app.infrastructure.llm.factory import create_llm_service
 from app.infrastructure.redis.config import (
     LLM_JOB_MAX_RETRIES,
     LLM_QUEUE_NAME,
@@ -20,7 +20,7 @@ from app.infrastructure.redis.job_store import RedisJobStore
 from app.infrastructure.redis.rq_queue import RQQueueClient
 
 logger = logging.getLogger(__name__)
-_MODEL_SERVICE: LLMService | None = None
+_MODEL_SERVICE: Any | None = None
 _MODEL_LOCK = threading.Lock()
 _SETTINGS = AppSettings.from_env()
 
@@ -39,10 +39,10 @@ def get_worker_class() -> type[SimpleWorker]:
     return SimpleWorker
 
 
-def get_worker_llm_service() -> LLMService:
+def get_worker_llm_service() -> Any:
     global _MODEL_SERVICE
     if _MODEL_SERVICE is None:
-        _MODEL_SERVICE = create_local_llm_service()
+        _MODEL_SERVICE = create_llm_service(_SETTINGS)
         logger.info("llm_worker_model_ready")
     return _MODEL_SERVICE
 
@@ -89,6 +89,11 @@ def is_cancel_requested(job_id: str, connection: Redis | None = None) -> bool:
 
 def safe_error_message(error: Exception) -> str:
     name = type(error).__name__.lower()
+    message = str(error).lower()
+    if "unavailable" in name or "unavailable" in message:
+        return "The external llama-server is unavailable."
+    if "interrupt" in name or "interrupt" in message:
+        return "The model server interrupted generation."
     if "timeout" in name:
         return "The language model job timed out."
     return "The language model worker hit an internal execution error."
@@ -127,6 +132,12 @@ def finalize_cancelled_job(
         connection,
     )
     return serialize_llm_call(llm_call)
+
+
+def close_stream_iterator(stream) -> None:
+    close = getattr(stream, "close", None)
+    if callable(close):
+        close()
 
 
 def process_llm_call(payload: dict) -> dict:
@@ -176,6 +187,7 @@ def process_llm_call(payload: dict) -> dict:
                     llm_call.result = service.ask_llm_sync(
                         messages=llm_call.messages,
                         schema=llm_call.response_schema or {},
+                        mode=llm_call.mode,
                         **llm_call.generation_parameters,
                     )
                 except (ValueError, TypeError, KeyError) as error:
@@ -185,6 +197,7 @@ def process_llm_call(payload: dict) -> dict:
             elif llm_call.call_type == "text_generation":
                 llm_call.result = service.generate_text_sync(
                     messages=llm_call.messages,
+                    mode=llm_call.mode,
                     **llm_call.generation_parameters,
                 )
             else:
@@ -197,24 +210,29 @@ def process_llm_call(payload: dict) -> dict:
                     connection,
                 )
                 parts: list[str] = []
-                for chunk in service.stream_llm_sync(
+                stream = service.stream_llm_sync(
                     messages=llm_call.messages,
+                    mode=llm_call.mode,
                     **llm_call.generation_parameters,
-                ):
-                    delta = chunk["choices"][0].get("delta", {})
-                    token = delta.get("content")
-                    if token:
-                        parts.append(token)
-                        append_stream_event(
-                            llm_call.job_id,
-                            build_stream_event(llm_call, token=token),
-                            connection,
-                        )
-                    if is_cancel_requested(llm_call.job_id, connection):
-                        llm_call.cancel_requested = True
-                        raise LLMJobCancelledError(
-                            "LLM streaming job was cancelled during generation."
-                        )
+                )
+                try:
+                    for chunk in stream:
+                        delta = chunk["choices"][0].get("delta", {})
+                        token = delta.get("content")
+                        if token:
+                            parts.append(token)
+                            append_stream_event(
+                                llm_call.job_id,
+                                build_stream_event(llm_call, token=token),
+                                connection,
+                            )
+                        if is_cancel_requested(llm_call.job_id, connection):
+                            llm_call.cancel_requested = True
+                            raise LLMJobCancelledError(
+                                "LLM streaming job was cancelled during generation."
+                            )
+                finally:
+                    close_stream_iterator(stream)
                 llm_call.result = "".join(parts)
 
         if is_cancel_requested(llm_call.job_id, connection):

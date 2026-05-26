@@ -41,9 +41,9 @@ class AgentService:
 
     @classmethod
     def from_local_model(cls) -> "AgentService":
-        from app.infrastructure.llm.local_model import create_local_llm_service
+        from app.infrastructure.llm.factory import create_llm_service
 
-        llm_service = create_local_llm_service()
+        llm_service = create_llm_service()
         memory = ConversationMemory(max_turns=5)
         router = IntentRouter(llm_service)
         return cls(llm_service=llm_service, router=router, memory=memory)

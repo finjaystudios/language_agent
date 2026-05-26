@@ -533,7 +533,9 @@ async def stream_backend_response(
         return
 
     if not streamed_text:
-        raise BackendStreamError("Backend stream completed without response text.")
+        logger.info("webui_stream_empty_fallback mode=%s", api_mode)
+        await send_full_backend_response(client, status_message, user_text, api_mode)
+        return
     if token_buffer:
         await response.stream_token(token_buffer)
     if not done_received:

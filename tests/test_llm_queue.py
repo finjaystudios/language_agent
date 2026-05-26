@@ -4,6 +4,7 @@ import time
 from types import SimpleNamespace
 from unittest.mock import sentinel
 
+import pytest
 from app.application.agent_service import AgentService
 from app.application.models import ChatCommand
 from app.data_models.intent_result import IntentResult
@@ -82,6 +83,7 @@ def test_queued_gateway_enqueues_and_waits(monkeypatch):
     assert captured["job"].call_type == "structured_json"
     assert captured["job"].messages[0]["role"] == "system"
     assert captured["job"].messages[1]["content"] == "user"
+    assert captured["job"].generation_parameters == {}
 
 
 def test_chat_full_translation_creates_multiple_llm_jobs():
@@ -119,14 +121,16 @@ def test_chat_full_translation_creates_multiple_llm_jobs():
     )
 
     assert response.response == "bonjour"
-    assert [call["mode"] for call in gateway.calls] == ["translation", "translation"]
+    assert [call["mode"] for call in gateway.calls] == ["session_state", "translation"]
 
 
 def test_worker_processes_mocked_llm_call(monkeypatch):
     class FakeService:
-        def ask_llm_sync(self, *, messages, schema, temperature, max_tokens):
+        def ask_llm_sync(self, *, messages, schema, mode=None, **generation_parameters):
             assert messages[1]["content"] == "user"
             assert schema == {"type": "object"}
+            assert mode == "intent"
+            assert generation_parameters == {}
             return {"response": "done"}
 
     monkeypatch.setattr("app.worker.jobs.get_worker_llm_service", lambda: FakeService())
@@ -149,7 +153,8 @@ def test_worker_processes_mocked_llm_call(monkeypatch):
                 {"role": "user", "content": "user"},
             ],
             response_schema={"type": "object"},
-            generation_parameters={"temperature": 0.1, "max_tokens": 2000},
+            mode="intent",
+            generation_parameters={},
         ).model_dump(mode="json")
     )
 
@@ -162,7 +167,7 @@ def test_worker_serializes_mocked_llm_calls(monkeypatch):
     state_lock = threading.Lock()
 
     class FakeService:
-        def generate_text_sync(self, *, messages, temperature, max_tokens):
+        def generate_text_sync(self, *, messages, mode=None, **generation_parameters):
             with state_lock:
                 state["active"] += 1
                 state["max_active"] = max(state["max_active"], state["active"])
@@ -190,7 +195,7 @@ def test_worker_serializes_mocked_llm_calls(monkeypatch):
                 {"role": "system", "content": "system"},
                 {"role": "user", "content": f"user-{index}"},
             ],
-            generation_parameters={"temperature": 0.1, "max_tokens": 2000},
+            generation_parameters={},
         ).model_dump(mode="json")
         for index in range(2)
     ]
@@ -211,7 +216,8 @@ def test_worker_streaming_publishes_mocked_token_chunks(monkeypatch):
     events = []
 
     class FakeService:
-        def stream_llm_sync(self, *, messages, temperature, max_tokens):
+        def stream_llm_sync(self, *, messages, mode=None, **generation_parameters):
+            assert mode is None
             yield {"choices": [{"delta": {"content": "bon"}}]}
             yield {"choices": [{"delta": {"content": "jour"}}]}
 
@@ -246,7 +252,7 @@ def test_worker_streaming_publishes_mocked_token_chunks(monkeypatch):
                 {"role": "system", "content": "system"},
                 {"role": "user", "content": "user"},
             ],
-            generation_parameters={"temperature": 0.1, "max_tokens": 2000},
+            generation_parameters={},
         ).model_dump(mode="json")
     )
 
@@ -258,6 +264,128 @@ def test_worker_streaming_publishes_mocked_token_chunks(monkeypatch):
         "jour",
     ]
     assert events[-1]["done"] is True
+
+
+def test_worker_streaming_cancellation_closes_stream_and_marks_cancelled(monkeypatch):
+    events = []
+    state = {"cancel_checks": 0, "closed": False}
+
+    class FakeStream:
+        def __iter__(self):
+            yield {"choices": [{"delta": {"content": "bon"}}]}
+            yield {"choices": [{"delta": {"content": "jour"}}]}
+
+        def close(self):
+            state["closed"] = True
+
+    class FakeService:
+        def stream_llm_sync(self, *, messages, mode=None, **generation_parameters):
+            return FakeStream()
+
+    class FakeJob:
+        def __init__(self):
+            self.connection = object()
+            self.meta = {}
+
+        def save_meta(self):
+            return None
+
+    def fake_is_cancel_requested(*_args):
+        state["cancel_checks"] += 1
+        return state["cancel_checks"] >= 3
+
+    monkeypatch.setattr("app.worker.jobs.get_worker_llm_service", lambda: FakeService())
+    monkeypatch.setattr("app.worker.jobs.get_current_job", lambda: FakeJob())
+    monkeypatch.setattr("app.worker.jobs.is_cancel_requested", fake_is_cancel_requested)
+    monkeypatch.setattr(
+        "app.worker.jobs.record_wait_time", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        "app.worker.jobs.record_completion_metrics",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "app.worker.jobs.append_stream_event",
+        lambda _job_id, payload, _connection: events.append(payload),
+    )
+
+    result = process_llm_call(
+        LLMCallJob(
+            job_id="cancel-stream-job",
+            call_type="streaming_text_generation",
+            messages=[
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "user"},
+            ],
+            generation_parameters={},
+        ).model_dump(mode="json")
+    )
+
+    assert result["status"] == "cancelled"
+    assert result["cancel_requested"] is True
+    assert state["closed"] is True
+    assert [event.get("token") for event in events if event.get("token")] == [
+        "bon",
+        "jour",
+    ]
+    assert events[-1]["done"] is True
+    assert events[-1]["status"] == "cancelled"
+
+
+def test_worker_streaming_failure_publishes_safe_error(monkeypatch):
+    from app.infrastructure.llm.llama_server_gateway import (
+        LlamaServerMalformedResponseError,
+    )
+
+    events = []
+
+    class FakeService:
+        def stream_llm_sync(self, *, messages, mode=None, **generation_parameters):
+            raise LlamaServerMalformedResponseError("bad stream event")
+
+    class FakeJob:
+        def __init__(self):
+            self.connection = object()
+            self.meta = {}
+
+        def save_meta(self):
+            return None
+
+    monkeypatch.setattr("app.worker.jobs.LLM_JOB_MAX_RETRIES", 0)
+    monkeypatch.setattr("app.worker.jobs.get_worker_llm_service", lambda: FakeService())
+    monkeypatch.setattr("app.worker.jobs.get_current_job", lambda: FakeJob())
+    monkeypatch.setattr("app.worker.jobs.is_cancel_requested", lambda *args: False)
+    monkeypatch.setattr(
+        "app.worker.jobs.record_wait_time", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        "app.worker.jobs.record_completion_metrics",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "app.worker.jobs.append_stream_event",
+        lambda _job_id, payload, _connection: events.append(payload),
+    )
+
+    with pytest.raises(LlamaServerMalformedResponseError):
+        process_llm_call(
+            LLMCallJob(
+                job_id="bad-stream-job",
+                call_type="streaming_text_generation",
+                messages=[
+                    {"role": "system", "content": "system"},
+                    {"role": "user", "content": "user"},
+                ],
+                generation_parameters={},
+            ).model_dump(mode="json")
+        )
+
+    assert events[-1]["done"] is True
+    assert events[-1]["error"] == "llm_service_error"
+    assert (
+        events[-1]["message"]
+        == "The language model worker hit an internal execution error."
+    )
 
 
 def test_cancelling_queued_job_marks_it_cancelled(monkeypatch):
@@ -356,6 +484,55 @@ def test_agent_service_from_queue_does_not_load_local_model(monkeypatch):
     service = AgentService.from_queue()
 
     assert isinstance(service.llm_service, QueuedLLMService)
+
+
+def test_agent_service_from_local_model_uses_runtime_factory(monkeypatch):
+    fake_gateway = object()
+
+    monkeypatch.setattr(
+        "app.infrastructure.llm.factory.create_llm_service",
+        lambda settings=None: fake_gateway,
+    )
+
+    service = AgentService.from_local_model()
+
+    assert service.llm_service is fake_gateway
+    assert service.router.llm_service is fake_gateway
+
+
+def test_worker_selects_llama_server_backend(monkeypatch):
+    from app.core.config import AppSettings
+    from app.infrastructure.llm.llama_server_gateway import LlamaServerGateway
+
+    monkeypatch.setattr("app.worker.jobs._MODEL_SERVICE", None)
+    monkeypatch.setattr(
+        "app.worker.jobs._SETTINGS",
+        AppSettings(
+            **{
+                **AppSettings.from_env().__dict__,
+                "llm_backend": "llama_server",
+                "llama_server_url": "http://llama-server:8080",
+            }
+        ),
+    )
+
+    service = process_selected_worker_service(monkeypatch)
+
+    assert isinstance(service, LlamaServerGateway)
+
+
+def process_selected_worker_service(monkeypatch):
+    from app.worker.jobs import get_worker_llm_service
+
+    class FakeClient:
+        def get(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(
+        "app.infrastructure.llm.llama_server_gateway.httpx.Client",
+        lambda *args, **kwargs: FakeClient(),
+    )
+    return get_worker_llm_service()
 
 
 def test_worker_uses_simpleworker_on_windows(monkeypatch):

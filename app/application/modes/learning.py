@@ -32,7 +32,7 @@ class LearningHandler(ModeHandler):
             system_prompt=STATE_UPDATE_SYSTEM_PROMPT,
             user_prompt=prompt,
             schema=LEARNING_STATE_SCHEMA,
-            mode="learning",
+            mode="session_state",
         )
 
         session_state.learning = LearningModeState(**response)

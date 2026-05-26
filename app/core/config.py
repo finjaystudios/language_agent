@@ -21,6 +21,7 @@ class AppSettings:
     fastapi_api_key: str | None
     cors_allowed_origins: list[str]
     redis_url: str
+    llm_backend: str
     llm_queue_name: str
     llm_queue_timeout_seconds: int
     llm_queue_wait_timeout_seconds: int
@@ -32,6 +33,13 @@ class AppSettings:
     llm_stream_channel_prefix: str
     llm_status_poll_interval_seconds: float
     llm_stream_timeout_seconds: int
+    llama_server_url: str
+    llama_server_api_key: str
+    llama_server_timeout_seconds: int
+    llama_server_stream_timeout_seconds: int
+    llama_server_model_name: str
+    llama_server_health_path: str
+    model_profiles_path: str
 
     @classmethod
     def from_env(cls) -> "AppSettings":
@@ -41,6 +49,7 @@ class AppSettings:
             fastapi_api_key=os.getenv("FASTAPI_API_KEY"),
             cors_allowed_origins=parse_csv_env(os.getenv("CORS_ALLOWED_ORIGINS", "")),
             redis_url=os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0"),
+            llm_backend=os.getenv("LLM_BACKEND", "llama_server"),
             llm_queue_name=os.getenv("LLM_QUEUE_NAME", "llm"),
             llm_queue_timeout_seconds=queue_timeout,
             llm_queue_wait_timeout_seconds=int(
@@ -64,5 +73,18 @@ class AppSettings:
             ),
             llm_stream_timeout_seconds=int(
                 os.getenv("LLM_STREAM_TIMEOUT_SECONDS", str(queue_timeout))
+            ),
+            llama_server_url=os.getenv("LLAMA_SERVER_URL", "http://localhost:8080"),
+            llama_server_api_key=os.getenv("LLAMA_SERVER_API_KEY", ""),
+            llama_server_timeout_seconds=int(
+                os.getenv("LLAMA_SERVER_TIMEOUT_SECONDS", str(queue_timeout))
+            ),
+            llama_server_stream_timeout_seconds=int(
+                os.getenv("LLAMA_SERVER_STREAM_TIMEOUT_SECONDS", str(queue_timeout))
+            ),
+            llama_server_model_name=os.getenv("LLAMA_SERVER_MODEL_NAME", ""),
+            llama_server_health_path=os.getenv("LLAMA_SERVER_HEALTH_PATH", "/health"),
+            model_profiles_path=os.getenv(
+                "MODEL_PROFILES_PATH", "config/model_profiles.yml"
             ),
         )

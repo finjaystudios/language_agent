@@ -32,7 +32,7 @@ class DefinitionHandler(ModeHandler):
             system_prompt=STATE_UPDATE_SYSTEM_PROMPT,
             user_prompt=prompt,
             schema=DEFINITION_STATE_SCHEMA,
-            mode="definition",
+            mode="session_state",
         )
 
         session_state.definition = DefinitionModeState(**response)

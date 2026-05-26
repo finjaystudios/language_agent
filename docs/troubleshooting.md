@@ -46,10 +46,12 @@ Symptoms:
 
 Checks:
 
-- only the CLI and the worker should load the local model runtime
+- in the default Compose path, only `llama-server` should load the GGUF model
+- only the CLI and legacy `llama_cpp_python` worker path should load the local
+  model runtime directly
 - FastAPI should enqueue through Redis + RQ, not import the local model adapter
 - the Web UI should call FastAPI over HTTP only
-- for Compose, confirm only `llm-worker` mounts `./models`
+- for Compose, confirm only `llama-server` mounts `./models`
 
 ## Model Not Found
 
@@ -63,22 +65,29 @@ Checks:
 
 - confirm `LLM_MODEL_PATH` points at a real file
 - for host-local runs, use a repo path such as `models/...`
-- for Compose, use the in-container `/models/...` path
-- confirm `./models` is mounted into the worker container
+- for Compose, use the in-container `/models/...` path for `llama-server`
+- confirm `./models` is mounted into the `llama-server` container
 
 ## GPU Unavailable
 
 Symptoms:
 
 - CLI or worker fails during GPU checks
-- containerized worker cannot use `--gpus all`
+- `llama-server` fails to start or crashes on first request
 - model initialization fails before requests complete
 
 Checks:
 
 - confirm the host has an NVIDIA GPU and working drivers
 - confirm Docker GPU support is installed for container runs
-- confirm the worker container, not FastAPI or Web UI, owns model execution
+- confirm the `llama-server` container, not FastAPI or Web UI, owns model execution
+- for GTX 1080 / Pascal, confirm the `llama-server` binary or image was built
+  with `sm_61` support
+- reduce `LLM_CONTEXT_SIZE`, `LLM_N_GPU_LAYERS`, `LLAMA_SERVER_BATCH_SIZE`, and
+  `LLAMA_SERVER_UBATCH_SIZE` if the server fails during model load
+- if you see `CUDA error: no kernel image is available for execution on the device`,
+  treat that as a GPU-architecture build mismatch and rebuild or replace the
+  `llama-server` binary/image with `sm_61` support
 
 ## Redis Unavailable
 
@@ -105,9 +114,10 @@ Symptoms:
 Checks:
 
 - confirm `app.worker.main` is running
+- confirm `llama-server` is healthy
 - inspect `GET /api/queue/status`
 - inspect `GET /api/llm/jobs/{job_id}`
-- follow `docker compose logs -f llm-worker` or local worker logs
+- follow `docker compose logs -f llm-worker` and `docker compose logs -f llama-server`
 
 ## Worker Not Running
 
@@ -121,6 +131,23 @@ Checks:
 - start the worker with `python -m app.worker.main`
 - confirm it shares the same `REDIS_URL` and queue settings as FastAPI
 - confirm `LLM_WORKER_CONCURRENCY` remains `1`
+- if `LLM_BACKEND=llama_server`, confirm `LLAMA_SERVER_URL` resolves and the
+  `llama-server` health endpoint responds
+
+## Llama-Server Unavailable
+
+Symptoms:
+
+- worker logs say `The external llama-server is unavailable.`
+- streaming jobs fail quickly after dequeuing
+- `docker compose ps` shows the worker as unhealthy while Redis is healthy
+
+Checks:
+
+- confirm `docker compose logs -f llama-server`
+- confirm `curl http://127.0.0.1:8080/health`
+- confirm `LLAMA_SERVER_URL=http://llama-server:8080` inside the worker
+- confirm the selected image is compatible with the host GPU architecture
 
 ## Web UI Auth Failure
 
