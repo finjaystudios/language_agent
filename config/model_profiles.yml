@@ -23,7 +23,18 @@ profiles:
     top_p: 0.8
     top_k: 20
     min_p: 0
-    max_tokens: 128
+    max_tokens: 256
+    stream: false
+
+  session_state:
+    model: qwen3-4b-q4-k-m
+    reasoning: "off"
+    prompt_control: "/no_think"
+    temperature: 0.1
+    top_p: 0.8
+    top_k: 20
+    min_p: 0
+    max_tokens: 256
     stream: false
 
   translation:
@@ -35,7 +46,7 @@ profiles:
     top_k: 20
     min_p: 0
     max_tokens: 512
-    stream: false
+    stream: true
 
   definition:
     model: qwen3-4b-q4-k-m
@@ -46,7 +57,7 @@ profiles:
     top_k: 20
     min_p: 0
     max_tokens: 512
-    stream: false
+    stream: true
 
   learning:
     model: qwen3-4b-q4-k-m
@@ -56,7 +67,7 @@ profiles:
     top_p: 0.95
     top_k: 20
     min_p: 0
-    max_tokens: 1024
+    max_tokens: 2048
     stream: true
 
   general:

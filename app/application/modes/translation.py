@@ -32,7 +32,7 @@ class TranslationHandler(ModeHandler):
             system_prompt=STATE_UPDATE_SYSTEM_PROMPT,
             user_prompt=prompt,
             schema=TRANSLATION_STATE_SCHEMA,
-            mode="translation",
+            mode="session_state",
         )
 
         session_state.translation = TranslationModeState(**response)
