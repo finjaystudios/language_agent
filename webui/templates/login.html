@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LanguageAgent</title>
+  <link rel="icon" href="/favicon" />
+  <link rel="stylesheet" href="/public/login.css?v=languageagent-login-v1" />
+</head>
+<body data-min-password-length="__MIN_PASSWORD_LENGTH__">
+  <main class="lla-shell">
+    <header class="lla-brand">
+      <img src="/public/logo_dark.png" alt="LanguageAgent logo" />
+      <div>
+        <h1>Language<span>Agent</span></h1>
+        <p>Local language help, clearly explained.</p>
+      </div>
+    </header>
+    <section class="lla-grid">
+      <section class="lla-card">
+        <div class="lla-card-head">
+          <h2>Login to access the app</h2>
+          <p>Sign in with your LanguageAgent username and password.</p>
+        </div>
+        <form id="lla-login-form" class="lla-form">
+          <label class="lla-field">
+            <span>Username</span>
+            <input name="username" type="text" autocomplete="username" required />
+          </label>
+          <label class="lla-field">
+            <span>Password</span>
+            <input name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <div id="lla-login-message" class="lla-message" hidden></div>
+          <button type="submit" class="lla-primary" id="lla-login-submit">Sign In</button>
+        </form>
+        <p class="lla-note">The app stays protected by username and password before any chat access is granted.</p>
+      </section>
+      __SIGNUP_PANEL__
+    </section>
+  </main>
+  <script src="/public/login.js?v=languageagent-login-v1"></script>
+</body>
+</html>

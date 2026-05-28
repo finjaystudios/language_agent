@@ -1,21 +1,44 @@
 import asyncio
 import logging
 import os
+import sys
+from pathlib import Path
 
 import chainlit as cl
 from chainlit.input_widget import Select
 from chainlit.server import app as chainlit_app
+from chainlit.types import ThreadDict
+from fastapi import Request
+from fastapi.responses import HTMLResponse, JSONResponse
 
-from client import (
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from webui.auth import authenticate_user  # noqa: E402
+from webui.auth_rate_limit import close_auth_attempt_store  # noqa: E402
+from webui.client import (  # noqa: E402
     BackendClientError,
     BackendConfig,
+    BackendConflictError,
+    BackendFeatureDisabledError,
     BackendInvalidResponseError,
     BackendStreamError,
+    BackendValidationError,
     FastAPIClient,
     format_ui_error,
 )
-from modes import starter_mode_for_values
-from renderer import render_chat_response
+from webui.config import WebUISettings  # noqa: E402
+from webui.login_page import render_login_page  # noqa: E402
+from webui.modes import starter_mode_for_values  # noqa: E402
+from webui.persistence import (  # noqa: E402
+    apply_user_profile_to_session,
+    chainlit_history_enabled,
+    get_chainlit_data_layer,
+    restore_profile_from_thread,
+    thread_belongs_to_user,
+)
+from webui.renderer import render_chat_response  # noqa: E402
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -28,6 +51,7 @@ SESSION_MODE_KEY = "selected_mode"
 LAST_USER_MESSAGE_KEY = "last_user_message"
 STREAM_FLUSH_CHAR_LIMIT = 96
 MODE_AUTO = "auto"
+AUTH_ENABLED = WebUISettings.from_env().auth_enabled
 STREAMING_MODES = {"translation", "definition", "learning"}
 STREAM_STATUS_MESSAGES = {
     "queued": "Your request is queued and waiting for the model worker.",
@@ -54,6 +78,197 @@ FEEDBACK_CATEGORIES = {
     "incorrect": "Incorrect",
     "offensive": "Offensive",
 }
+
+
+if AUTH_ENABLED:
+
+    @cl.password_auth_callback
+    async def password_auth_callback(username: str, password: str) -> cl.User | None:
+        return await authenticate_user(username, password)
+
+
+@cl.data_layer
+def chainlit_data_layer():
+    if not chainlit_history_enabled():
+        return None
+    return get_chainlit_data_layer()
+
+
+@cl.on_app_startup
+async def on_app_startup() -> None:
+    settings = WebUISettings.from_env()
+    settings.validate_for_auth()
+    logger.info(
+        "webui_startup auth_enabled=%s signup_enabled=%s persistence_enabled=%s cookie_samesite=%s cookie_secure=%s auth_max_failed_attempts=%s auth_lockout_seconds=%s auth_rate_limit_window_seconds=%s",
+        settings.auth_enabled,
+        settings.signup_enabled,
+        chainlit_history_enabled(settings),
+        settings.session_cookie_samesite,
+        settings.session_cookie_secure,
+        settings.auth_max_failed_attempts,
+        settings.auth_lockout_seconds,
+        settings.auth_rate_limit_window_seconds,
+    )
+
+
+@cl.on_app_shutdown
+async def on_app_shutdown() -> None:
+    settings = WebUISettings.from_env()
+    if chainlit_history_enabled(settings):
+        await get_chainlit_data_layer().close()
+    await close_auth_attempt_store()
+
+
+def get_current_user() -> cl.User | None:
+    user = cl.user_session.get("user")
+    if isinstance(user, cl.User):
+        return user
+    return None
+
+
+def current_user_identifier() -> str:
+    user = get_current_user()
+    return user.identifier if user else "anonymous"
+
+
+def current_user_id() -> str:
+    user = get_current_user()
+    metadata = user.metadata if user else {}
+    return str(metadata.get("user_id", "unknown"))
+
+
+def current_session_id() -> str:
+    return str(cl.user_session.get("id", "unknown"))
+
+
+@chainlit_app.get("/login", response_class=HTMLResponse)
+async def login_page() -> HTMLResponse:
+    return HTMLResponse(render_login_page(WebUISettings.from_env()))
+
+
+@chainlit_app.middleware("http")
+async def custom_login_page_middleware(request: Request, call_next):
+    if request.method == "GET" and request.url.path == "/login":
+        return HTMLResponse(render_login_page(WebUISettings.from_env()))
+    return await call_next(request)
+
+
+@chainlit_app.get("/webui/auth/config")
+async def auth_ui_config() -> dict[str, object]:
+    settings = WebUISettings.from_env()
+    return {
+        "signupEnabled": settings.signup_enabled,
+        "minPasswordLength": settings.auth_min_password_length,
+        "requireAdminApproval": settings.signup_require_admin_approval,
+    }
+
+
+@chainlit_app.post("/webui/auth/signup")
+async def auth_signup(request: Request) -> JSONResponse:
+    settings = WebUISettings.from_env()
+    if not settings.signup_enabled:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "success": False,
+                "message": "Account sign-up is not available right now.",
+                "error": "signup_disabled",
+            },
+        )
+
+    payload = await request.json()
+    username = str(payload.get("username", "")).strip()
+    display_name = payload.get("display_name")
+    preferred_language = payload.get("preferred_language")
+
+    logger.info(
+        "service=webui event_type=signup outcome=requested username=%s",
+        username,
+    )
+    client = get_backend_client()
+    try:
+        result = await client.signup_user(
+            username=username,
+            password=str(payload.get("password", "")),
+            confirm_password=(
+                str(payload["confirm_password"])
+                if payload.get("confirm_password") is not None
+                else None
+            ),
+            display_name=(str(display_name) if display_name is not None else None),
+            preferred_language=(
+                str(preferred_language) if preferred_language is not None else None
+            ),
+        )
+    except BackendFeatureDisabledError:
+        logger.warning(
+            "service=webui event_type=signup outcome=disabled username=%s",
+            username,
+        )
+        return JSONResponse(
+            status_code=404,
+            content={
+                "success": False,
+                "message": "Account sign-up is not available right now.",
+                "error": "signup_disabled",
+            },
+        )
+    except BackendConflictError:
+        logger.warning(
+            "service=webui event_type=signup outcome=failure username=%s reason=username_unavailable",
+            username,
+        )
+        return JSONResponse(
+            status_code=409,
+            content={
+                "success": False,
+                "message": "That username is unavailable.",
+                "error": "username_unavailable",
+            },
+        )
+    except BackendValidationError as error:
+        logger.warning(
+            "service=webui event_type=signup outcome=failure username=%s reason=invalid_signup",
+            username,
+        )
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "message": str(error),
+                "error": error.error_code or "invalid_signup",
+            },
+        )
+    except BackendClientError as error:
+        logger.warning(
+            "service=webui event_type=signup outcome=error username=%s reason=%s",
+            username,
+            error.category,
+        )
+        return JSONResponse(
+            status_code=502,
+            content={
+                "success": False,
+                "message": "Account sign-up is unavailable right now. Please try again shortly.",
+                "error": "signup_unavailable",
+            },
+        )
+
+    logger.info(
+        "service=webui event_type=signup outcome=success username=%s user_id=%s",
+        result.username,
+        result.user_id,
+    )
+    return JSONResponse(
+        status_code=201,
+        content={
+            "success": result.success,
+            "message": result.message,
+            "username": result.username,
+            "user_id": result.user_id,
+            "created_at": result.created_at,
+        },
+    )
 
 
 @chainlit_app.get("/webui/backend-status")
@@ -96,26 +311,36 @@ async def backend_status() -> dict[str, str]:
     }
 
 
-def prioritize_backend_status_route() -> None:
-    status_index = None
+def prioritize_webui_routes() -> None:
+    managed_paths = {
+        "/login",
+        "/webui/backend-status",
+        "/webui/auth/config",
+        "/webui/auth/signup",
+    }
     catch_all_index = None
+    managed_routes = []
     for index, route in enumerate(chainlit_app.routes):
         path = getattr(route, "path", "")
-        if path == "/webui/backend-status":
-            status_index = index
+        if path in managed_paths:
+            managed_routes.append((index, route))
         elif path == "/{full_path:path}" and catch_all_index is None:
             catch_all_index = index
 
-    if (
-        status_index is not None
-        and catch_all_index is not None
-        and status_index > catch_all_index
-    ):
-        route = chainlit_app.routes.pop(status_index)
-        chainlit_app.routes.insert(catch_all_index, route)
+    if catch_all_index is None or not managed_routes:
+        return
+
+    for index, _route in sorted(managed_routes, reverse=True):
+        if index > catch_all_index:
+            chainlit_app.routes.pop(index)
+
+    insert_index = catch_all_index
+    for _index, route in sorted(managed_routes, key=lambda item: item[0]):
+        chainlit_app.routes.insert(insert_index, route)
+        insert_index += 1
 
 
-prioritize_backend_status_route()
+prioritize_webui_routes()
 
 
 def get_selected_mode() -> str:
@@ -233,10 +458,59 @@ async def set_starters() -> list[cl.Starter]:
 
 @cl.on_chat_start
 async def on_chat_start() -> None:
+    session_profile = apply_user_profile_to_session(get_current_user())
     cl.user_session.set(SESSION_MODE_KEY, MODE_AUTO)
     cl.user_session.set(LAST_USER_MESSAGE_KEY, "")
-    logger.info("webui_chat_start default_mode=%s", MODE_AUTO)
+    logger.info(
+        "webui_chat_start default_mode=%s username=%s user_id=%s preferred_language=%s ui_theme=%s session_id=%s",
+        MODE_AUTO,
+        current_user_identifier(),
+        current_user_id(),
+        session_profile.get("preferred_language"),
+        session_profile.get("ui_theme"),
+        current_session_id(),
+    )
     await send_mode_settings()
+
+
+@cl.on_chat_resume
+async def on_chat_resume(thread: ThreadDict) -> None:
+    user = get_current_user()
+    if not thread_belongs_to_user(thread, user):
+        logger.warning(
+            "webui_chat_resume_rejected username=%s thread_id=%s reason=thread_owner_mismatch",
+            current_user_identifier(),
+            thread.get("id"),
+        )
+        return
+
+    session_profile = apply_user_profile_to_session(user)
+    restored_profile = restore_profile_from_thread(thread)
+    selected_mode = get_selected_mode()
+    logger.info(
+        "webui_chat_resume thread_id=%s mode=%s username=%s user_id=%s preferred_language=%s ui_theme=%s session_id=%s",
+        thread.get("id"),
+        selected_mode,
+        current_user_identifier(),
+        current_user_id(),
+        restored_profile.get(
+            "preferred_language",
+            session_profile.get("preferred_language"),
+        ),
+        restored_profile.get("ui_theme", session_profile.get("ui_theme")),
+        current_session_id(),
+    )
+    await send_mode_settings(selected_mode)
+
+
+@cl.on_logout
+def on_logout(request, response) -> None:
+    logger.info(
+        "service=webui event_type=auth outcome=logout username=%s user_id=%s session_id=%s",
+        current_user_identifier(),
+        current_user_id(),
+        current_session_id(),
+    )
 
 
 @cl.on_settings_update
@@ -244,7 +518,13 @@ async def on_settings_update(settings: dict[str, object]) -> None:
     selected_mode = normalize_mode_value(settings.get(SESSION_MODE_KEY, MODE_AUTO))
 
     cl.user_session.set(SESSION_MODE_KEY, selected_mode)
-    logger.info("webui_mode_settings_update mode=%s", selected_mode)
+    logger.info(
+        "webui_mode_settings_update mode=%s username=%s user_id=%s session_id=%s",
+        selected_mode,
+        current_user_identifier(),
+        current_user_id(),
+        current_session_id(),
+    )
     await cl.Message(
         content=(
             f"Response mode set to **{mode_label(selected_mode)}**. "
@@ -258,7 +538,13 @@ async def on_set_mode(action: cl.Action) -> None:
     selected_mode = normalize_mode_value(action.payload.get("mode", MODE_AUTO))
 
     cl.user_session.set(SESSION_MODE_KEY, selected_mode)
-    logger.info("webui_mode_action_update mode=%s", selected_mode)
+    logger.info(
+        "webui_mode_action_update mode=%s username=%s user_id=%s session_id=%s",
+        selected_mode,
+        current_user_identifier(),
+        current_user_id(),
+        current_session_id(),
+    )
     await action.remove()
     await send_mode_settings(selected_mode)
     await cl.Message(
@@ -277,7 +563,13 @@ async def on_retry_response(action: cl.Action) -> None:
         return
 
     cl.user_session.set(SESSION_MODE_KEY, selected_mode)
-    logger.info("webui_retry_response mode=%s", selected_mode)
+    logger.info(
+        "webui_retry_response mode=%s username=%s user_id=%s session_id=%s",
+        selected_mode,
+        current_user_identifier(),
+        current_user_id(),
+        current_session_id(),
+    )
     await action.remove()
     await send_mode_settings(selected_mode)
     await handle_user_text(user_text, echo_user=True)
@@ -287,7 +579,10 @@ async def on_retry_response(action: cl.Action) -> None:
 async def on_feedback_good(action: cl.Action) -> None:
     user_text = str(action.payload.get("message", "")).strip()
     logger.info(
-        "webui_feedback_submitted rating=positive message_length=%d",
+        "webui_feedback_submitted rating=positive username=%s user_id=%s session_id=%s message_length=%d",
+        current_user_identifier(),
+        current_user_id(),
+        current_session_id(),
         len(user_text),
     )
     await action.remove()
@@ -316,8 +611,11 @@ async def on_feedback_needs_category(action: cl.Action) -> None:
     payload = res.get("payload", {})
     category = str(payload.get("category", "uncategorized"))
     logger.info(
-        "webui_feedback_submitted rating=negative category=%s message_length=%d",
+        "webui_feedback_submitted rating=negative category=%s username=%s user_id=%s session_id=%s message_length=%d",
         category,
+        current_user_identifier(),
+        current_user_id(),
+        current_session_id(),
         len(user_text),
     )
     await cl.Message(
@@ -351,7 +649,13 @@ async def handle_user_text(
     if starter_mode:
         cl.user_session.set(SESSION_MODE_KEY, starter_mode)
         await send_mode_settings(starter_mode)
-        logger.info("webui_starter_mode_selected mode=%s", starter_mode)
+        logger.info(
+            "webui_starter_mode_selected mode=%s username=%s user_id=%s session_id=%s",
+            starter_mode,
+            current_user_identifier(),
+            current_user_id(),
+            current_session_id(),
+        )
 
     cl.user_session.set(LAST_USER_MESSAGE_KEY, user_text)
     selected_mode = get_selected_mode()
@@ -359,10 +663,13 @@ async def handle_user_text(
     client = get_backend_client()
     use_streaming = should_stream(api_mode)
     logger.info(
-        "webui_message_received mode=%s api_mode=%s streaming=%s message_length=%d",
+        "webui_message_received mode=%s api_mode=%s streaming=%s username=%s user_id=%s session_id=%s message_length=%d",
         selected_mode,
         api_mode,
         use_streaming,
+        current_user_identifier(),
+        current_user_id(),
+        current_session_id(),
         len(user_text),
     )
 
@@ -386,9 +693,12 @@ async def handle_user_text(
             )
     except BackendClientError as error:
         logger.warning(
-            "webui_message_backend_error category=%s mode=%s",
+            "webui_message_backend_error category=%s mode=%s username=%s user_id=%s session_id=%s",
             error.category,
             api_mode,
+            current_user_identifier(),
+            current_user_id(),
+            current_session_id(),
         )
         status_message.content = format_ui_error(error)
         status_message.actions = response_actions(user_text, selected_mode)
@@ -510,7 +820,13 @@ async def stream_backend_response(
                 done_received = True
     except BackendClientError:
         if received_token:
-            logger.warning("webui_stream_interrupted_after_tokens mode=%s", api_mode)
+            logger.warning(
+                "webui_stream_interrupted_after_tokens mode=%s username=%s user_id=%s session_id=%s",
+                api_mode,
+                current_user_identifier(),
+                current_user_id(),
+                current_session_id(),
+            )
             if token_buffer:
                 await response.stream_token(token_buffer)
             response.content = (

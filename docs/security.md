@@ -7,10 +7,15 @@ Chainlit Web UI and the FastAPI backend.
 
 The current security model does not add:
 
-- browser user login
 - OAuth
 - reverse-proxy TLS termination inside the app stack
-- per-user authorization
+- per-user authorization inside FastAPI
+
+This change set enables Chainlit username/password login against the local
+`users` table while preserving the separate service-to-service API key between
+the Web UI server and FastAPI. It also enables Chainlit thread persistence in
+the same internal PostgreSQL database, plus Redis-backed login lockout
+protection for repeated failed sign-in attempts.
 
 ## Boundary
 
@@ -28,6 +33,7 @@ FastAPI keeps these endpoints public:
 
 FastAPI protects model-backed and queue-inspection routes with `X-API-Key`:
 
+- `POST /api/auth/signup`
 - `POST /api/chat`
 - `POST /api/chat/stream`
 - `GET /api/queue/status`
@@ -44,6 +50,41 @@ The current mechanism is a shared static service API key:
 - auth toggle: `AUTH_ENABLED`
 
 This is service authentication, not user authentication.
+
+## Stored User Credentials
+
+Web UI users are stored in PostgreSQL with a password hash only:
+
+- plaintext passwords must never be stored
+- `PASSWORD_HASH_SCHEME` defaults to `argon2id`
+- `bcrypt` remains available as a compatibility fallback
+- inactive users can be retained in the database without being treated as valid
+  sign-in candidates
+- self-service sign-up, when enabled, uses the same password hashing utility as
+  login and local admin user creation
+- `scripts/create_user.py` rejects empty, too-short, username-matching, and
+  obvious passwords when `AUTH_REQUIRE_STRONG_PASSWORD=true`
+
+Recommended handling:
+
+- keep `DATABASE_HOST`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`,
+  `POSTGRES_PASSWORD`, and
+  `CHAINLIT_AUTH_SECRET` in local `.env` files or deployment secret stores
+- keep `SESSION_COOKIE_SAMESITE` and `CHAINLIT_COOKIE_SAMESITE` aligned at
+  `lax` or `strict` for ordinary local and same-site deployments
+- set `SESSION_COOKIE_SECURE=true` before exposing the app over HTTPS on a LAN
+  reverse proxy or public domain
+- keep `AUTH_MAX_FAILED_ATTEMPTS`, `AUTH_LOCKOUT_SECONDS`, and
+  `AUTH_RATE_LIMIT_WINDOW_SECONDS` conservative enough to slow brute-force
+  guesses without blocking normal use
+- keep `AUTH_MIN_PASSWORD_LENGTH` high enough to favor password-manager
+  generated passphrases for both self-service sign-up and seeded admin users
+- do not log password material or password hashes
+- run `alembic upgrade head` before any code path that depends on the `users`
+  table or Chainlit thread history tables
+- use `scripts/create_user.py` or an equivalent admin path that hashes the
+  password before storage; never insert plaintext passwords manually
+- recommend password-manager generated passphrases for seeded users
 
 ## CORS
 
@@ -62,10 +103,20 @@ Wildcard origins with credentials are not used.
 ## Secret Handling Rules
 
 - Do not commit real API keys.
+- Do not commit real database credentials or session secrets.
 - Keep `FASTAPI_API_KEY` in `.env`, shell environment, or deployment-specific
   secret management.
+- Keep `DATABASE_HOST`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`,
+  `POSTGRES_PASSWORD`, and
+  `CHAINLIT_AUTH_SECRET` in `.env`, shell environment, or deployment-specific
+  secret management.
+- Keep PostgreSQL off public interfaces. The default Compose bind is
+  `127.0.0.1` only so host-local tools can connect without exposing the
+  database to LAN clients, Caddy, or Cloudflare.
 - Do not expose the API key in browser-visible content, logs, URLs, or public
   assets.
+- Do not expose `DATABASE_PASSWORD`, `CHAINLIT_AUTH_SECRET`, or password hashes
+  in Chainlit user metadata, messages, or browser-visible responses.
 - Do not bake real secrets into Dockerfiles or images.
 
 ## Local and Docker Behavior
@@ -73,12 +124,66 @@ Wildcard origins with credentials are not used.
 - Recommended examples keep `AUTH_ENABLED=true`.
 - If `AUTH_ENABLED=true` and `FASTAPI_API_KEY` is missing or wrong, protected
   FastAPI routes should fail.
+- If `AUTH_ENABLED=true` and `CHAINLIT_AUTH_SECRET` is missing, Chainlit login
+  should not start successfully.
 - The Web UI sends `X-API-Key` from server-side code only.
 - Docker health checks stay on unauthenticated `GET /health`.
+
+## Web UI Login Flow
+
+- browser users authenticate to Chainlit with username and password
+- Chainlit posts sign-in requests to its own server-side `/login` endpoint
+- the Web UI server validates credentials through the protected FastAPI login
+  endpoint
+- successful login creates a Chainlit session signed with `CHAINLIT_AUTH_SECRET`
+- repeated failed logins for the same username are rate-limited and locked out
+  through Redis-backed counters
+- when `SIGNUP_ENABLED=true`, the custom Web UI login page also offers a
+  sign-up form that posts to the Web UI server, which then calls the protected
+  FastAPI sign-up endpoint with the service API key
+- duplicate usernames return a safe "That username is unavailable" message
+- when `SIGNUP_REQUIRE_ADMIN_APPROVAL=true`, new self-service accounts are
+  created inactive and cannot log in until an admin activates them
+- Chainlit persists thread history against its own internal tables keyed to the
+  authenticated user's database-backed identifier
+- the browser still does not receive `FASTAPI_API_KEY`
+- FastAPI still authenticates only the Web UI server, not the browser user
+
+## Chat History Boundaries
+
+- Chainlit thread history is scoped to the authenticated Chainlit user.
+- The Web UI stores safe profile fields such as `display_name`,
+  `preferred_language`, and `ui_theme` in session/thread metadata for resume.
+- Passwords, password hashes, `FASTAPI_API_KEY`, `DATABASE_PASSWORD`, and
+  `CHAINLIT_AUTH_SECRET` must never appear in Chainlit user metadata or thread
+  metadata.
+
+## Logging and Audit Events
+
+- Web UI auth logs use structured fields such as `service=webui`,
+  `event_type=auth`, and `outcome=success`, `failure`, `locked`, or `logout`
+- usernames may appear in server-side auth logs for operational tracing; do not
+  forward these logs to public or browser-visible surfaces
+- prefer `user_id` for downstream correlation when it is available
+- never log plaintext passwords, password hashes, `FASTAPI_API_KEY`,
+  `DATABASE_PASSWORD`, or `CHAINLIT_AUTH_SECRET`
+
+## Public Exposure
+
+- public LAN or domain access must still pass through the Web UI login form
+- FastAPI remains separately protected by `FASTAPI_API_KEY`
+- `llama-server` remains an internal-only service even if its host debug port is
+  temporarily published for local development
+- PostgreSQL is reachable only from the Compose network and the Docker host
+  loopback bind in local development; it must not be exposed through Caddy,
+  Cloudflare, or a public interface
+- the deterministic Playwright login tests use a seeded local test user and do
+  not require public exposure of any internal service
 
 ## Current Limitations
 
 - A shared API key authenticates the Web UI service, not individual users.
+- FastAPI does not yet consume per-user identity from the Web UI.
 - There are no user scopes, token expiry rules, or per-user audit trails.
 - HTTP encryption is expected to be handled by deployment infrastructure such as
   Cloudflare Tunnel, not by this app-level auth mechanism.

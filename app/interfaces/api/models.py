@@ -11,6 +11,7 @@ from app.domain.mode_responses import (
     LearningResponse,
     TranslationResponse,
 )
+from app.domain.user_profile import UserProfile
 
 
 class ApiMode(StrEnum):
@@ -125,6 +126,84 @@ class ChatResponse(BaseModel):
     )
 
 
+class UserPasswordLoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(
+        min_length=1,
+        description="Username to authenticate for the Web UI.",
+    )
+    password: str = Field(
+        min_length=1,
+        description="Plaintext password to verify for the Web UI session.",
+    )
+
+
+class AuthenticatedUserResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: int = Field(description="Stable database identifier for the user.")
+    username: str = Field(description="Unique username used for authentication.")
+    display_name: str | None = Field(
+        default=None,
+        description="Optional display name for the Web UI.",
+    )
+    role: str = Field(description="Application role associated with the user.")
+    is_admin: bool = Field(description="Whether the user has admin privileges.")
+    preferred_language: str | None = Field(
+        default=None,
+        description="Optional preferred language for future UI defaults.",
+    )
+    ui_theme: str | None = Field(
+        default=None,
+        description="Optional UI theme preference for future UX features.",
+    )
+
+
+class UserSignupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(
+        min_length=1,
+        description="Username to create for the Web UI account.",
+    )
+    password: str = Field(
+        min_length=1,
+        description="Plaintext password for the new account.",
+    )
+    confirm_password: str | None = Field(
+        default=None,
+        description="Optional password confirmation to validate before account creation.",
+    )
+    display_name: str | None = Field(
+        default=None,
+        description="Optional display name for the new user profile.",
+    )
+    preferred_language: str | None = Field(
+        default=None,
+        description="Optional preferred language for future UI defaults.",
+    )
+
+
+class UserSignupResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    success: bool = Field(description="Whether the account was created successfully.")
+    message: str = Field(description="Safe user-facing result message.")
+    user_id: int | None = Field(
+        default=None,
+        description="Stable database identifier for the created user, when available.",
+    )
+    username: str | None = Field(
+        default=None,
+        description="Created username, when safe to return.",
+    )
+    created_at: str | None = Field(
+        default=None,
+        description="ISO-8601 creation timestamp for the new user, when available.",
+    )
+
+
 class ErrorResponse(BaseModel):
     """Stable error response returned by API exception handlers."""
 
@@ -189,4 +268,32 @@ def chat_response_from_result(result: ApplicationChatResult) -> ChatResponse:
         )
         if result.metadata
         else None,
+    )
+
+
+def authenticated_user_response_from_profile(
+    user: UserProfile,
+) -> AuthenticatedUserResponse:
+    return AuthenticatedUserResponse(
+        user_id=user.id,
+        username=user.username,
+        display_name=user.display_name,
+        role=user.role,
+        is_admin=user.is_admin,
+        preferred_language=user.preferred_language,
+        ui_theme=user.ui_theme,
+    )
+
+
+def user_signup_response_from_profile(
+    user: UserProfile,
+    *,
+    message: str,
+) -> UserSignupResponse:
+    return UserSignupResponse(
+        success=True,
+        message=message,
+        user_id=user.id,
+        username=user.username,
+        created_at=user.created_at.isoformat() if user.created_at else None,
     )

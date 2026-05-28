@@ -9,7 +9,7 @@ pytestmark = pytest.mark.e2e
 
 
 def submit_chat_message(page: Page, text: str) -> None:
-    input_box = page.get_by_placeholder("Ask your local language assistant...")
+    input_box = page.locator("textarea").first
     expect(input_box).to_be_enabled()
     input_box.fill(text)
     page.locator("#chat-submit:not([disabled])").click()
@@ -33,14 +33,20 @@ def test_definition_starter_sets_mode_and_renders_response(
     requires_fake_backend: None,
     page: Page,
     chainlit_url: str,
+    login_to_chainlit,
+    e2e_credentials,
+    chat_input,
     reset_fake_backend: None,
     backend_requests,
 ):
     page.goto(chainlit_url)
+    login_to_chainlit(
+        page,
+        e2e_credentials["username"],
+        e2e_credentials["password"],
+    )
 
-    expect(
-        page.get_by_placeholder("Ask your local language assistant...")
-    ).to_be_enabled()
+    expect(chat_input(page)).to_be_enabled()
     page.get_by_role("button", name=re.compile(r"Define")).click()
 
     expect(page.get_by_text("Define recursion in simple terms.")).to_be_visible()
@@ -62,10 +68,17 @@ def test_user_can_send_full_response_message(
     requires_fake_backend: None,
     page: Page,
     chainlit_url: str,
+    login_to_chainlit,
+    e2e_credentials,
     reset_fake_backend: None,
     backend_requests,
 ):
     page.goto(chainlit_url)
+    login_to_chainlit(
+        page,
+        e2e_credentials["username"],
+        e2e_credentials["password"],
+    )
 
     submit_chat_message(page, "Workshop")
 
@@ -86,10 +99,17 @@ def test_settings_response_mode_overrides_next_message(
     requires_fake_backend: None,
     page: Page,
     chainlit_url: str,
+    login_to_chainlit,
+    e2e_credentials,
     reset_fake_backend: None,
     backend_requests,
 ):
     page.goto(chainlit_url)
+    login_to_chainlit(
+        page,
+        e2e_credentials["username"],
+        e2e_credentials["password"],
+    )
 
     select_response_mode(page, "Definition")
     submit_chat_message(page, "Workshop")
@@ -108,14 +128,20 @@ def test_streaming_starter_renders_streamed_response(
     requires_fake_backend: None,
     page: Page,
     chainlit_url: str,
+    login_to_chainlit,
+    e2e_credentials,
+    chat_input,
     reset_fake_backend: None,
     backend_requests,
 ):
     page.goto(chainlit_url)
+    login_to_chainlit(
+        page,
+        e2e_credentials["username"],
+        e2e_credentials["password"],
+    )
 
-    expect(
-        page.get_by_placeholder("Ask your local language assistant...")
-    ).to_be_enabled()
+    expect(chat_input(page)).to_be_enabled()
     page.get_by_role("button", name=re.compile(r"Translate")).click()
 
     expect(page.get_by_text("Bonjour from fake stream.")).to_be_visible(timeout=15000)

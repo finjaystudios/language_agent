@@ -1,5 +1,3 @@
-import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 from webui.client import (
@@ -7,11 +5,10 @@ from webui.client import (
     BackendAuthenticationError,
     format_ui_error,
 )
+from webui.config import WebUISettings
+from webui.login_page import render_login_page
 from webui.modes import starter_mode_for_values
-
-WEBUI_DIR = Path(__file__).resolve().parents[1] / "webui"
-sys.path.insert(0, str(WEBUI_DIR))
-from webui.app import (  # noqa: E402
+from webui.ui_app import (
     has_unclosed_markdown_fence,
     normalize_mode_value,
     should_flush_stream_buffer,
@@ -62,6 +59,72 @@ def test_missing_webui_api_key_message_is_readable_and_safe():
     assert "missing the backend API key" in message
     assert "change-me" not in message
     assert "Traceback" not in message
+
+
+def test_render_login_page_includes_signup_when_enabled():
+    settings = WebUISettings(
+        auth_enabled=True,
+        auth_max_failed_attempts=5,
+        auth_lockout_seconds=300,
+        auth_rate_limit_window_seconds=300,
+        auth_min_password_length=12,
+        auth_require_strong_password=True,
+        signup_enabled=True,
+        signup_require_admin_approval=False,
+        chainlit_history_enabled=False,
+        database_scheme="sqlite+aiosqlite",
+        database_host="",
+        database_port=0,
+        database_name=":memory:",
+        database_user="",
+        database_password="",
+        database_url="sqlite+aiosqlite:///:memory:",
+        chainlit_database_url="sqlite:///:memory:",
+        redis_url="",
+        chainlit_auth_secret="test-secret",
+        chainlit_cookie_samesite="lax",
+        session_cookie_samesite="lax",
+        session_cookie_secure=False,
+    )
+
+    page = render_login_page(settings)
+
+    assert "Create your account" in page
+    assert "lla-signup-form" in page
+    assert "<span>Username</span>" in page
+    assert "Email address" not in page
+
+
+def test_render_login_page_excludes_signup_when_disabled():
+    settings = WebUISettings(
+        auth_enabled=True,
+        auth_max_failed_attempts=5,
+        auth_lockout_seconds=300,
+        auth_rate_limit_window_seconds=300,
+        auth_min_password_length=12,
+        auth_require_strong_password=True,
+        signup_enabled=False,
+        signup_require_admin_approval=False,
+        chainlit_history_enabled=False,
+        database_scheme="sqlite+aiosqlite",
+        database_host="",
+        database_port=0,
+        database_name=":memory:",
+        database_user="",
+        database_password="",
+        database_url="sqlite+aiosqlite:///:memory:",
+        chainlit_database_url="sqlite:///:memory:",
+        redis_url="",
+        chainlit_auth_secret="test-secret",
+        chainlit_cookie_samesite="lax",
+        session_cookie_samesite="lax",
+        session_cookie_secure=False,
+    )
+
+    page = render_login_page(settings)
+
+    assert "Create your account" not in page
+    assert "lla-signup-form" not in page
 
 
 def test_normalize_mode_value_accepts_mode_ids_and_labels():
@@ -130,9 +193,9 @@ def test_stream_backend_response_falls_back_to_full_response_when_empty(monkeypa
         fallback["user_text"] = user_text
         fallback["api_mode"] = api_mode
 
-    monkeypatch.setattr("webui.app.cl.Message", FakeMessage)
+    monkeypatch.setattr("webui.ui_app.cl.Message", FakeMessage)
     monkeypatch.setattr(
-        "webui.app.send_full_backend_response",
+        "webui.ui_app.send_full_backend_response",
         fake_send_full_backend_response,
     )
 

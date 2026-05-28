@@ -9,7 +9,7 @@ pytestmark = pytest.mark.e2e
 
 
 def submit_chat_message(page: Page, text: str) -> None:
-    input_box = page.get_by_placeholder("Ask your local language assistant...")
+    input_box = page.locator("textarea").first
     expect(input_box).to_be_enabled()
     input_box.fill(text)
     page.locator("#chat-submit:not([disabled])").click()
@@ -30,16 +30,22 @@ def test_mobile_layout_is_touch_friendly_and_submits_message(
     requires_fake_backend: None,
     emulated_page: Page,
     chainlit_url: str,
+    login_to_chainlit,
+    e2e_credentials,
+    chat_input,
     reset_fake_backend: None,
     backend_requests,
 ):
     page = emulated_page
     page.goto(chainlit_url)
+    login_to_chainlit(
+        page,
+        e2e_credentials["username"],
+        e2e_credentials["password"],
+    )
 
     expect(page).to_have_title(re.compile(r"LanguageAgent"))
-    expect(
-        page.get_by_placeholder("Ask your local language assistant...")
-    ).to_be_visible()
+    expect(chat_input(page)).to_be_visible()
     expect(page.locator("#chat-submit")).to_be_visible()
     expect(page.get_by_role("button", name="Translate")).to_be_visible()
     expect(page.get_by_role("button", name="Define")).to_be_visible()
@@ -84,6 +90,8 @@ def test_mobile_error_state_is_readable(
     emulated_page: Page,
     unavailable_backend_url: str,
     chainlit_process_factory,
+    login_to_chainlit,
+    e2e_credentials,
     requires_managed_chainlit: None,
 ):
     page = emulated_page
@@ -92,6 +100,11 @@ def test_mobile_error_state_is_readable(
         name="chainlit-webui-mobile-offline",
     )
     page.goto(url)
+    login_to_chainlit(
+        page,
+        e2e_credentials["username"],
+        e2e_credentials["password"],
+    )
 
     submit_chat_message(page, "Hello")
 
@@ -107,14 +120,20 @@ def test_tablet_layout_remains_readable_without_horizontal_overflow(
     requires_fake_backend: None,
     emulated_page: Page,
     chainlit_url: str,
+    login_to_chainlit,
+    e2e_credentials,
+    chat_input,
     reset_fake_backend: None,
 ):
     page = emulated_page
     page.goto(chainlit_url)
+    login_to_chainlit(
+        page,
+        e2e_credentials["username"],
+        e2e_credentials["password"],
+    )
 
-    expect(
-        page.get_by_placeholder("Ask your local language assistant...")
-    ).to_be_visible()
+    expect(chat_input(page)).to_be_visible()
     expect(page.locator("#chat-submit")).to_be_visible()
     assert_no_horizontal_overflow(page)
 
@@ -141,15 +160,21 @@ def test_mobile_safari_layout_smoke_if_webkit_available(
     browser_name: str,
     emulated_page: Page,
     chainlit_url: str,
+    login_to_chainlit,
+    e2e_credentials,
+    chat_input,
 ):
     if browser_name != "webkit":
         pytest.skip("Run with --browser webkit to validate iPhone Safari emulation.")
 
     page = emulated_page
     page.goto(chainlit_url)
+    login_to_chainlit(
+        page,
+        e2e_credentials["username"],
+        e2e_credentials["password"],
+    )
 
-    expect(
-        page.get_by_placeholder("Ask your local language assistant...")
-    ).to_be_visible()
+    expect(chat_input(page)).to_be_visible()
     expect(page.get_by_role("button", name="Translate")).to_be_visible()
     assert_no_horizontal_overflow(page)

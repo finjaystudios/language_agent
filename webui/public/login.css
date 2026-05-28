@@ -1,0 +1,192 @@
+:root {
+  --lla-bg: #0f1722;
+  --lla-border: rgba(148, 163, 184, 0.2);
+  --lla-text: #f8fafc;
+  --lla-muted: #b7c2d0;
+  --lla-primary: #35c4aa;
+  --lla-primary-strong: #28a892;
+  --lla-danger-bg: rgba(248, 113, 113, 0.12);
+  --lla-success-bg: rgba(53, 196, 170, 0.13);
+  --lla-shadow: 0 24px 60px rgba(5, 12, 22, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top right, rgba(53, 196, 170, 0.18), transparent 30%),
+    linear-gradient(135deg, var(--lla-bg), #182232 62%, #111827);
+  color: var(--lla-text);
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+.lla-shell {
+  display: grid;
+  gap: 1.5rem;
+  margin: 0 auto;
+  max-width: 1120px;
+  min-height: 100vh;
+  padding: 2rem 1.25rem;
+}
+
+.lla-brand {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.lla-brand img {
+  border-radius: 1.25rem;
+  height: 72px;
+  width: 72px;
+}
+
+.lla-brand h1 {
+  font-size: clamp(2rem, 3vw, 3rem);
+  margin: 0;
+}
+
+.lla-brand h1 span {
+  color: var(--lla-primary);
+}
+
+.lla-brand p {
+  color: var(--lla-muted);
+  margin: 0.25rem 0 0;
+}
+
+.lla-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: start;
+}
+
+.lla-card {
+  background:
+    linear-gradient(180deg, rgba(19, 29, 42, 0.96), rgba(14, 20, 32, 0.95));
+  border: 1px solid var(--lla-border);
+  border-radius: 1.4rem;
+  box-shadow: var(--lla-shadow);
+  padding: 1.4rem;
+}
+
+.lla-card-head h2 {
+  font-size: 1.45rem;
+  margin: 0;
+}
+
+.lla-card-head p {
+  color: var(--lla-muted);
+  margin: 0.5rem 0 0;
+}
+
+.lla-form {
+  display: grid;
+  gap: 0.95rem;
+  margin-top: 1.15rem;
+}
+
+.lla-field {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.lla-field span {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.lla-field em {
+  color: var(--lla-muted);
+  font-size: 0.82rem;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.lla-field input {
+  background: rgba(8, 12, 20, 0.55);
+  border: 1px solid var(--lla-border);
+  border-radius: 0.95rem;
+  color: var(--lla-text);
+  font: inherit;
+  min-height: 48px;
+  padding: 0.9rem 1rem;
+  width: 100%;
+}
+
+.lla-field input:focus {
+  border-color: rgba(53, 196, 170, 0.7);
+  box-shadow: 0 0 0 3px rgba(53, 196, 170, 0.2);
+  outline: none;
+}
+
+.lla-primary {
+  background: var(--lla-primary);
+  border: 0;
+  border-radius: 999px;
+  color: #05201b;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  min-height: 48px;
+  padding: 0.9rem 1.1rem;
+}
+
+.lla-primary:hover {
+  background: var(--lla-primary-strong);
+}
+
+.lla-primary:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.lla-message {
+  border-radius: 0.95rem;
+  font-size: 0.93rem;
+  line-height: 1.45;
+  padding: 0.85rem 0.95rem;
+}
+
+.lla-message[data-state="error"] {
+  background: var(--lla-danger-bg);
+  border: 1px solid rgba(248, 113, 113, 0.42);
+}
+
+.lla-message[data-state="success"] {
+  background: var(--lla-success-bg);
+  border: 1px solid rgba(53, 196, 170, 0.36);
+}
+
+.lla-hint {
+  color: var(--lla-muted);
+  font-size: 0.88rem;
+  margin: -0.1rem 0 0;
+}
+
+.lla-note {
+  color: var(--lla-muted);
+  font-size: 0.9rem;
+  margin-top: 0.4rem;
+}
+
+@media (max-width: 720px) {
+  .lla-shell {
+    padding: 1.25rem 1rem;
+  }
+
+  .lla-brand {
+    align-items: flex-start;
+  }
+
+  .lla-brand img {
+    height: 60px;
+    width: 60px;
+  }
+}

@@ -1,6 +1,8 @@
 import os
 from dataclasses import dataclass
 
+from sqlalchemy.engine import URL
+
 
 def parse_bool(value: str, *, default: bool) -> bool:
     normalized = value.strip().lower()
@@ -15,11 +17,84 @@ def parse_csv_env(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def build_database_url(
+    *,
+    scheme: str,
+    host: str | None,
+    port: int | None,
+    name: str,
+    username: str | None,
+    password: str | None,
+) -> str:
+    normalized_scheme = scheme.strip()
+    if normalized_scheme.startswith("sqlite"):
+        if name == ":memory:":
+            return f"{normalized_scheme}:///{name}"
+        return f"{normalized_scheme}:///{name.lstrip('/')}"
+
+    return str(
+        URL.create(
+            drivername=normalized_scheme,
+            username=username or None,
+            password=password or None,
+            host=host or None,
+            port=port,
+            database=name,
+        ).render_as_string(hide_password=False)
+    )
+
+
+def build_chainlit_database_url(
+    *,
+    scheme: str,
+    host: str | None,
+    port: int | None,
+    name: str,
+    username: str | None,
+    password: str | None,
+) -> str:
+    normalized_scheme = scheme.strip()
+    if normalized_scheme.startswith("postgresql+"):
+        normalized_scheme = "postgresql"
+    elif normalized_scheme.startswith("postgres+"):
+        normalized_scheme = "postgres"
+
+    return build_database_url(
+        scheme=normalized_scheme,
+        host=host,
+        port=port,
+        name=name,
+        username=username,
+        password=password,
+    )
+
+
 @dataclass(frozen=True)
 class AppSettings:
     auth_enabled: bool
+    auth_max_failed_attempts: int
+    auth_lockout_seconds: int
+    auth_rate_limit_window_seconds: int
+    auth_min_password_length: int
+    auth_require_strong_password: bool
+    signup_enabled: bool
+    signup_default_role: str
+    signup_require_admin_approval: bool
     fastapi_api_key: str | None
+    chainlit_auth_secret: str | None
+    session_cookie_secure: bool
+    session_cookie_samesite: str
     cors_allowed_origins: list[str]
+    database_scheme: str
+    database_host: str
+    database_port: int
+    database_name: str
+    database_user: str
+    database_password: str
+    database_url: str
+    database_pool_size: int
+    database_echo: bool
+    password_hash_scheme: str
     redis_url: str
     llm_backend: str
     llm_queue_name: str
@@ -44,10 +119,74 @@ class AppSettings:
     @classmethod
     def from_env(cls) -> "AppSettings":
         queue_timeout = int(os.getenv("LLM_QUEUE_TIMEOUT_SECONDS", "180"))
+        session_cookie_samesite = (
+            os.getenv(
+                "SESSION_COOKIE_SAMESITE",
+                os.getenv("CHAINLIT_COOKIE_SAMESITE", "lax"),
+            )
+            .strip()
+            .lower()
+        )
+        if session_cookie_samesite not in {"lax", "strict", "none"}:
+            session_cookie_samesite = "lax"
+        database_scheme = os.getenv("DATABASE_SCHEME", "postgresql+asyncpg")
+        database_host = os.getenv("DATABASE_HOST", "127.0.0.1")
+        database_port = int(os.getenv("DATABASE_PORT", "5432"))
+        database_name = os.getenv("DATABASE_NAME", "language_agent")
+        database_user = os.getenv("DATABASE_USER", "language_agent")
+        database_password = os.getenv("DATABASE_PASSWORD", "change-me")
         return cls(
             auth_enabled=parse_bool(os.getenv("AUTH_ENABLED", "true"), default=True),
+            auth_max_failed_attempts=int(os.getenv("AUTH_MAX_FAILED_ATTEMPTS", "5")),
+            auth_lockout_seconds=int(os.getenv("AUTH_LOCKOUT_SECONDS", "300")),
+            auth_rate_limit_window_seconds=int(
+                os.getenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "300")
+            ),
+            auth_min_password_length=int(os.getenv("AUTH_MIN_PASSWORD_LENGTH", "12")),
+            auth_require_strong_password=parse_bool(
+                os.getenv("AUTH_REQUIRE_STRONG_PASSWORD", "true"),
+                default=True,
+            ),
+            signup_enabled=parse_bool(
+                os.getenv("SIGNUP_ENABLED", "true"),
+                default=True,
+            ),
+            signup_default_role=os.getenv("SIGNUP_DEFAULT_ROLE", "user").strip()
+            or "user",
+            signup_require_admin_approval=parse_bool(
+                os.getenv("SIGNUP_REQUIRE_ADMIN_APPROVAL", "false"),
+                default=False,
+            ),
             fastapi_api_key=os.getenv("FASTAPI_API_KEY"),
+            chainlit_auth_secret=os.getenv("CHAINLIT_AUTH_SECRET"),
+            session_cookie_secure=parse_bool(
+                os.getenv(
+                    "SESSION_COOKIE_SECURE",
+                    "true" if session_cookie_samesite == "none" else "false",
+                ),
+                default=session_cookie_samesite == "none",
+            ),
+            session_cookie_samesite=session_cookie_samesite,
             cors_allowed_origins=parse_csv_env(os.getenv("CORS_ALLOWED_ORIGINS", "")),
+            database_scheme=database_scheme,
+            database_host=database_host,
+            database_port=database_port,
+            database_name=database_name,
+            database_user=database_user,
+            database_password=database_password,
+            database_url=build_database_url(
+                scheme=database_scheme,
+                host=database_host,
+                port=database_port,
+                name=database_name,
+                username=database_user,
+                password=database_password,
+            ),
+            database_pool_size=int(os.getenv("DATABASE_POOL_SIZE", "5")),
+            database_echo=parse_bool(
+                os.getenv("DATABASE_ECHO", "false"), default=False
+            ),
+            password_hash_scheme=os.getenv("PASSWORD_HASH_SCHEME", "argon2id"),
             redis_url=os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0"),
             llm_backend=os.getenv("LLM_BACKEND", "llama_server"),
             llm_queue_name=os.getenv("LLM_QUEUE_NAME", "llm"),

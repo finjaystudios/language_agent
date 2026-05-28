@@ -16,7 +16,7 @@ The detailed migration sequence lives in
 LanguageAgent currently has these runtime entry points:
 
 - FastAPI: `python -m uvicorn app.interfaces.api.main:app ...`
-- Chainlit Web UI: `chainlit run webui/app.py ...`
+- Chainlit Web UI: `chainlit run webui/chainlit_app.py ...`
 - RQ worker: `python -m app.worker.main`
 - tests: `pytest ...`
 
@@ -197,7 +197,7 @@ Current practical composition roots:
 - FastAPI root: [`app/interfaces/api/main.py`](C:\Projects\LocalTranslation\language_agent\app\interfaces\api\main.py)
 - FastAPI dependency assembly: [`app/interfaces/api/dependencies.py`](C:\Projects\LocalTranslation\language_agent\app\interfaces\api\dependencies.py)
 - worker root: [`app/worker/main.py`](C:\Projects\LocalTranslation\language_agent\app\worker\main.py)
-- Web UI root: [`webui/app.py`](C:\Projects\LocalTranslation\language_agent\webui\app.py)
+- Web UI root: [`webui/ui_app.py`](C:\Projects\LocalTranslation\language_agent\webui\ui_app.py)
 
 Current dependency-injection responsibilities:
 
@@ -212,7 +212,7 @@ Target composition roots:
 - `interfaces/api/dependencies.py`: assemble application services with queue
   adapters
 - `worker/main.py`: assemble the selected runtime adapter and queue job executor
-- `webui/app.py`: keep separate and HTTP-only
+- `webui/ui_app.py`: keep separate and HTTP-only
 
 ## Recommended Home for Key Concepts
 

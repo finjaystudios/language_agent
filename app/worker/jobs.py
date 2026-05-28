@@ -322,8 +322,6 @@ def create_worker(connection: Redis | None = None) -> Worker:
 
 def main() -> None:
     configure_logging()
-    with _MODEL_LOCK:
-        get_worker_llm_service()
     worker = create_worker()
     logger.info(
         "llm_worker_start queue=%s worker_class=%s",

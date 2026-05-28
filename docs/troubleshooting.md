@@ -97,6 +97,44 @@ Checks:
 - for Compose, confirm the `redis` service is healthy
 - confirm `REDIS_URL` matches the current environment
 
+## PostgreSQL Unavailable
+
+Symptoms:
+
+- `alembic upgrade head` fails before applying migrations
+- `scripts/create_user.py` fails to connect
+- Web UI or future auth work fails when opening database-backed features
+
+Checks:
+
+- for Compose, confirm the `postgres` service is healthy
+- confirm `DATABASE_HOST=postgres` and `DATABASE_PORT=5432` inside Compose
+- confirm `DATABASE_HOST=127.0.0.1` and `DATABASE_PORT=5432` for host-local
+  backend and Chainlit history runs
+- confirm `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` match
+  `DATABASE_NAME`, `DATABASE_USER`, and `DATABASE_PASSWORD`
+- run `docker compose logs -f postgres`
+- validate readiness with `docker compose exec postgres pg_isready -U language_agent -d language_agent`
+
+## Migration Failure
+
+Symptoms:
+
+- `alembic upgrade head` exits with import or connection errors
+- the `users` table or Chainlit history tables are missing after startup
+
+Checks:
+
+- confirm the active Python environment has `alembic`, `SQLAlchemy`, and
+  `asyncpg` installed
+- confirm you are running commands from the repository root
+- for Compose, run either `docker compose run --rm fastapi alembic upgrade head`
+  or `docker compose --profile tools run --rm db-migrate`
+- do not assume migrations run automatically; this stack applies them only when
+  you invoke the command
+- if login works but chat history does not appear, confirm the Chainlit tables
+  were created by the current Alembic revision
+
 ## Queue Stuck
 
 Symptoms:
@@ -147,14 +185,43 @@ Checks:
 
 Symptoms:
 
+- login is rejected
 - Web UI can load but chat requests fail with auth-related errors
+- previous threads do not appear after login or refresh
+- valid credentials work after waiting, but fail briefly after many bad attempts
+- Playwright login tests fail before reaching chat
 
 Checks:
 
+- confirm the user exists in the `users` table
+- confirm the stored user is active
+- confirm the login password matches the stored hash
+- confirm `AUTH_ENABLED=true` and `CHAINLIT_AUTH_SECRET` are set for the Web UI
+- confirm `REDIS_URL` is reachable from the Web UI if lockout protection is
+  enabled
+- confirm `AUTH_MAX_FAILED_ATTEMPTS`, `AUTH_LOCKOUT_SECONDS`, and
+  `AUTH_RATE_LIMIT_WINDOW_SECONDS` match the intended login policy
+- confirm `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`,
+  and `DATABASE_PASSWORD` are reachable and correct for the Web UI process when
+  chat history is expected
 - confirm FastAPI and Web UI use the same `FASTAPI_API_KEY`
 - confirm `AUTH_ENABLED=true` is expected for the current run
 - confirm the browser is talking to Chainlit and Chainlit is calling FastAPI
   server-side
+- confirm `alembic upgrade head` ran after pulling changes that added Chainlit
+  persistence tables
+- if a username is temporarily locked, wait for `AUTH_LOCKOUT_SECONDS` to pass
+  before retrying with the correct password
+- inspect `docker compose logs -f webui` and confirm auth events do not contain
+  plaintext passwords or password hashes
+- for managed Playwright runs, confirm `tests/e2e/conftest.py` can create a
+  temporary SQLite database and seed the `e2e-user` account
+- remember the managed Playwright path intentionally sets
+  `CHAINLIT_HISTORY_ENABLED=false`; chat-history validation belongs to the real
+  PostgreSQL-backed workflow
+
+If login unexpectedly succeeds without a prompt, confirm that the Web UI did not
+start with `AUTH_ENABLED=false`.
 
 ## Caddy Routing Failure
 
@@ -179,5 +246,7 @@ Checks:
 
 - confirm the local origin behind the tunnel is the host Caddy port
 - confirm the local stack works at `http://localhost/` first
+- confirm the Web UI login prompt appears before chat access on the public host
+- do not route PostgreSQL or `llama-server` through the tunnel
 - remember Cloudflare Tunnel is outside `compose.yml`; inspect tunnel config
   separately from local app services

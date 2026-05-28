@@ -1,18 +1,31 @@
 # Docker Compose
 
-Use Docker Compose to run Redis, FastAPI, the dedicated worker, a dedicated
-`llama-server`, the Chainlit Web UI, and Caddy on one local network.
+Use Docker Compose to run PostgreSQL, Redis, FastAPI, the dedicated worker, a
+dedicated `llama-server`, the Chainlit Web UI, and Caddy on one local network.
 
 ## Services
 
 `compose.yml` defines:
 
+- `postgres`
+- `db-migrate`
 - `redis`
 - `llama-server`
 - `fastapi`
 - `llm-worker`
 - `webui`
 - `caddy`
+
+`postgres` is published only on `127.0.0.1:${POSTGRES_HOST_PORT:-5432}` for
+host-local debugging from VS Code. Other Compose services still reach it through
+the internal `postgres:5432` hostname, and it is not routed through Caddy.
+
+`webui` depends on healthy `fastapi` and `postgres` services before startup, and
+PostgreSQL uses the named `postgres-data` volume for persistent local state.
+
+`db-migrate` runs `alembic upgrade head` against the same internal PostgreSQL
+service during normal Compose startup before `fastapi` and `webui` begin
+serving requests.
 
 Only `llama-server` mounts `./models` and requests GPU access. The worker does
 not mount the model directory in the default Compose path. The Web UI does not
@@ -33,6 +46,29 @@ Create a local `.env` file:
 
 ```powershell
 Copy-Item .env.compose.example .env
+```
+
+Set database secrets in that local `.env`, especially:
+
+```text
+POSTGRES_PASSWORD=replace-me
+POSTGRES_HOST_PORT=5432
+DATABASE_SCHEME=postgresql+asyncpg
+DATABASE_HOST=127.0.0.1
+DATABASE_PORT=5432
+DATABASE_NAME=language_agent
+DATABASE_USER=language_agent
+DATABASE_PASSWORD=replace-me
+CHAINLIT_AUTH_SECRET=replace-with-random-secret
+SESSION_COOKIE_SAMESITE=lax
+SESSION_COOKIE_SECURE=false
+AUTH_MAX_FAILED_ATTEMPTS=5
+AUTH_LOCKOUT_SECONDS=300
+AUTH_RATE_LIMIT_WINDOW_SECONDS=300
+AUTH_MIN_PASSWORD_LENGTH=12
+SIGNUP_ENABLED=true
+SIGNUP_DEFAULT_ROLE=user
+SIGNUP_REQUIRE_ADMIN_APPROVAL=false
 ```
 
 For Compose, `LLAMA_SERVER_MODEL_PATH` now belongs to `llama-server` and must point at
@@ -57,6 +93,13 @@ GTX 1080 / Pascal note:
   `LLAMA_SERVER_N_GPU_LAYERS=20`, `LLAMA_SERVER_BATCH_SIZE=256`, and
   `LLAMA_SERVER_UBATCH_SIZE=128`
 
+`db-migrate` runs automatically during normal Compose startup. To rerun
+migrations manually, use the migration service:
+
+```powershell
+docker compose run --rm db-migrate
+```
+
 Build and start the stack:
 
 ```powershell
@@ -73,8 +116,26 @@ docker compose up
 Start only the queue path and model server while debugging:
 
 ```powershell
-docker compose up -d redis llama-server llm-worker
+docker compose up -d postgres redis llama-server llm-worker
 ```
+
+Create a local admin user after migrations:
+
+```powershell
+docker compose run --rm fastapi python scripts/create_user.py `
+  --username admin `
+  --password change-me-now `
+  --display-name "Local Admin" `
+  --admin
+```
+
+Use a password manager-generated passphrase for seeded users. The command
+rejects empty, obvious, and too-short passwords by default.
+
+Self-service sign-up is enabled on the custom Web UI login page when
+`SIGNUP_ENABLED=true`. If you do not want public self-service account creation
+on a LAN or domain deployment, set `SIGNUP_ENABLED=false` before starting
+Compose.
 
 ## URLs
 
@@ -90,11 +151,16 @@ Direct host ports remain available for development:
 
 - FastAPI direct: `http://127.0.0.1:8000`
 - Chainlit direct: `http://127.0.0.1:8001`
+- PostgreSQL host-local debug port: `127.0.0.1:${POSTGRES_HOST_PORT:-5432}`
 - llama-server direct debug port: `http://127.0.0.1:8080`
 
 LAN devices can replace `localhost` with the host machine IP address. If local
 name resolution maps `agent.local` to the Docker host, the same routes can be
-used there as well.
+used there as well. In both cases, browser users must authenticate through the
+Web UI login before chat access.
+
+Neither PostgreSQL nor `llama-server` is routed through Caddy. Cloudflare, if
+used later, should continue to point only at the host Caddy entrypoint.
 
 ## Health and Logs
 
@@ -146,15 +212,19 @@ docker compose down
 
 Manual validation checklist:
 
-1. `docker compose up -d redis llama-server llm-worker`
-2. `curl http://127.0.0.1:8080/health`
-3. `docker compose up -d fastapi webui caddy`
-4. Submit an authenticated `/api/chat` request
-5. Submit an authenticated `/api/chat/stream` request
-6. Confirm `docker compose logs -f llm-worker` shows worker activity
-7. Confirm `docker compose logs -f llama-server` shows model-server requests
-8. Confirm Web UI works at `http://localhost/`
-9. Confirm Caddy still proxies `http://localhost/api/health`
+1. `docker compose up -d postgres redis llama-server llm-worker`
+2. Confirm `db-migrate` exits successfully with `docker compose ps db-migrate`
+3. `curl http://127.0.0.1:8080/health`
+4. `docker compose up -d fastapi webui caddy`
+5. Submit an authenticated `/api/chat` request
+6. Submit an authenticated `/api/chat/stream` request
+7. Confirm `docker compose logs -f llm-worker` shows worker activity
+8. Confirm `docker compose logs -f llama-server` shows model-server requests
+9. Confirm Web UI works at `http://localhost/`
+10. Confirm Caddy still proxies `http://localhost/api/health`
+11. Confirm the login page shows the sign-up form only when `SIGNUP_ENABLED=true`
+12. Confirm a newly signed-up user can sign in, or sees the pending-approval
+    message when `SIGNUP_REQUIRE_ADMIN_APPROVAL=true`
 
 Backend status route through the Web UI server:
 

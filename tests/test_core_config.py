@@ -10,6 +10,25 @@ from app.core.config import AppSettings  # noqa: E402
 
 def test_app_settings_default_llama_server_config(monkeypatch):
     for key in (
+        "AUTH_MAX_FAILED_ATTEMPTS",
+        "AUTH_LOCKOUT_SECONDS",
+        "AUTH_RATE_LIMIT_WINDOW_SECONDS",
+        "AUTH_MIN_PASSWORD_LENGTH",
+        "AUTH_REQUIRE_STRONG_PASSWORD",
+        "SIGNUP_ENABLED",
+        "SIGNUP_DEFAULT_ROLE",
+        "SIGNUP_REQUIRE_ADMIN_APPROVAL",
+        "CHAINLIT_AUTH_SECRET",
+        "SESSION_COOKIE_SAMESITE",
+        "SESSION_COOKIE_SECURE",
+        "DATABASE_SCHEME",
+        "DATABASE_HOST",
+        "DATABASE_PORT",
+        "DATABASE_NAME",
+        "DATABASE_USER",
+        "DATABASE_PASSWORD",
+        "DATABASE_POOL_SIZE",
+        "DATABASE_ECHO",
         "LLM_BACKEND",
         "LLAMA_SERVER_URL",
         "LLAMA_SERVER_API_KEY",
@@ -18,6 +37,7 @@ def test_app_settings_default_llama_server_config(monkeypatch):
         "LLAMA_SERVER_MODEL_NAME",
         "LLAMA_SERVER_HEALTH_PATH",
         "MODEL_PROFILES_PATH",
+        "PASSWORD_HASH_SCHEME",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -31,9 +51,52 @@ def test_app_settings_default_llama_server_config(monkeypatch):
     assert settings.llama_server_model_name == ""
     assert settings.llama_server_health_path == "/health"
     assert settings.model_profiles_path == "config/model_profiles.yml"
+    assert settings.chainlit_auth_secret is None
+    assert settings.auth_max_failed_attempts == 5
+    assert settings.auth_lockout_seconds == 300
+    assert settings.auth_rate_limit_window_seconds == 300
+    assert settings.auth_min_password_length == 12
+    assert settings.auth_require_strong_password is True
+    assert settings.signup_enabled is True
+    assert settings.signup_default_role == "user"
+    assert settings.signup_require_admin_approval is False
+    assert settings.session_cookie_samesite == "lax"
+    assert settings.session_cookie_secure is False
+    assert settings.database_scheme == "postgresql+asyncpg"
+    assert settings.database_host == "127.0.0.1"
+    assert settings.database_port == 5432
+    assert settings.database_name == "language_agent"
+    assert settings.database_user == "language_agent"
+    assert settings.database_password == "change-me"
+    assert (
+        settings.database_url
+        == "postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent"
+    )
+    assert settings.database_pool_size == 5
+    assert settings.database_echo is False
+    assert settings.password_hash_scheme == "argon2id"
 
 
 def test_app_settings_reads_llama_server_env(monkeypatch):
+    monkeypatch.setenv("CHAINLIT_AUTH_SECRET", "session-secret")
+    monkeypatch.setenv("AUTH_MAX_FAILED_ATTEMPTS", "7")
+    monkeypatch.setenv("AUTH_LOCKOUT_SECONDS", "600")
+    monkeypatch.setenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "120")
+    monkeypatch.setenv("AUTH_MIN_PASSWORD_LENGTH", "16")
+    monkeypatch.setenv("AUTH_REQUIRE_STRONG_PASSWORD", "false")
+    monkeypatch.setenv("SIGNUP_ENABLED", "false")
+    monkeypatch.setenv("SIGNUP_DEFAULT_ROLE", "member")
+    monkeypatch.setenv("SIGNUP_REQUIRE_ADMIN_APPROVAL", "true")
+    monkeypatch.setenv("SESSION_COOKIE_SAMESITE", "strict")
+    monkeypatch.setenv("SESSION_COOKIE_SECURE", "true")
+    monkeypatch.setenv("DATABASE_SCHEME", "postgresql+asyncpg")
+    monkeypatch.setenv("DATABASE_HOST", "db")
+    monkeypatch.setenv("DATABASE_PORT", "5432")
+    monkeypatch.setenv("DATABASE_NAME", "appdb")
+    monkeypatch.setenv("DATABASE_USER", "user")
+    monkeypatch.setenv("DATABASE_PASSWORD", "pass")
+    monkeypatch.setenv("DATABASE_POOL_SIZE", "9")
+    monkeypatch.setenv("DATABASE_ECHO", "true")
     monkeypatch.setenv("LLM_BACKEND", "llama_server")
     monkeypatch.setenv("LLAMA_SERVER_URL", "http://llama-server:8080")
     monkeypatch.setenv("LLAMA_SERVER_API_KEY", "test-key")
@@ -42,6 +105,7 @@ def test_app_settings_reads_llama_server_env(monkeypatch):
     monkeypatch.setenv("LLAMA_SERVER_MODEL_NAME", "qwen2.5-7b-instruct")
     monkeypatch.setenv("LLAMA_SERVER_HEALTH_PATH", "/v1/models")
     monkeypatch.setenv("MODEL_PROFILES_PATH", "config/custom-model-profiles.yml")
+    monkeypatch.setenv("PASSWORD_HASH_SCHEME", "bcrypt")
 
     settings = AppSettings.from_env()
 
@@ -53,3 +117,24 @@ def test_app_settings_reads_llama_server_env(monkeypatch):
     assert settings.llama_server_model_name == "qwen2.5-7b-instruct"
     assert settings.llama_server_health_path == "/v1/models"
     assert settings.model_profiles_path == "config/custom-model-profiles.yml"
+    assert settings.chainlit_auth_secret == "session-secret"
+    assert settings.auth_max_failed_attempts == 7
+    assert settings.auth_lockout_seconds == 600
+    assert settings.auth_rate_limit_window_seconds == 120
+    assert settings.auth_min_password_length == 16
+    assert settings.auth_require_strong_password is False
+    assert settings.signup_enabled is False
+    assert settings.signup_default_role == "member"
+    assert settings.signup_require_admin_approval is True
+    assert settings.session_cookie_samesite == "strict"
+    assert settings.session_cookie_secure is True
+    assert settings.database_scheme == "postgresql+asyncpg"
+    assert settings.database_host == "db"
+    assert settings.database_port == 5432
+    assert settings.database_name == "appdb"
+    assert settings.database_user == "user"
+    assert settings.database_password == "pass"
+    assert settings.database_url == "postgresql+asyncpg://user:pass@db:5432/appdb"
+    assert settings.database_pool_size == 9
+    assert settings.database_echo is True
+    assert settings.password_hash_scheme == "bcrypt"
