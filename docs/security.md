@@ -12,6 +12,9 @@ The current security model does not add:
 - reverse-proxy TLS termination inside the app stack
 - per-user authorization
 
+This change set adds the persistence and password-storage foundation for future
+username/password login, but it does not enable Web UI sign-in yet.
+
 ## Boundary
 
 Browser users interact with Chainlit only. Chainlit server-side Python then
@@ -45,6 +48,24 @@ The current mechanism is a shared static service API key:
 
 This is service authentication, not user authentication.
 
+## Stored User Credentials
+
+Planned Web UI users are stored in PostgreSQL with a password hash only:
+
+- plaintext passwords must never be stored
+- `PASSWORD_HASH_SCHEME` defaults to `argon2id`
+- `bcrypt` remains available as a compatibility fallback
+- inactive users can be retained in the database without being treated as valid
+  sign-in candidates
+
+Recommended handling:
+
+- keep `DATABASE_URL`, `POSTGRES_PASSWORD`, and `CHAINLIT_AUTH_SECRET` in local
+  `.env` files or deployment secret stores
+- do not log password material or password hashes
+- run `alembic upgrade head` before any code path that depends on the `users`
+  table
+
 ## CORS
 
 The browser does not call FastAPI directly in the normal Chainlit workflow, so
@@ -62,8 +83,11 @@ Wildcard origins with credentials are not used.
 ## Secret Handling Rules
 
 - Do not commit real API keys.
+- Do not commit real database credentials or session secrets.
 - Keep `FASTAPI_API_KEY` in `.env`, shell environment, or deployment-specific
   secret management.
+- Keep `DATABASE_URL`, `POSTGRES_PASSWORD`, and `CHAINLIT_AUTH_SECRET` in `.env`,
+  shell environment, or deployment-specific secret management.
 - Do not expose the API key in browser-visible content, logs, URLs, or public
   assets.
 - Do not bake real secrets into Dockerfiles or images.
@@ -79,6 +103,7 @@ Wildcard origins with credentials are not used.
 ## Current Limitations
 
 - A shared API key authenticates the Web UI service, not individual users.
+- Username/password login is not wired into Chainlit yet.
 - There are no user scopes, token expiry rules, or per-user audit trails.
 - HTTP encryption is expected to be handled by deployment infrastructure such as
   Cloudflare Tunnel, not by this app-level auth mechanism.

@@ -1,4 +1,23 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-language_agent}
+      POSTGRES_USER: ${POSTGRES_USER:-language_agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-language_agent} -d ${POSTGRES_DB:-language_agent}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
@@ -63,6 +82,11 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       AUTH_ENABLED: ${AUTH_ENABLED:-true}
       FASTAPI_API_KEY: ${FASTAPI_API_KEY:-local-dev-change-me}
+      CHAINLIT_AUTH_SECRET: ${CHAINLIT_AUTH_SECRET:-replace-with-random-secret-when-login-is-enabled}
+      PASSWORD_HASH_SCHEME: ${PASSWORD_HASH_SCHEME:-argon2id}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://language_agent:change-me@postgres:5432/language_agent}
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-5}
+      DATABASE_ECHO: ${DATABASE_ECHO:-false}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8001,http://127.0.0.1:8001}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       LLM_QUEUE_NAME: ${LLM_QUEUE_NAME:-llm}
@@ -76,6 +100,8 @@ services:
       LLM_STATUS_POLL_INTERVAL_SECONDS: ${LLM_STATUS_POLL_INTERVAL_SECONDS:-0.05}
       LLM_STREAM_TIMEOUT_SECONDS: ${LLM_STREAM_TIMEOUT_SECONDS:-180}
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -97,6 +123,9 @@ services:
     restart: unless-stopped
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://language_agent:change-me@postgres:5432/language_agent}
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-5}
+      DATABASE_ECHO: ${DATABASE_ECHO:-false}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       LLM_BACKEND: ${LLM_BACKEND:-llama_server}
       LLAMA_SERVER_URL: ${LLAMA_SERVER_URL:-http://llama-server:${LLAMA_SERVER_PORT:-8080}}
@@ -118,6 +147,8 @@ services:
       LLM_STATUS_POLL_INTERVAL_SECONDS: ${LLM_STATUS_POLL_INTERVAL_SECONDS:-0.05}
       LLM_STREAM_TIMEOUT_SECONDS: ${LLM_STREAM_TIMEOUT_SECONDS:-180}
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
       llama-server:
@@ -145,6 +176,7 @@ services:
     environment:
       FASTAPI_BASE_URL: http://fastapi:8000
       FASTAPI_API_KEY: ${FASTAPI_API_KEY:-local-dev-change-me}
+      CHAINLIT_AUTH_SECRET: ${CHAINLIT_AUTH_SECRET:-replace-with-random-secret-when-login-is-enabled}
       WEBUI_HOST: 0.0.0.0
       WEBUI_PORT: 8001
       WEBUI_REQUEST_TIMEOUT_SECONDS: ${WEBUI_REQUEST_TIMEOUT_SECONDS:-120}
@@ -188,4 +220,5 @@ services:
       retries: 3
 
 volumes:
+  postgres-data:
   redis-data:

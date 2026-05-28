@@ -19,7 +19,12 @@ def parse_csv_env(value: str) -> list[str]:
 class AppSettings:
     auth_enabled: bool
     fastapi_api_key: str | None
+    chainlit_auth_secret: str | None
     cors_allowed_origins: list[str]
+    database_url: str
+    database_pool_size: int
+    database_echo: bool
+    password_hash_scheme: str
     redis_url: str
     llm_backend: str
     llm_queue_name: str
@@ -47,7 +52,17 @@ class AppSettings:
         return cls(
             auth_enabled=parse_bool(os.getenv("AUTH_ENABLED", "true"), default=True),
             fastapi_api_key=os.getenv("FASTAPI_API_KEY"),
+            chainlit_auth_secret=os.getenv("CHAINLIT_AUTH_SECRET"),
             cors_allowed_origins=parse_csv_env(os.getenv("CORS_ALLOWED_ORIGINS", "")),
+            database_url=os.getenv(
+                "DATABASE_URL",
+                "postgresql+psycopg://language_agent:change-me@127.0.0.1:5432/language_agent",
+            ),
+            database_pool_size=int(os.getenv("DATABASE_POOL_SIZE", "5")),
+            database_echo=parse_bool(
+                os.getenv("DATABASE_ECHO", "false"), default=False
+            ),
+            password_hash_scheme=os.getenv("PASSWORD_HASH_SCHEME", "argon2id"),
             redis_url=os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0"),
             llm_backend=os.getenv("LLM_BACKEND", "llama_server"),
             llm_queue_name=os.getenv("LLM_QUEUE_NAME", "llm"),

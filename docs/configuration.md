@@ -13,7 +13,28 @@ Compose. Use [`.env.example`](../.env.example) for local host runs and
 | `LOG_LEVEL` | `INFO` | FastAPI, worker, Web UI | Log verbosity |
 | `AUTH_ENABLED` | `true` | FastAPI | Enables API key validation on protected routes |
 | `FASTAPI_API_KEY` | None | FastAPI, Web UI | Shared service-to-service API key |
+| `CHAINLIT_AUTH_SECRET` | unset | Web UI | Reserved session/auth secret for future username/password login wiring |
+| `PASSWORD_HASH_SCHEME` | `argon2id` | backend auth utilities | Password hashing algorithm for stored user credentials |
 | `CORS_ALLOWED_ORIGINS` | empty in code, example values in env templates | FastAPI | Optional comma-separated origins for future direct browser access |
+
+## Database
+
+| Variable | Default | Used by | Purpose |
+| --- | --- | --- | --- |
+| `DATABASE_URL` | `postgresql+psycopg://language_agent:change-me@127.0.0.1:5432/language_agent` locally, `postgresql+psycopg://language_agent:change-me@postgres:5432/language_agent` in Compose examples | FastAPI, worker, Alembic | SQLAlchemy and Alembic database connection string |
+| `DATABASE_POOL_SIZE` | `5` | FastAPI, worker | SQLAlchemy connection pool size for non-SQLite backends |
+| `DATABASE_ECHO` | `false` | FastAPI, worker | Enables SQLAlchemy SQL logging when debugging |
+| `POSTGRES_DB` | `language_agent` | Compose `postgres` service | Internal database name for the bundled PostgreSQL container |
+| `POSTGRES_USER` | `language_agent` | Compose `postgres` service | Internal PostgreSQL username |
+| `POSTGRES_PASSWORD` | placeholder in env examples | Compose `postgres` service | Internal PostgreSQL password; keep in local `.env` only |
+
+Migration commands:
+
+```powershell
+alembic upgrade head
+alembic current
+alembic history
+```
 
 ## Queue and Redis
 
@@ -102,9 +123,13 @@ The embedded `llama-cpp-python` runtime was removed from the active code path.
 ## Configuration Notes
 
 - Keep `FASTAPI_API_KEY` out of browser-visible content.
+- Keep `CHAINLIT_AUTH_SECRET`, `POSTGRES_PASSWORD`, and `DATABASE_URL` credentials
+  out of committed files.
 - Keep real secrets out of committed files.
 - For Compose, `LLAMA_SERVER_MODEL_PATH` belongs to the `llama-server` service
   and should point at the in-container `/models/...` path.
+- The bundled PostgreSQL service is internal-only in `compose.yml`; no host port
+  is published by default.
 - For Compose-local Pascal GPUs such as a GTX 1080, start with
   `LLAMA_SERVER_CONTEXT_SIZE=1024` or `2048`, modest
   `LLAMA_SERVER_N_GPU_LAYERS`, and conservative `LLAMA_SERVER_BATCH_SIZE` /
