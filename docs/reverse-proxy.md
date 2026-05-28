@@ -132,6 +132,14 @@ Cloudflare Tunnel -> host Caddy port -> Caddy -> webui or fastapi
 This repo does not currently define Cloudflare services, public domain routing,
 or tunnel configuration inside Compose.
 
+When exposing the stack over a LAN hostname or public domain:
+
+- browser users must pass the Web UI username/password login before chat access
+- FastAPI remains separately protected by `FASTAPI_API_KEY`
+- `llama-server` should remain internal-only
+- PostgreSQL should remain internal-only and must not be published through
+  Caddy or Cloudflare
+
 ## Related Docs
 
 - [`docker-compose.md`](docker-compose.md)

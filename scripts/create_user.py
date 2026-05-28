@@ -25,6 +25,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def validate_create_user_password(username: str, password: str) -> None:
+    from app.core.config import AppSettings
+    from app.infrastructure.security.password_policy import validate_password_strength
+
+    settings = AppSettings.from_env()
+    validate_password_strength(
+        password,
+        username=username,
+        require_strong_password=settings.auth_require_strong_password,
+    )
+
+
 async def run() -> int:
     from app.domain.user_profile import UsernameAlreadyExistsError
     from app.infrastructure.database.repositories import SQLAlchemyUserRepository
@@ -33,6 +45,12 @@ async def run() -> int:
 
     args = build_parser().parse_args()
     repository = SQLAlchemyUserRepository(get_async_session_factory())
+
+    try:
+        validate_create_user_password(args.username, args.password)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 1
 
     try:
         created = await repository.create_user(

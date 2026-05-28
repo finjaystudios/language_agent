@@ -14,7 +14,13 @@ Compose. Use [`.env.example`](../.env.example) for local host runs and
 | `AUTH_ENABLED` | `true` | FastAPI, Web UI | Enables protected FastAPI routes and Chainlit password login by default |
 | `FASTAPI_API_KEY` | None | FastAPI, Web UI | Shared service-to-service API key used only for Web UI server-to-FastAPI calls |
 | `CHAINLIT_AUTH_SECRET` | unset | Web UI | Required Chainlit session/JWT secret when username/password login is enabled |
+| `AUTH_MAX_FAILED_ATTEMPTS` | `5` | Web UI | Failed login attempts allowed per username inside the current rate-limit window before lockout |
+| `AUTH_LOCKOUT_SECONDS` | `300` | Web UI | Username lockout duration after too many failed login attempts |
+| `AUTH_RATE_LIMIT_WINDOW_SECONDS` | `300` | Web UI | Window used for counting failed login attempts |
+| `AUTH_REQUIRE_STRONG_PASSWORD` | `true` | user creation tooling | Enforces the password-strength policy in `scripts/create_user.py` |
 | `PASSWORD_HASH_SCHEME` | `argon2id` | backend auth utilities | Password hashing algorithm for stored user credentials |
+| `SESSION_COOKIE_SAMESITE` | `lax` | Web UI | Preferred auth-cookie SameSite mode for Chainlit sessions |
+| `SESSION_COOKIE_SECURE` | `false` unless SameSite is `none` | Web UI | Preferred auth-cookie secure flag; set `true` for HTTPS deployments |
 | `CORS_ALLOWED_ORIGINS` | empty in code, example values in env templates | FastAPI | Optional comma-separated origins for future direct browser access |
 
 ## Database
@@ -45,7 +51,7 @@ alembic history
 
 | Variable | Default | Used by | Purpose |
 | --- | --- | --- | --- |
-| `REDIS_URL` | `redis://127.0.0.1:6379/0` | FastAPI, worker | Redis connection URL |
+| `REDIS_URL` | `redis://127.0.0.1:6379/0` locally, `redis://redis:6379/0` in Compose | FastAPI, worker, Web UI | Redis connection URL for queueing and Web UI auth lockout storage |
 | `LLM_BACKEND` | `llama_server` | FastAPI, worker | Runtime selector. `llama_server` is now the default runtime for host-local and Compose flows |
 | `LLM_QUEUE_NAME` | `llm` | FastAPI, worker | RQ queue name |
 | `LLM_QUEUE_TIMEOUT_SECONDS` | `180` | FastAPI, worker | General queue operation timeout |
@@ -119,7 +125,7 @@ The embedded `llama-cpp-python` runtime was removed from the active code path.
 | Variable | Default | Used by | Purpose |
 | --- | --- | --- | --- |
 | `FASTAPI_BASE_URL` | `http://localhost:8000` locally, `http://fastapi:8000` in Compose | Web UI | Backend base URL for server-side Chainlit calls |
-| `CHAINLIT_COOKIE_SAMESITE` | `lax` | Web UI | Chainlit auth-cookie SameSite mode; `none` implies secure cookies |
+| `CHAINLIT_COOKIE_SAMESITE` | `lax` | Web UI | Chainlit native cookie setting; keep aligned with `SESSION_COOKIE_SAMESITE` |
 | `WEBUI_HOST` | `0.0.0.0` | Web UI container | Chainlit bind host |
 | `WEBUI_PORT` | `8001` | Web UI container | Chainlit bind port |
 | `WEBUI_REQUEST_TIMEOUT_SECONDS` | `120` | Web UI | Backend request timeout |
@@ -132,10 +138,14 @@ The embedded `llama-cpp-python` runtime was removed from the active code path.
 - Keep `CHAINLIT_AUTH_SECRET`, `POSTGRES_PASSWORD`, and `DATABASE_PASSWORD`
   credentials
   out of committed files.
+- Keep `SESSION_COOKIE_SAMESITE=lax` or `strict` for localhost, LAN, and
+  same-site domain deployments. Use `none` only when the browser must send the
+  cookie cross-site, and pair it with `SESSION_COOKIE_SECURE=true` over HTTPS.
 - `alembic upgrade head` now creates both the app `users` table and Chainlit's
   persistence tables for thread history and resume support.
-- Keep `CHAINLIT_COOKIE_SAMESITE=lax` or `strict` unless you explicitly need a
-  cross-site deployment that requires `none` with HTTPS.
+- `scripts/create_user.py` rejects empty, too-short, and obvious passwords when
+  `AUTH_REQUIRE_STRONG_PASSWORD=true`. Prefer a password manager-generated
+  passphrase instead of inventing one manually.
 - Keep real secrets out of committed files.
 - For Compose, `LLAMA_SERVER_MODEL_PATH` belongs to the `llama-server` service
   and should point at the in-container `/models/...` path.

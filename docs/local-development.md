@@ -55,6 +55,9 @@ python scripts/create_user.py `
   --admin
 ```
 
+The default password policy expects a non-obvious password with at least
+12 characters. Prefer a password manager-generated passphrase.
+
 ## Redis
 
 Start Redis locally:
@@ -134,6 +137,12 @@ Run the Web UI as a separate local process:
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
 $env:CHAINLIT_AUTH_SECRET = "replace-with-random-secret-when-login-is-enabled"
+$env:REDIS_URL = "redis://127.0.0.1:6379/0"
+$env:AUTH_MAX_FAILED_ATTEMPTS = "5"
+$env:AUTH_LOCKOUT_SECONDS = "300"
+$env:AUTH_RATE_LIMIT_WINDOW_SECONDS = "300"
+$env:SESSION_COOKIE_SAMESITE = "lax"
+$env:SESSION_COOKIE_SECURE = "false"
 $env:DATABASE_SCHEME = "postgresql+asyncpg"
 $env:DATABASE_HOST = "127.0.0.1"
 $env:DATABASE_PORT = "5432"
@@ -154,6 +163,8 @@ Chat history and resume notes:
 - `DATABASE_SCHEME`, `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`,
   `DATABASE_USER`, and `DATABASE_PASSWORD` together enable Chainlit's persisted
   thread history.
+- `REDIS_URL` enables shared login lockout state for repeated failed sign-in
+  attempts.
 - After logging in, start a chat, refresh the page, and confirm the thread can
   be resumed under the same user.
 

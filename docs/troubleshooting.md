@@ -188,6 +188,7 @@ Symptoms:
 - login is rejected
 - Web UI can load but chat requests fail with auth-related errors
 - previous threads do not appear after login or refresh
+- valid credentials work after waiting, but fail briefly after many bad attempts
 
 Checks:
 
@@ -195,6 +196,10 @@ Checks:
 - confirm the stored user is active
 - confirm the login password matches the stored hash
 - confirm `AUTH_ENABLED=true` and `CHAINLIT_AUTH_SECRET` are set for the Web UI
+- confirm `REDIS_URL` is reachable from the Web UI if lockout protection is
+  enabled
+- confirm `AUTH_MAX_FAILED_ATTEMPTS`, `AUTH_LOCKOUT_SECONDS`, and
+  `AUTH_RATE_LIMIT_WINDOW_SECONDS` match the intended login policy
 - confirm `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`,
   and `DATABASE_PASSWORD` are reachable and correct for the Web UI process when
   chat history is expected
@@ -204,6 +209,10 @@ Checks:
   server-side
 - confirm `alembic upgrade head` ran after pulling changes that added Chainlit
   persistence tables
+- if a username is temporarily locked, wait for `AUTH_LOCKOUT_SECONDS` to pass
+  before retrying with the correct password
+- inspect `docker compose logs -f webui` and confirm auth events do not contain
+  plaintext passwords or password hashes
 
 If login unexpectedly succeeds without a prompt, confirm that the Web UI did not
 start with `AUTH_ENABLED=false`.
@@ -231,5 +240,7 @@ Checks:
 
 - confirm the local origin behind the tunnel is the host Caddy port
 - confirm the local stack works at `http://localhost/` first
+- confirm the Web UI login prompt appears before chat access on the public host
+- do not route PostgreSQL or `llama-server` through the tunnel
 - remember Cloudflare Tunnel is outside `compose.yml`; inspect tunnel config
   separately from local app services

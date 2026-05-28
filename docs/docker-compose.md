@@ -55,6 +55,11 @@ DATABASE_NAME=language_agent
 DATABASE_USER=language_agent
 DATABASE_PASSWORD=replace-me
 CHAINLIT_AUTH_SECRET=replace-with-random-secret
+SESSION_COOKIE_SAMESITE=lax
+SESSION_COOKIE_SECURE=false
+AUTH_MAX_FAILED_ATTEMPTS=5
+AUTH_LOCKOUT_SECONDS=300
+AUTH_RATE_LIMIT_WINDOW_SECONDS=300
 ```
 
 For Compose, `LLAMA_SERVER_MODEL_PATH` now belongs to `llama-server` and must point at
@@ -120,6 +125,9 @@ docker compose run --rm fastapi python scripts/create_user.py `
   --admin
 ```
 
+Use a password manager-generated passphrase for seeded users. The command
+rejects empty, obvious, and too-short passwords by default.
+
 ## URLs
 
 Preferred local entry points through Caddy:
@@ -138,7 +146,8 @@ Direct host ports remain available for development:
 
 LAN devices can replace `localhost` with the host machine IP address. If local
 name resolution maps `agent.local` to the Docker host, the same routes can be
-used there as well.
+used there as well. In both cases, browser users must authenticate through the
+Web UI login before chat access.
 
 ## Health and Logs
 

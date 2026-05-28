@@ -18,6 +18,10 @@ def parse_bool(value: str, *, default: bool) -> bool:
 @dataclass(frozen=True)
 class WebUISettings:
     auth_enabled: bool
+    auth_max_failed_attempts: int
+    auth_lockout_seconds: int
+    auth_rate_limit_window_seconds: int
+    auth_require_strong_password: bool
     database_scheme: str
     database_host: str
     database_port: int
@@ -25,13 +29,22 @@ class WebUISettings:
     database_user: str
     database_password: str
     database_url: str
+    redis_url: str
     chainlit_auth_secret: str | None
     chainlit_cookie_samesite: str
+    session_cookie_samesite: str
     session_cookie_secure: bool
 
     @classmethod
     def from_env(cls) -> WebUISettings:
-        samesite = os.getenv("CHAINLIT_COOKIE_SAMESITE", "lax").strip().lower()
+        samesite = (
+            os.getenv(
+                "SESSION_COOKIE_SAMESITE",
+                os.getenv("CHAINLIT_COOKIE_SAMESITE", "lax"),
+            )
+            .strip()
+            .lower()
+        )
         if samesite not in {"lax", "strict", "none"}:
             samesite = "lax"
         database_scheme = os.getenv("DATABASE_SCHEME", "postgresql+asyncpg")
@@ -43,6 +56,15 @@ class WebUISettings:
 
         return cls(
             auth_enabled=parse_bool(os.getenv("AUTH_ENABLED", "true"), default=True),
+            auth_max_failed_attempts=int(os.getenv("AUTH_MAX_FAILED_ATTEMPTS", "5")),
+            auth_lockout_seconds=int(os.getenv("AUTH_LOCKOUT_SECONDS", "300")),
+            auth_rate_limit_window_seconds=int(
+                os.getenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "300")
+            ),
+            auth_require_strong_password=parse_bool(
+                os.getenv("AUTH_REQUIRE_STRONG_PASSWORD", "true"),
+                default=True,
+            ),
             database_scheme=database_scheme,
             database_host=database_host,
             database_port=database_port,
@@ -57,9 +79,17 @@ class WebUISettings:
                 username=database_user,
                 password=database_password,
             ),
+            redis_url=os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0"),
             chainlit_auth_secret=os.getenv("CHAINLIT_AUTH_SECRET"),
             chainlit_cookie_samesite=samesite,
-            session_cookie_secure=samesite == "none",
+            session_cookie_samesite=samesite,
+            session_cookie_secure=parse_bool(
+                os.getenv(
+                    "SESSION_COOKIE_SECURE",
+                    "true" if samesite == "none" else "false",
+                ),
+                default=samesite == "none",
+            ),
         )
 
     def validate_for_auth(self) -> None:
@@ -68,4 +98,8 @@ class WebUISettings:
         if not self.chainlit_auth_secret:
             raise RuntimeError(
                 "CHAINLIT_AUTH_SECRET must be configured when Chainlit password auth is enabled."
+            )
+        if self.session_cookie_samesite == "none" and not self.session_cookie_secure:
+            raise RuntimeError(
+                "SESSION_COOKIE_SECURE must be true when SESSION_COOKIE_SAMESITE=none."
             )

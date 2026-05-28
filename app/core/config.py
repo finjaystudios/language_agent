@@ -47,8 +47,14 @@ def build_database_url(
 @dataclass(frozen=True)
 class AppSettings:
     auth_enabled: bool
+    auth_max_failed_attempts: int
+    auth_lockout_seconds: int
+    auth_rate_limit_window_seconds: int
+    auth_require_strong_password: bool
     fastapi_api_key: str | None
     chainlit_auth_secret: str | None
+    session_cookie_secure: bool
+    session_cookie_samesite: str
     cors_allowed_origins: list[str]
     database_scheme: str
     database_host: str
@@ -84,6 +90,16 @@ class AppSettings:
     @classmethod
     def from_env(cls) -> "AppSettings":
         queue_timeout = int(os.getenv("LLM_QUEUE_TIMEOUT_SECONDS", "180"))
+        session_cookie_samesite = (
+            os.getenv(
+                "SESSION_COOKIE_SAMESITE",
+                os.getenv("CHAINLIT_COOKIE_SAMESITE", "lax"),
+            )
+            .strip()
+            .lower()
+        )
+        if session_cookie_samesite not in {"lax", "strict", "none"}:
+            session_cookie_samesite = "lax"
         database_scheme = os.getenv("DATABASE_SCHEME", "postgresql+asyncpg")
         database_host = os.getenv("DATABASE_HOST", "127.0.0.1")
         database_port = int(os.getenv("DATABASE_PORT", "5432"))
@@ -92,8 +108,25 @@ class AppSettings:
         database_password = os.getenv("DATABASE_PASSWORD", "change-me")
         return cls(
             auth_enabled=parse_bool(os.getenv("AUTH_ENABLED", "true"), default=True),
+            auth_max_failed_attempts=int(os.getenv("AUTH_MAX_FAILED_ATTEMPTS", "5")),
+            auth_lockout_seconds=int(os.getenv("AUTH_LOCKOUT_SECONDS", "300")),
+            auth_rate_limit_window_seconds=int(
+                os.getenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "300")
+            ),
+            auth_require_strong_password=parse_bool(
+                os.getenv("AUTH_REQUIRE_STRONG_PASSWORD", "true"),
+                default=True,
+            ),
             fastapi_api_key=os.getenv("FASTAPI_API_KEY"),
             chainlit_auth_secret=os.getenv("CHAINLIT_AUTH_SECRET"),
+            session_cookie_secure=parse_bool(
+                os.getenv(
+                    "SESSION_COOKIE_SECURE",
+                    "true" if session_cookie_samesite == "none" else "false",
+                ),
+                default=session_cookie_samesite == "none",
+            ),
+            session_cookie_samesite=session_cookie_samesite,
             cors_allowed_origins=parse_csv_env(os.getenv("CORS_ALLOWED_ORIGINS", "")),
             database_scheme=database_scheme,
             database_host=database_host,

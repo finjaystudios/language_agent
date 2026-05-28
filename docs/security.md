@@ -14,7 +14,8 @@ The current security model does not add:
 This change set enables Chainlit username/password login against the local
 `users` table while preserving the separate service-to-service API key between
 the Web UI server and FastAPI. It also enables Chainlit thread persistence in
-the same internal PostgreSQL database.
+the same internal PostgreSQL database, plus Redis-backed login lockout
+protection for repeated failed sign-in attempts.
 
 ## Boundary
 
@@ -58,19 +59,27 @@ Web UI users are stored in PostgreSQL with a password hash only:
 - `bcrypt` remains available as a compatibility fallback
 - inactive users can be retained in the database without being treated as valid
   sign-in candidates
+- `scripts/create_user.py` rejects empty, too-short, username-matching, and
+  obvious passwords when `AUTH_REQUIRE_STRONG_PASSWORD=true`
 
 Recommended handling:
 
 - keep `DATABASE_HOST`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`,
   `POSTGRES_PASSWORD`, and
   `CHAINLIT_AUTH_SECRET` in local `.env` files or deployment secret stores
-- keep `CHAINLIT_COOKIE_SAMESITE` at `lax` or `strict` for ordinary local and
-  same-site deployments
+- keep `SESSION_COOKIE_SAMESITE` and `CHAINLIT_COOKIE_SAMESITE` aligned at
+  `lax` or `strict` for ordinary local and same-site deployments
+- set `SESSION_COOKIE_SECURE=true` before exposing the app over HTTPS on a LAN
+  reverse proxy or public domain
+- keep `AUTH_MAX_FAILED_ATTEMPTS`, `AUTH_LOCKOUT_SECONDS`, and
+  `AUTH_RATE_LIMIT_WINDOW_SECONDS` conservative enough to slow brute-force
+  guesses without blocking normal use
 - do not log password material or password hashes
 - run `alembic upgrade head` before any code path that depends on the `users`
   table or Chainlit thread history tables
 - use `scripts/create_user.py` or an equivalent admin path that hashes the
   password before storage; never insert plaintext passwords manually
+- recommend password-manager generated passphrases for seeded users
 
 ## CORS
 
@@ -118,6 +127,8 @@ Wildcard origins with credentials are not used.
 - browser users authenticate to Chainlit with username and password
 - Chainlit verifies credentials against the `users` table
 - successful login creates a Chainlit session signed with `CHAINLIT_AUTH_SECRET`
+- repeated failed logins for the same username are rate-limited and locked out
+  through Redis-backed counters
 - Chainlit persists thread history against its own internal tables keyed to the
   authenticated user's database-backed identifier
 - the browser still does not receive `FASTAPI_API_KEY`
@@ -131,6 +142,25 @@ Wildcard origins with credentials are not used.
 - Passwords, password hashes, `FASTAPI_API_KEY`, `DATABASE_PASSWORD`, and
   `CHAINLIT_AUTH_SECRET` must never appear in Chainlit user metadata or thread
   metadata.
+
+## Logging and Audit Events
+
+- Web UI auth logs use structured fields such as `service=webui`,
+  `event_type=auth`, and `outcome=success`, `failure`, `locked`, or `logout`
+- usernames may appear in server-side auth logs for operational tracing; do not
+  forward these logs to public or browser-visible surfaces
+- prefer `user_id` for downstream correlation when it is available
+- never log plaintext passwords, password hashes, `FASTAPI_API_KEY`,
+  `DATABASE_PASSWORD`, or `CHAINLIT_AUTH_SECRET`
+
+## Public Exposure
+
+- public LAN or domain access must still pass through the Web UI login form
+- FastAPI remains separately protected by `FASTAPI_API_KEY`
+- `llama-server` remains an internal-only service even if its host debug port is
+  temporarily published for local development
+- PostgreSQL remains internal-only in Compose and must not be exposed through
+  Caddy or Cloudflare
 
 ## Current Limitations
 

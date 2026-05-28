@@ -14,6 +14,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from webui.auth import authenticate_user  # noqa: E402
+from webui.auth_rate_limit import close_auth_attempt_store  # noqa: E402
 from webui.client import (  # noqa: E402
     BackendClientError,
     BackendConfig,
@@ -89,11 +90,14 @@ async def on_app_startup() -> None:
     settings = WebUISettings.from_env()
     settings.validate_for_auth()
     logger.info(
-        "webui_startup auth_enabled=%s persistence_enabled=%s cookie_samesite=%s cookie_secure=%s",
+        "webui_startup auth_enabled=%s persistence_enabled=%s cookie_samesite=%s cookie_secure=%s auth_max_failed_attempts=%s auth_lockout_seconds=%s auth_rate_limit_window_seconds=%s",
         settings.auth_enabled,
         bool(settings.database_url),
-        settings.chainlit_cookie_samesite,
+        settings.session_cookie_samesite,
         settings.session_cookie_secure,
+        settings.auth_max_failed_attempts,
+        settings.auth_lockout_seconds,
+        settings.auth_rate_limit_window_seconds,
     )
 
 
@@ -102,6 +106,7 @@ async def on_app_shutdown() -> None:
     settings = WebUISettings.from_env()
     if settings.database_url:
         await get_chainlit_data_layer().close()
+    await close_auth_attempt_store()
 
 
 def get_current_user() -> cl.User | None:
@@ -346,6 +351,16 @@ async def on_chat_resume(thread: ThreadDict) -> None:
         current_session_id(),
     )
     await send_mode_settings(selected_mode)
+
+
+@cl.on_logout
+def on_logout(request, response) -> None:
+    logger.info(
+        "service=webui event_type=auth outcome=logout username=%s user_id=%s session_id=%s",
+        current_user_identifier(),
+        current_user_id(),
+        current_session_id(),
+    )
 
 
 @cl.on_settings_update

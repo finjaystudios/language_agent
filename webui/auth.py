@@ -26,6 +26,7 @@ from app.infrastructure.database.repositories import (
 )
 from app.infrastructure.security.passwords import verify_password  # noqa: E402
 from app.ports.user_repository import UserRepository  # noqa: E402
+from webui.auth_rate_limit import AuthAttemptStore, get_auth_attempt_store  # noqa: E402
 from webui.config import WebUISettings  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -63,37 +64,62 @@ async def authenticate_user(
     password: str,
     *,
     repository: UserRepository | None = None,
+    auth_attempt_store: AuthAttemptStore | None = None,
 ) -> cl.User | None:
     normalized_username = username.strip()
     user_repository = repository or get_user_repository()
+    attempt_store = auth_attempt_store or get_auth_attempt_store()
+    session_id = _current_auth_session_id()
+
+    if await attempt_store.is_locked(normalized_username):
+        logger.warning(
+            "service=webui event_type=auth outcome=locked username=%s session_id=%s reason=too_many_failures",
+            normalized_username,
+            session_id,
+        )
+        return None
+
     user = await user_repository.get_by_username(normalized_username)
     if user is None:
+        await attempt_store.record_failure(normalized_username)
         logger.warning(
-            "webui_login_failed username=%s reason=invalid_credentials",
+            "service=webui event_type=auth outcome=failure username=%s session_id=%s reason=invalid_credentials",
             normalized_username,
+            session_id,
         )
         return None
 
     if not user.is_active:
+        await attempt_store.record_failure(normalized_username)
         logger.warning(
-            "webui_login_failed username=%s user_id=%s reason=inactive_user",
+            "service=webui event_type=auth outcome=failure username=%s user_id=%s session_id=%s reason=inactive_user",
             normalized_username,
             user.id,
+            session_id,
         )
         return None
 
     if not verify_password(password, user.password_hash):
+        failures = await attempt_store.record_failure(normalized_username)
+        settings = WebUISettings.from_env()
+        outcome = (
+            "locked" if failures >= settings.auth_max_failed_attempts else "failure"
+        )
         logger.warning(
-            "webui_login_failed username=%s reason=invalid_credentials",
+            "service=webui event_type=auth outcome=%s username=%s session_id=%s reason=invalid_credentials",
+            outcome,
             normalized_username,
+            session_id,
         )
         return None
 
+    await attempt_store.clear(normalized_username)
     authenticated_user = await user_repository.update_last_login(user.id) or user
     logger.info(
-        "webui_login_success username=%s user_id=%s role=%s admin=%s",
+        "service=webui event_type=auth outcome=success username=%s user_id=%s session_id=%s role=%s admin=%s",
         authenticated_user.username,
         authenticated_user.id,
+        session_id,
         authenticated_user.role,
         authenticated_user.is_admin,
     )
@@ -114,3 +140,10 @@ def to_chainlit_user(user: UserProfile) -> cl.User:
             "ui_theme": user.ui_theme,
         },
     )
+
+
+def _current_auth_session_id() -> str:
+    try:
+        return str(cl.user_session.get("id", "unknown"))
+    except Exception:
+        return "unknown"

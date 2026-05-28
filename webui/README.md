@@ -24,13 +24,21 @@ $env:DATABASE_NAME = "language_agent"
 $env:DATABASE_USER = "language_agent"
 $env:DATABASE_PASSWORD = "change-me"
 $env:CHAINLIT_AUTH_SECRET = "replace-with-random-secret"
+$env:SESSION_COOKIE_SAMESITE = "lax"
+$env:SESSION_COOKIE_SECURE = "false"
+$env:AUTH_MAX_FAILED_ATTEMPTS = "5"
+$env:AUTH_LOCKOUT_SECONDS = "300"
+$env:AUTH_RATE_LIMIT_WINDOW_SECONDS = "300"
+$env:AUTH_REQUIRE_STRONG_PASSWORD = "true"
 $env:CHAINLIT_COOKIE_SAMESITE = "lax"
 $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
 ```
 
 Keep `FASTAPI_API_KEY`, `DATABASE_PASSWORD`, and
-`CHAINLIT_AUTH_SECRET` in the server-side Web UI environment only.
+`CHAINLIT_AUTH_SECRET` in the server-side Web UI environment only. Keep
+`REDIS_URL` reachable so failed-login lockouts can be tracked across restarts
+and multiple Web UI processes.
 
 ## Run Locally
 
@@ -47,6 +55,12 @@ $env:DATABASE_NAME = "language_agent"
 $env:DATABASE_USER = "language_agent"
 $env:DATABASE_PASSWORD = "change-me"
 $env:CHAINLIT_AUTH_SECRET = "replace-with-random-secret"
+$env:SESSION_COOKIE_SAMESITE = "lax"
+$env:SESSION_COOKIE_SECURE = "false"
+$env:AUTH_MAX_FAILED_ATTEMPTS = "5"
+$env:AUTH_LOCKOUT_SECONDS = "300"
+$env:AUTH_RATE_LIMIT_WINDOW_SECONDS = "300"
+$env:AUTH_REQUIRE_STRONG_PASSWORD = "true"
 $env:CHAINLIT_COOKIE_SAMESITE = "lax"
 $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
@@ -80,7 +94,14 @@ docker run --rm -p 8001:8001 `
   -e DATABASE_USER=language_agent `
   -e DATABASE_PASSWORD=change-me `
   -e CHAINLIT_AUTH_SECRET=replace-with-random-secret `
+  -e SESSION_COOKIE_SAMESITE=lax `
+  -e SESSION_COOKIE_SECURE=false `
+  -e AUTH_MAX_FAILED_ATTEMPTS=5 `
+  -e AUTH_LOCKOUT_SECONDS=300 `
+  -e AUTH_RATE_LIMIT_WINDOW_SECONDS=300 `
+  -e AUTH_REQUIRE_STRONG_PASSWORD=true `
   -e CHAINLIT_COOKIE_SAMESITE=lax `
+  -e REDIS_URL=redis://host.docker.internal:6379/0 `
   -e WEBUI_HOST=0.0.0.0 `
   -e WEBUI_PORT=8001 `
   -e DEBUG=false `
@@ -118,8 +139,13 @@ Direct host port:
   `WEBUI_STREAMING_ENABLED=true`
 - the browser never receives `FASTAPI_API_KEY`
 - the browser never receives database credentials or password hashes
+- repeated failed logins are locked out by username through Redis-backed state
 - resumed chats restore the previous thread and mode selection for the same
   authenticated user
+
+Use a password manager-generated passphrase when creating users with
+`scripts/create_user.py`. By default the command rejects empty, obvious, and
+too-short passwords.
 
 ## Assets and Customization
 
