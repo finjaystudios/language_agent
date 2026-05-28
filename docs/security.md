@@ -33,6 +33,7 @@ FastAPI keeps these endpoints public:
 
 FastAPI protects model-backed and queue-inspection routes with `X-API-Key`:
 
+- `POST /api/auth/signup`
 - `POST /api/chat`
 - `POST /api/chat/stream`
 - `GET /api/queue/status`
@@ -59,6 +60,8 @@ Web UI users are stored in PostgreSQL with a password hash only:
 - `bcrypt` remains available as a compatibility fallback
 - inactive users can be retained in the database without being treated as valid
   sign-in candidates
+- self-service sign-up, when enabled, uses the same password hashing utility as
+  login and local admin user creation
 - `scripts/create_user.py` rejects empty, too-short, username-matching, and
   obvious passwords when `AUTH_REQUIRE_STRONG_PASSWORD=true`
 
@@ -74,6 +77,8 @@ Recommended handling:
 - keep `AUTH_MAX_FAILED_ATTEMPTS`, `AUTH_LOCKOUT_SECONDS`, and
   `AUTH_RATE_LIMIT_WINDOW_SECONDS` conservative enough to slow brute-force
   guesses without blocking normal use
+- keep `AUTH_MIN_PASSWORD_LENGTH` high enough to favor password-manager
+  generated passphrases for both self-service sign-up and seeded admin users
 - do not log password material or password hashes
 - run `alembic upgrade head` before any code path that depends on the `users`
   table or Chainlit thread history tables
@@ -105,7 +110,9 @@ Wildcard origins with credentials are not used.
   `POSTGRES_PASSWORD`, and
   `CHAINLIT_AUTH_SECRET` in `.env`, shell environment, or deployment-specific
   secret management.
-- Keep PostgreSQL internal-only unless you have an explicit reason to publish it.
+- Keep PostgreSQL off public interfaces. The default Compose bind is
+  `127.0.0.1` only so host-local tools can connect without exposing the
+  database to LAN clients, Caddy, or Cloudflare.
 - Do not expose the API key in browser-visible content, logs, URLs, or public
   assets.
 - Do not expose `DATABASE_PASSWORD`, `CHAINLIT_AUTH_SECRET`, or password hashes
@@ -125,10 +132,18 @@ Wildcard origins with credentials are not used.
 ## Web UI Login Flow
 
 - browser users authenticate to Chainlit with username and password
-- Chainlit verifies credentials against the `users` table
+- Chainlit posts sign-in requests to its own server-side `/login` endpoint
+- the Web UI server validates credentials through the protected FastAPI login
+  endpoint
 - successful login creates a Chainlit session signed with `CHAINLIT_AUTH_SECRET`
 - repeated failed logins for the same username are rate-limited and locked out
   through Redis-backed counters
+- when `SIGNUP_ENABLED=true`, the custom Web UI login page also offers a
+  sign-up form that posts to the Web UI server, which then calls the protected
+  FastAPI sign-up endpoint with the service API key
+- duplicate usernames return a safe "That username is unavailable" message
+- when `SIGNUP_REQUIRE_ADMIN_APPROVAL=true`, new self-service accounts are
+  created inactive and cannot log in until an admin activates them
 - Chainlit persists thread history against its own internal tables keyed to the
   authenticated user's database-backed identifier
 - the browser still does not receive `FASTAPI_API_KEY`
@@ -159,8 +174,9 @@ Wildcard origins with credentials are not used.
 - FastAPI remains separately protected by `FASTAPI_API_KEY`
 - `llama-server` remains an internal-only service even if its host debug port is
   temporarily published for local development
-- PostgreSQL remains internal-only in Compose and must not be exposed through
-  Caddy or Cloudflare
+- PostgreSQL is reachable only from the Compose network and the Docker host
+  loopback bind in local development; it must not be exposed through Caddy,
+  Cloudflare, or a public interface
 - the deterministic Playwright login tests use a seeded local test user and do
   not require public exposure of any internal service
 

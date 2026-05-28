@@ -4,7 +4,11 @@ from collections.abc import AsyncIterator
 from app.application.models import ChatResult, ResponseMetadata
 from app.infrastructure.database.repositories import SQLAlchemyUserRepository
 from app.infrastructure.security.passwords import hash_password
-from app.interfaces.api.dependencies import get_agent_service, get_user_repository
+from app.interfaces.api.dependencies import (
+    get_agent_service,
+    get_settings,
+    get_user_repository,
+)
 from app.interfaces.api.main import create_app
 from fastapi.testclient import TestClient
 
@@ -25,7 +29,12 @@ class FakeAgentService:
         return events()
 
 
+def reset_settings_cache() -> None:
+    get_settings.cache_clear()
+
+
 def test_health_endpoint_allows_missing_api_key(monkeypatch):
+    reset_settings_cache()
     monkeypatch.setenv("AUTH_ENABLED", "true")
     monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
     client = TestClient(create_app())
@@ -37,6 +46,7 @@ def test_health_endpoint_allows_missing_api_key(monkeypatch):
 
 
 def test_root_endpoint_allows_missing_api_key(monkeypatch):
+    reset_settings_cache()
     monkeypatch.setenv("AUTH_ENABLED", "true")
     monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
     client = TestClient(create_app())
@@ -48,6 +58,7 @@ def test_root_endpoint_allows_missing_api_key(monkeypatch):
 
 
 def test_chat_endpoint_rejects_missing_api_key(monkeypatch):
+    reset_settings_cache()
     monkeypatch.setenv("AUTH_ENABLED", "true")
     monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
     client = TestClient(create_app())
@@ -63,6 +74,7 @@ def test_chat_endpoint_rejects_missing_api_key(monkeypatch):
 
 
 def test_chat_endpoint_rejects_wrong_api_key(monkeypatch):
+    reset_settings_cache()
     monkeypatch.setenv("AUTH_ENABLED", "true")
     monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
     client = TestClient(create_app())
@@ -78,6 +90,7 @@ def test_chat_endpoint_rejects_wrong_api_key(monkeypatch):
 
 
 def test_chat_endpoint_accepts_correct_api_key(monkeypatch):
+    reset_settings_cache()
     monkeypatch.setenv("AUTH_ENABLED", "true")
     monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
     app = create_app()
@@ -95,6 +108,7 @@ def test_chat_endpoint_accepts_correct_api_key(monkeypatch):
 
 
 def test_streaming_endpoint_requires_api_key(monkeypatch):
+    reset_settings_cache()
     monkeypatch.setenv("AUTH_ENABLED", "true")
     monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
     client = TestClient(create_app())
@@ -109,6 +123,7 @@ def test_streaming_endpoint_requires_api_key(monkeypatch):
 
 
 def test_streaming_endpoint_accepts_correct_api_key(monkeypatch):
+    reset_settings_cache()
     monkeypatch.setenv("AUTH_ENABLED", "true")
     monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
     app = create_app()
@@ -127,6 +142,7 @@ def test_streaming_endpoint_accepts_correct_api_key(monkeypatch):
 
 
 def test_queue_status_endpoint_requires_api_key(monkeypatch):
+    reset_settings_cache()
     monkeypatch.setenv("AUTH_ENABLED", "true")
     monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
     client = TestClient(create_app())
@@ -138,6 +154,7 @@ def test_queue_status_endpoint_requires_api_key(monkeypatch):
 
 
 def test_auth_enabled_false_allows_unauthenticated_chat(monkeypatch):
+    reset_settings_cache()
     monkeypatch.setenv("AUTH_ENABLED", "false")
     monkeypatch.delenv("FASTAPI_API_KEY", raising=False)
     app = create_app()
@@ -151,6 +168,7 @@ def test_auth_enabled_false_allows_unauthenticated_chat(monkeypatch):
 
 
 def test_auth_enabled_with_missing_config_returns_safe_error(monkeypatch):
+    reset_settings_cache()
     monkeypatch.setenv("AUTH_ENABLED", "true")
     monkeypatch.delenv("FASTAPI_API_KEY", raising=False)
     client = TestClient(create_app())
@@ -189,6 +207,7 @@ def test_internal_login_accepts_valid_credentials_and_updates_last_login(
     monkeypatch,
     user_repository: SQLAlchemyUserRepository,
 ):
+    reset_settings_cache()
     monkeypatch.setenv("AUTH_ENABLED", "true")
     monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
     created = asyncio.run(
@@ -229,6 +248,7 @@ def test_internal_login_rejects_unknown_username_without_leaking_existence(
     monkeypatch,
     user_repository: SQLAlchemyUserRepository,
 ):
+    reset_settings_cache()
     monkeypatch.setenv("AUTH_ENABLED", "true")
     monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
     app = create_app()
@@ -253,6 +273,7 @@ def test_internal_login_rejects_inactive_user(
     monkeypatch,
     user_repository: SQLAlchemyUserRepository,
 ):
+    reset_settings_cache()
     monkeypatch.setenv("AUTH_ENABLED", "true")
     monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
     asyncio.run(
@@ -278,3 +299,193 @@ def test_internal_login_rejects_inactive_user(
         "message": "Invalid username or password.",
         "details": None,
     }
+
+
+def test_signup_creates_user_with_hashed_password(
+    monkeypatch,
+    user_repository: SQLAlchemyUserRepository,
+):
+    reset_settings_cache()
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    monkeypatch.setenv("SIGNUP_ENABLED", "true")
+    app = create_app()
+    app.dependency_overrides[get_user_repository] = lambda: user_repository
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/auth/signup",
+        headers={"X-API-Key": "test-secret"},
+        json={
+            "username": "new-user",
+            "display_name": "New User",
+            "password": "correct horse battery staple",
+            "confirm_password": "correct horse battery staple",
+        },
+    )
+    created = asyncio.run(user_repository.get_by_username("new-user"))
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["message"] == "Account created. Please sign in."
+    assert response.json()["username"] == "new-user"
+    assert "password_hash" not in response.text
+    assert created is not None
+    assert created.display_name == "New User"
+    assert created.password_hash != "correct horse battery staple"
+    assert "correct horse battery staple" not in created.password_hash
+
+
+def test_signup_rejects_duplicate_username(
+    monkeypatch,
+    user_repository: SQLAlchemyUserRepository,
+):
+    reset_settings_cache()
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    monkeypatch.setenv("SIGNUP_ENABLED", "true")
+    asyncio.run(
+        user_repository.create_user(
+            username="taken-user",
+            password_hash=hash_password("correct horse battery staple"),
+        )
+    )
+    app = create_app()
+    app.dependency_overrides[get_user_repository] = lambda: user_repository
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/auth/signup",
+        headers={"X-API-Key": "test-secret"},
+        json={
+            "username": "taken-user",
+            "password": "correct horse battery staple",
+            "confirm_password": "correct horse battery staple",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "error": "username_unavailable",
+        "message": "That username is unavailable.",
+        "details": None,
+    }
+
+
+def test_signup_rejects_weak_password(
+    monkeypatch,
+    user_repository: SQLAlchemyUserRepository,
+):
+    reset_settings_cache()
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    monkeypatch.setenv("SIGNUP_ENABLED", "true")
+    app = create_app()
+    app.dependency_overrides[get_user_repository] = lambda: user_repository
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/auth/signup",
+        headers={"X-API-Key": "test-secret"},
+        json={
+            "username": "weak-user",
+            "password": "password123",
+            "confirm_password": "password123",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_signup"
+    assert "too weak" in response.json()["message"]
+
+
+def test_signup_rejects_mismatched_password_confirmation(
+    monkeypatch,
+    user_repository: SQLAlchemyUserRepository,
+):
+    reset_settings_cache()
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    monkeypatch.setenv("SIGNUP_ENABLED", "true")
+    app = create_app()
+    app.dependency_overrides[get_user_repository] = lambda: user_repository
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/auth/signup",
+        headers={"X-API-Key": "test-secret"},
+        json={
+            "username": "mismatch-user",
+            "password": "correct horse battery staple",
+            "confirm_password": "different password",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": "invalid_signup",
+        "message": "Password confirmation does not match.",
+        "details": None,
+    }
+
+
+def test_signup_disabled_rejects_request(
+    monkeypatch,
+    user_repository: SQLAlchemyUserRepository,
+):
+    reset_settings_cache()
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    monkeypatch.setenv("SIGNUP_ENABLED", "false")
+    app = create_app()
+    app.dependency_overrides[get_user_repository] = lambda: user_repository
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/auth/signup",
+        headers={"X-API-Key": "test-secret"},
+        json={
+            "username": "new-user",
+            "password": "correct horse battery staple",
+            "confirm_password": "correct horse battery staple",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": "signup_disabled",
+        "message": "Account sign-up is not available right now.",
+        "details": None,
+    }
+
+
+def test_signup_can_create_inactive_user_when_admin_approval_is_required(
+    monkeypatch,
+    user_repository: SQLAlchemyUserRepository,
+):
+    reset_settings_cache()
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    monkeypatch.setenv("SIGNUP_ENABLED", "true")
+    monkeypatch.setenv("SIGNUP_REQUIRE_ADMIN_APPROVAL", "true")
+    app = create_app()
+    app.dependency_overrides[get_user_repository] = lambda: user_repository
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/auth/signup",
+        headers={"X-API-Key": "test-secret"},
+        json={
+            "username": "pending-user",
+            "password": "correct horse battery staple",
+            "confirm_password": "correct horse battery staple",
+        },
+    )
+    created = asyncio.run(user_repository.get_by_username("pending-user"))
+
+    assert response.status_code == 200
+    assert response.json()["message"] == (
+        "Account created. Please wait for approval before signing in."
+    )
+    assert created is not None
+    assert created.is_active is False

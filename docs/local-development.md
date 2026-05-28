@@ -26,6 +26,14 @@ docker run --rm --name language-agent-postgres `
   postgres:17-alpine
 ```
 
+If you already use the Compose stack for infrastructure, this equivalent command
+starts the bundled PostgreSQL service on `127.0.0.1:5432` for host-local VS Code
+launches:
+
+```powershell
+docker compose up -d postgres db-migrate redis
+```
+
 Set host-local database settings before using Alembic or the user script:
 
 ```powershell
@@ -157,6 +165,10 @@ Pop-Location
 ```
 
 Open `http://127.0.0.1:8001`.
+
+The `.vscode/launch.json` FastAPI and Chainlit profiles use the same host-local
+database and Redis addresses. Start `postgres`, `db-migrate`, and `redis` first,
+then launch `FastAPI Backend`, then `Chainlit Web UI`.
 
 Chat history and resume notes:
 

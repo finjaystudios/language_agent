@@ -1,0 +1,27 @@
+<section class="lla-card">
+  <div class="lla-card-head">
+    <h2>Create your account</h2>
+    <p>Set up a username and password, then sign in to start chatting.</p>
+  </div>
+  <form id="lla-signup-form" class="lla-form">
+    <label class="lla-field">
+      <span>Username</span>
+      <input name="username" type="text" maxlength="64" autocomplete="username" required />
+    </label>
+    <label class="lla-field">
+      <span>Display name <em>Optional</em></span>
+      <input name="display_name" type="text" maxlength="80" autocomplete="name" />
+    </label>
+    <label class="lla-field">
+      <span>Password</span>
+      <input name="password" type="password" autocomplete="new-password" required />
+    </label>
+    <label class="lla-field">
+      <span>Confirm password</span>
+      <input name="confirm_password" type="password" autocomplete="new-password" required />
+    </label>
+    <p class="lla-hint">Use a unique password with at least __MIN_PASSWORD_LENGTH__ characters.</p>
+    <div id="lla-signup-message" class="lla-message" hidden></div>
+    <button type="submit" class="lla-primary" id="lla-signup-submit">Create account</button>
+  </form>
+</section>

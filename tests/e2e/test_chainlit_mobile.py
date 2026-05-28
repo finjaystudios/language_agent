@@ -9,7 +9,7 @@ pytestmark = pytest.mark.e2e
 
 
 def submit_chat_message(page: Page, text: str) -> None:
-    input_box = page.get_by_placeholder("Ask your local language assistant...")
+    input_box = page.locator("textarea").first
     expect(input_box).to_be_enabled()
     input_box.fill(text)
     page.locator("#chat-submit:not([disabled])").click()
@@ -32,6 +32,7 @@ def test_mobile_layout_is_touch_friendly_and_submits_message(
     chainlit_url: str,
     login_to_chainlit,
     e2e_credentials,
+    chat_input,
     reset_fake_backend: None,
     backend_requests,
 ):
@@ -44,9 +45,7 @@ def test_mobile_layout_is_touch_friendly_and_submits_message(
     )
 
     expect(page).to_have_title(re.compile(r"LanguageAgent"))
-    expect(
-        page.get_by_placeholder("Ask your local language assistant...")
-    ).to_be_visible()
+    expect(chat_input(page)).to_be_visible()
     expect(page.locator("#chat-submit")).to_be_visible()
     expect(page.get_by_role("button", name="Translate")).to_be_visible()
     expect(page.get_by_role("button", name="Define")).to_be_visible()
@@ -123,6 +122,7 @@ def test_tablet_layout_remains_readable_without_horizontal_overflow(
     chainlit_url: str,
     login_to_chainlit,
     e2e_credentials,
+    chat_input,
     reset_fake_backend: None,
 ):
     page = emulated_page
@@ -133,9 +133,7 @@ def test_tablet_layout_remains_readable_without_horizontal_overflow(
         e2e_credentials["password"],
     )
 
-    expect(
-        page.get_by_placeholder("Ask your local language assistant...")
-    ).to_be_visible()
+    expect(chat_input(page)).to_be_visible()
     expect(page.locator("#chat-submit")).to_be_visible()
     assert_no_horizontal_overflow(page)
 
@@ -164,6 +162,7 @@ def test_mobile_safari_layout_smoke_if_webkit_available(
     chainlit_url: str,
     login_to_chainlit,
     e2e_credentials,
+    chat_input,
 ):
     if browser_name != "webkit":
         pytest.skip("Run with --browser webkit to validate iPhone Safari emulation.")
@@ -176,8 +175,6 @@ def test_mobile_safari_layout_smoke_if_webkit_available(
         e2e_credentials["password"],
     )
 
-    expect(
-        page.get_by_placeholder("Ask your local language assistant...")
-    ).to_be_visible()
+    expect(chat_input(page)).to_be_visible()
     expect(page.get_by_role("button", name="Translate")).to_be_visible()
     assert_no_horizontal_overflow(page)

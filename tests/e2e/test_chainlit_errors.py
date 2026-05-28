@@ -12,6 +12,7 @@ def test_backend_unavailable_message_is_readable(
     chainlit_process_factory,
     login_to_chainlit,
     e2e_credentials,
+    chat_input,
     requires_managed_chainlit: None,
 ):
     url = chainlit_process_factory(
@@ -25,7 +26,7 @@ def test_backend_unavailable_message_is_readable(
         e2e_credentials["password"],
     )
 
-    input_box = page.get_by_placeholder("Ask your local language assistant...")
+    input_box = chat_input(page)
     expect(input_box).to_be_enabled()
     input_box.fill("Hello")
     page.locator("#chat-submit:not([disabled])").click()
@@ -44,6 +45,7 @@ def test_wrong_api_key_message_is_readable(
     chainlit_process_factory,
     login_to_chainlit,
     e2e_credentials,
+    chat_input,
     reset_fake_backend: None,
     backend_requests,
     requires_managed_chainlit: None,
@@ -60,7 +62,7 @@ def test_wrong_api_key_message_is_readable(
         e2e_credentials["password"],
     )
 
-    input_box = page.get_by_placeholder("Ask your local language assistant...")
+    input_box = chat_input(page)
     expect(input_box).to_be_enabled()
     input_box.fill("Define recursion")
     page.locator("#chat-submit:not([disabled])").click()
@@ -85,6 +87,7 @@ def test_missing_api_key_message_is_readable(
     chainlit_process_factory,
     login_to_chainlit,
     e2e_credentials,
+    chat_input,
     reset_fake_backend: None,
     backend_requests,
     requires_managed_chainlit: None,
@@ -101,7 +104,7 @@ def test_missing_api_key_message_is_readable(
         e2e_credentials["password"],
     )
 
-    input_box = page.get_by_placeholder("Ask your local language assistant...")
+    input_box = chat_input(page)
     expect(input_box).to_be_enabled()
     input_box.fill("Define recursion")
     page.locator("#chat-submit:not([disabled])").click()

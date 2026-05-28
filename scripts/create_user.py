@@ -34,6 +34,7 @@ def validate_create_user_password(username: str, password: str) -> None:
         password,
         username=username,
         require_strong_password=settings.auth_require_strong_password,
+        min_password_length=settings.auth_min_password_length,
     )
 
 

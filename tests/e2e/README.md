@@ -60,6 +60,8 @@ are skipped.
 
 - covers Chainlit browser behavior
 - covers the username/password login flow with a seeded test user
+- covers the self-service sign-up flow on the custom `/login` page, including
+  client-side password confirmation and a follow-up login
 - covers starter actions, mode controls, streaming/full-response UX, and error
   states
 - includes mobile and tablet coverage
@@ -73,3 +75,9 @@ Managed E2E login credentials:
 
 - username: `e2e-user`
 - password: `correct horse battery staple`
+
+Managed E2E sign-up defaults:
+
+- sign-up is enabled
+- minimum password length is `12`
+- newly signed-up users are active immediately

@@ -46,6 +46,18 @@ class BackendUserAuthenticationError(BackendHTTPError):
     category = "backend_user_authentication"
 
 
+class BackendValidationError(BackendHTTPError):
+    category = "backend_validation"
+
+
+class BackendConflictError(BackendHTTPError):
+    category = "backend_conflict"
+
+
+class BackendFeatureDisabledError(BackendHTTPError):
+    category = "backend_feature_disabled"
+
+
 class BackendAuthConfigurationError(BackendClientError):
     category = "backend_auth_configuration"
 
@@ -67,6 +79,15 @@ class AuthenticatedBackendUser:
     is_admin: bool
     preferred_language: str | None
     ui_theme: str | None
+
+
+@dataclass(frozen=True)
+class BackendSignupResult:
+    success: bool
+    message: str
+    user_id: int | None
+    username: str | None
+    created_at: str | None
 
 
 @dataclass(frozen=True)
@@ -202,6 +223,97 @@ class FastAPIClient:
             else None,
             ui_theme=str(data["ui_theme"])
             if data.get("ui_theme") is not None
+            else None,
+        )
+
+    async def signup_user(
+        self,
+        *,
+        username: str,
+        password: str,
+        confirm_password: str | None,
+        display_name: str | None = None,
+        preferred_language: str | None = None,
+    ) -> BackendSignupResult:
+        payload: dict[str, Any] = {
+            "username": username,
+            "password": password,
+            "confirm_password": confirm_password,
+        }
+        if display_name is not None:
+            payload["display_name"] = display_name
+        if preferred_language is not None:
+            payload["preferred_language"] = preferred_language
+
+        logger.info(
+            "webui_signup_request_start base_url=%s username=%s",
+            self.config.base_url,
+            username,
+        )
+        try:
+            async with self._client() as client:
+                response = await client.post(
+                    "/api/auth/signup",
+                    json=payload,
+                    headers=self._auth_headers(),
+                )
+        except httpx.TimeoutException as error:
+            logger.warning("webui_signup_timeout username=%s", username)
+            raise BackendTimeoutError(
+                "The FastAPI backend timed out while creating the account."
+            ) from error
+        except httpx.RequestError as error:
+            logger.warning(
+                "webui_signup_unavailable username=%s error_type=%s",
+                username,
+                type(error).__name__,
+            )
+            raise BackendUnavailableError(format_request_error(error)) from error
+
+        try:
+            data = self._json_response(response)
+        except BackendHTTPError as error:
+            if (
+                error.status_code in {403, 404}
+                and error.error_code == "signup_disabled"
+            ):
+                raise BackendFeatureDisabledError(
+                    "Account sign-up is not available right now.",
+                    status_code=error.status_code,
+                    error_code=error.error_code,
+                ) from error
+            if error.status_code == 409 and error.error_code == "username_unavailable":
+                raise BackendConflictError(
+                    "That username is unavailable.",
+                    status_code=error.status_code,
+                    error_code=error.error_code,
+                ) from error
+            if error.status_code in {400, 422} and error.error_code in {
+                "invalid_signup",
+                "validation_error",
+            }:
+                raise BackendValidationError(
+                    str(error),
+                    status_code=error.status_code,
+                    error_code=error.error_code,
+                ) from error
+            raise
+
+        logger.info(
+            "webui_signup_request_complete username=%s user_id=%s success=%s",
+            username,
+            data.get("user_id"),
+            data.get("success"),
+        )
+        return BackendSignupResult(
+            success=bool(data.get("success", False)),
+            message=str(data["message"]),
+            user_id=int(data["user_id"]) if data.get("user_id") is not None else None,
+            username=str(data["username"])
+            if data.get("username") is not None
+            else None,
+            created_at=str(data["created_at"])
+            if data.get("created_at") is not None
             else None,
         )
 

@@ -160,6 +160,50 @@ class AuthenticatedUserResponse(BaseModel):
     )
 
 
+class UserSignupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(
+        min_length=1,
+        description="Username to create for the Web UI account.",
+    )
+    password: str = Field(
+        min_length=1,
+        description="Plaintext password for the new account.",
+    )
+    confirm_password: str | None = Field(
+        default=None,
+        description="Optional password confirmation to validate before account creation.",
+    )
+    display_name: str | None = Field(
+        default=None,
+        description="Optional display name for the new user profile.",
+    )
+    preferred_language: str | None = Field(
+        default=None,
+        description="Optional preferred language for future UI defaults.",
+    )
+
+
+class UserSignupResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    success: bool = Field(description="Whether the account was created successfully.")
+    message: str = Field(description="Safe user-facing result message.")
+    user_id: int | None = Field(
+        default=None,
+        description="Stable database identifier for the created user, when available.",
+    )
+    username: str | None = Field(
+        default=None,
+        description="Created username, when safe to return.",
+    )
+    created_at: str | None = Field(
+        default=None,
+        description="ISO-8601 creation timestamp for the new user, when available.",
+    )
+
+
 class ErrorResponse(BaseModel):
     """Stable error response returned by API exception handlers."""
 
@@ -238,4 +282,18 @@ def authenticated_user_response_from_profile(
         is_admin=user.is_admin,
         preferred_language=user.preferred_language,
         ui_theme=user.ui_theme,
+    )
+
+
+def user_signup_response_from_profile(
+    user: UserProfile,
+    *,
+    message: str,
+) -> UserSignupResponse:
+    return UserSignupResponse(
+        success=True,
+        message=message,
+        user_id=user.id,
+        username=user.username,
+        created_at=user.created_at.isoformat() if user.created_at else None,
     )

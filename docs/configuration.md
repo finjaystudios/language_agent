@@ -17,7 +17,11 @@ Compose. Use [`.env.example`](../.env.example) for local host runs and
 | `AUTH_MAX_FAILED_ATTEMPTS` | `5` | Web UI | Failed login attempts allowed per username inside the current rate-limit window before lockout |
 | `AUTH_LOCKOUT_SECONDS` | `300` | Web UI | Username lockout duration after too many failed login attempts |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | `300` | Web UI | Window used for counting failed login attempts |
+| `AUTH_MIN_PASSWORD_LENGTH` | `12` | FastAPI, Web UI, user creation tooling | Minimum password length enforced for sign-up and local user creation |
 | `AUTH_REQUIRE_STRONG_PASSWORD` | `true` | user creation tooling | Enforces the password-strength policy in `scripts/create_user.py` |
+| `SIGNUP_ENABLED` | `true` | FastAPI, Web UI | Enables the Web UI sign-up flow and the protected FastAPI sign-up endpoint |
+| `SIGNUP_DEFAULT_ROLE` | `user` | FastAPI | Role assigned to newly created self-service accounts |
+| `SIGNUP_REQUIRE_ADMIN_APPROVAL` | `false` | FastAPI, Web UI | When `true`, new self-service accounts are created inactive and must be activated before login |
 | `PASSWORD_HASH_SCHEME` | `argon2id` | backend auth utilities | Password hashing algorithm for stored user credentials |
 | `SESSION_COOKIE_SAMESITE` | `lax` | Web UI | Preferred auth-cookie SameSite mode for Chainlit sessions |
 | `SESSION_COOKIE_SECURE` | `false` unless SameSite is `none` | Web UI | Preferred auth-cookie secure flag; set `true` for HTTPS deployments |
@@ -38,6 +42,7 @@ Compose. Use [`.env.example`](../.env.example) for local host runs and
 | `POSTGRES_DB` | `language_agent` | Compose `postgres` service | Internal database name for the bundled PostgreSQL container |
 | `POSTGRES_USER` | `language_agent` | Compose `postgres` service | Internal PostgreSQL username |
 | `POSTGRES_PASSWORD` | placeholder in env examples | Compose `postgres` service | Internal PostgreSQL password; keep in local `.env` only |
+| `POSTGRES_HOST_PORT` | `5432` | Compose `postgres` service | Host-local PostgreSQL port bound to `127.0.0.1` for VS Code and other host-local debugging |
 
 Migration commands:
 
@@ -142,6 +147,10 @@ The embedded `llama-cpp-python` runtime was removed from the active code path.
 - Keep `CHAINLIT_AUTH_SECRET`, `POSTGRES_PASSWORD`, and `DATABASE_PASSWORD`
   credentials
   out of committed files.
+- `SIGNUP_ENABLED=false` hides the self-service sign-up form from the custom
+  Web UI login page and makes `POST /api/auth/signup` return a safe `404`.
+- `SIGNUP_REQUIRE_ADMIN_APPROVAL=true` creates new users as inactive and changes
+  the success message to indicate approval is required before sign-in.
 - Keep `SESSION_COOKIE_SAMESITE=lax` or `strict` for localhost, LAN, and
   same-site domain deployments. Use `none` only when the browser must send the
   cookie cross-site, and pair it with `SESSION_COOKIE_SECURE=true` over HTTPS.
@@ -153,8 +162,9 @@ The embedded `llama-cpp-python` runtime was removed from the active code path.
 - Keep real secrets out of committed files.
 - For Compose, `LLAMA_SERVER_MODEL_PATH` belongs to the `llama-server` service
   and should point at the in-container `/models/...` path.
-- The bundled PostgreSQL service is internal-only in `compose.yml`; no host port
-  is published by default.
+- The bundled PostgreSQL service binds its debug port to `127.0.0.1` only. It
+  is not routed through Caddy and is not reachable from LAN clients unless you
+  deliberately change the bind address.
 - For Compose-local Pascal GPUs such as a GTX 1080, start with
   `LLAMA_SERVER_CONTEXT_SIZE=1024` or `2048`, modest
   `LLAMA_SERVER_N_GPU_LAYERS`, and conservative `LLAMA_SERVER_BATCH_SIZE` /

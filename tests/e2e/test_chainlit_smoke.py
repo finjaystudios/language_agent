@@ -14,13 +14,16 @@ def test_chainlit_landing_page_loads(
     chainlit_url: str,
     login_to_chainlit,
     e2e_credentials,
+    chat_input,
 ):
     page.goto(chainlit_url)
 
     expect(page).to_have_title(re.compile(r"LanguageAgent"))
-    expect(page.get_by_role("textbox", name="Email address")).to_be_visible()
-    expect(page.get_by_role("textbox", name="Password")).to_be_visible()
-    expect(page.get_by_role("button", name="Sign In")).to_be_visible()
+    expect(page.locator('#lla-login-form input[name="username"]')).to_be_visible()
+    expect(page.locator('#lla-login-form input[name="password"]')).to_be_visible()
+    expect(
+        page.locator("#lla-login-form").get_by_role("button", name="Sign In")
+    ).to_be_visible()
 
     login_to_chainlit(
         page,
@@ -29,9 +32,7 @@ def test_chainlit_landing_page_loads(
     )
 
     expect(page.get_by_alt_text("logo")).to_be_visible(timeout=15000)
-    expect(
-        page.get_by_placeholder("Ask your local language assistant...")
-    ).to_be_visible()
+    expect(chat_input(page)).to_be_visible()
     expect(page.get_by_text("Translate")).to_be_visible()
     expect(page.get_by_text("Define")).to_be_visible()
     expect(page.get_by_text("Learn")).to_be_visible()
@@ -44,7 +45,7 @@ def test_chainlit_landing_page_loads(
 
     for asset_path in (
         "/public/theme.json",
-        "/public/style.css?v=languageagent-theme-v2",
+        "/public/style.css?v=languageagent-theme-v3",
         "/public/landing-status.js",
         "/logo?theme=dark",
         "/favicon",

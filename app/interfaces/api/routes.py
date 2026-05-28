@@ -7,9 +7,14 @@ from fastapi.responses import StreamingResponse
 
 from app.application.agent_service import AgentService
 from app.application.models import ChatCommand, RequestMetadata
+from app.application.user_auth_service import (
+    UsernameAlreadyExistsError,
+    UserSignupCommand,
+    authenticate_password_user,
+    signup_user,
+)
 from app.core.config import AppSettings
 from app.infrastructure.redis.queue_service import LLMQueueService
-from app.infrastructure.security.passwords import verify_password
 from app.interfaces.api.auth import require_api_key
 from app.interfaces.api.dependencies import (
     get_agent_service,
@@ -27,8 +32,11 @@ from app.interfaces.api.models import (
     QueueStatusResponse,
     StreamChatRequest,
     UserPasswordLoginRequest,
+    UserSignupRequest,
+    UserSignupResponse,
     authenticated_user_response_from_profile,
     chat_response_from_result,
+    user_signup_response_from_profile,
 )
 from app.ports.job_store import JobStore
 from app.ports.queue_client import QueueClient
@@ -101,12 +109,15 @@ async def internal_user_login(
     request: UserPasswordLoginRequest,
     user_repository: UserRepository = USER_REPOSITORY_DEP,
 ) -> AuthenticatedUserResponse:
-    normalized_username = request.username.strip()
-    user = await user_repository.get_by_username(normalized_username)
+    user = await authenticate_password_user(
+        request.username,
+        request.password,
+        user_repository,
+    )
     if user is None:
         logger.warning(
             "api_internal_auth_login_failed username=%s reason=invalid_credentials",
-            normalized_username,
+            request.username.strip(),
         )
         raise HTTPException(
             status_code=403,
@@ -116,43 +127,89 @@ async def internal_user_login(
             },
         )
 
-    if not user.is_active:
-        logger.warning(
-            "api_internal_auth_login_failed username=%s user_id=%s reason=inactive_user",
-            normalized_username,
-            user.id,
-        )
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "error": "invalid_credentials",
-                "message": "Invalid username or password.",
-            },
-        )
-
-    if not verify_password(request.password, user.password_hash):
-        logger.warning(
-            "api_internal_auth_login_failed username=%s user_id=%s reason=invalid_credentials",
-            normalized_username,
-            user.id,
-        )
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "error": "invalid_credentials",
-                "message": "Invalid username or password.",
-            },
-        )
-
-    authenticated_user = await user_repository.update_last_login(user.id) or user
     logger.info(
         "api_internal_auth_login_success username=%s user_id=%s role=%s admin=%s",
-        authenticated_user.username,
-        authenticated_user.id,
-        authenticated_user.role,
-        authenticated_user.is_admin,
+        user.username,
+        user.id,
+        user.role,
+        user.is_admin,
     )
-    return authenticated_user_response_from_profile(authenticated_user)
+    return authenticated_user_response_from_profile(user)
+
+
+@router.post(
+    "/auth/signup",
+    response_model=UserSignupResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Sign-up validation failed."},
+        401: {"model": ErrorResponse, "description": "Missing or invalid API key."},
+        404: {"model": ErrorResponse, "description": "Sign-up is disabled."},
+        409: {"model": ErrorResponse, "description": "Username is unavailable."},
+    },
+    summary="Create a new Web UI user account over the internal API boundary",
+)
+async def user_signup(
+    request: UserSignupRequest,
+    settings: AppSettings = SETTINGS_DEP,
+    user_repository: UserRepository = USER_REPOSITORY_DEP,
+) -> UserSignupResponse:
+    resolved_settings = (
+        get_settings() if isinstance(settings, DependsMarker) else settings
+    )
+    if not resolved_settings.signup_enabled:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "signup_disabled",
+                "message": "Account sign-up is not available right now.",
+            },
+        )
+
+    try:
+        user = await signup_user(
+            UserSignupCommand(
+                username=request.username,
+                password=request.password,
+                confirm_password=request.confirm_password,
+                display_name=request.display_name,
+                preferred_language=request.preferred_language,
+            ),
+            user_repository,
+            require_strong_password=resolved_settings.auth_require_strong_password,
+            min_password_length=resolved_settings.auth_min_password_length,
+            default_role=resolved_settings.signup_default_role,
+            require_admin_approval=resolved_settings.signup_require_admin_approval,
+        )
+    except UsernameAlreadyExistsError as error:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "username_unavailable",
+                "message": "That username is unavailable.",
+            },
+        ) from error
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "invalid_signup",
+                "message": str(error),
+            },
+        ) from error
+
+    logger.info(
+        "api_auth_signup_success username=%s user_id=%s active=%s role=%s",
+        user.username,
+        user.id,
+        user.is_active,
+        user.role,
+    )
+    message = (
+        "Account created. Please wait for approval before signing in."
+        if resolved_settings.signup_require_admin_approval
+        else "Account created. Please sign in."
+    )
+    return user_signup_response_from_profile(user, message=message)
 
 
 @router.post(

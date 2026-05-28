@@ -303,6 +303,131 @@ button[aria-label*="Needs improvement"] {
   white-space: normal !important;
 }
 
+#lla-signup-panel {
+  background:
+    linear-gradient(180deg, hsl(var(--card) / 0.98), hsl(var(--card) / 0.94));
+  border: 1px solid var(--lla-border);
+  border-radius: calc(var(--radius) * 1.35);
+  box-shadow: var(--lla-shadow);
+  margin-top: 1rem;
+  padding: 1rem 1rem 1.1rem;
+  width: 100%;
+}
+
+.lla-signup-header {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.lla-signup-header h2 {
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.lla-signup-header p {
+  color: var(--lla-muted-text);
+  margin: 0.25rem 0 0;
+}
+
+.lla-signup-toggle,
+.lla-signup-submit,
+.lla-signup-cancel {
+  min-height: 44px;
+}
+
+.lla-signup-toggle,
+.lla-signup-cancel {
+  background: transparent;
+  border: 1px solid var(--lla-border);
+  border-radius: 999px;
+  color: hsl(var(--foreground));
+  padding: 0.7rem 1rem;
+}
+
+.lla-signup-submit {
+  background: hsl(var(--primary));
+  border: 0;
+  border-radius: 999px;
+  color: hsl(var(--primary-foreground));
+  padding: 0.7rem 1.05rem;
+}
+
+.lla-signup-form {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.lla-signup-field {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.lla-signup-field span {
+  color: hsl(var(--foreground));
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.lla-signup-field em {
+  color: var(--lla-muted-text);
+  font-size: 0.8rem;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.lla-signup-field input {
+  background: hsl(var(--background));
+  border: 1px solid var(--lla-border);
+  border-radius: calc(var(--radius) * 1);
+  color: hsl(var(--foreground));
+  min-height: 46px;
+  padding: 0.8rem 0.9rem;
+  width: 100%;
+}
+
+.lla-signup-field input:focus,
+.lla-signup-field input:focus-visible {
+  box-shadow: var(--lla-focus-ring);
+  outline: 2px solid transparent;
+}
+
+.lla-signup-hint {
+  color: var(--lla-muted-text);
+  font-size: 0.88rem;
+  margin: -0.1rem 0 0;
+}
+
+.lla-signup-message {
+  border-radius: calc(var(--radius) * 1);
+  font-size: 0.92rem;
+  line-height: 1.45;
+  padding: 0.8rem 0.9rem;
+}
+
+.lla-signup-message[data-state="error"] {
+  background: hsl(var(--destructive) / 0.16);
+  border: 1px solid hsl(var(--destructive) / 0.4);
+}
+
+.lla-signup-message[data-state="success"] {
+  background: hsl(var(--primary) / 0.12);
+  border: 1px solid hsl(var(--primary) / 0.35);
+}
+
+.lla-signup-message[data-state="info"] {
+  background: hsl(var(--secondary) / 0.45);
+  border: 1px solid hsl(var(--border));
+}
+
+.lla-signup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
 .lla-status-refresh:hover:not(:disabled) {
   background: hsl(var(--foreground) / 0.06);
   border-color: var(--lla-border);

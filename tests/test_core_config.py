@@ -13,7 +13,11 @@ def test_app_settings_default_llama_server_config(monkeypatch):
         "AUTH_MAX_FAILED_ATTEMPTS",
         "AUTH_LOCKOUT_SECONDS",
         "AUTH_RATE_LIMIT_WINDOW_SECONDS",
+        "AUTH_MIN_PASSWORD_LENGTH",
         "AUTH_REQUIRE_STRONG_PASSWORD",
+        "SIGNUP_ENABLED",
+        "SIGNUP_DEFAULT_ROLE",
+        "SIGNUP_REQUIRE_ADMIN_APPROVAL",
         "CHAINLIT_AUTH_SECRET",
         "SESSION_COOKIE_SAMESITE",
         "SESSION_COOKIE_SECURE",
@@ -51,7 +55,11 @@ def test_app_settings_default_llama_server_config(monkeypatch):
     assert settings.auth_max_failed_attempts == 5
     assert settings.auth_lockout_seconds == 300
     assert settings.auth_rate_limit_window_seconds == 300
+    assert settings.auth_min_password_length == 12
     assert settings.auth_require_strong_password is True
+    assert settings.signup_enabled is True
+    assert settings.signup_default_role == "user"
+    assert settings.signup_require_admin_approval is False
     assert settings.session_cookie_samesite == "lax"
     assert settings.session_cookie_secure is False
     assert settings.database_scheme == "postgresql+asyncpg"
@@ -74,7 +82,11 @@ def test_app_settings_reads_llama_server_env(monkeypatch):
     monkeypatch.setenv("AUTH_MAX_FAILED_ATTEMPTS", "7")
     monkeypatch.setenv("AUTH_LOCKOUT_SECONDS", "600")
     monkeypatch.setenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "120")
+    monkeypatch.setenv("AUTH_MIN_PASSWORD_LENGTH", "16")
     monkeypatch.setenv("AUTH_REQUIRE_STRONG_PASSWORD", "false")
+    monkeypatch.setenv("SIGNUP_ENABLED", "false")
+    monkeypatch.setenv("SIGNUP_DEFAULT_ROLE", "member")
+    monkeypatch.setenv("SIGNUP_REQUIRE_ADMIN_APPROVAL", "true")
     monkeypatch.setenv("SESSION_COOKIE_SAMESITE", "strict")
     monkeypatch.setenv("SESSION_COOKIE_SECURE", "true")
     monkeypatch.setenv("DATABASE_SCHEME", "postgresql+asyncpg")
@@ -109,7 +121,11 @@ def test_app_settings_reads_llama_server_env(monkeypatch):
     assert settings.auth_max_failed_attempts == 7
     assert settings.auth_lockout_seconds == 600
     assert settings.auth_rate_limit_window_seconds == 120
+    assert settings.auth_min_password_length == 16
     assert settings.auth_require_strong_password is False
+    assert settings.signup_enabled is False
+    assert settings.signup_default_role == "member"
+    assert settings.signup_require_admin_approval is True
     assert settings.session_cookie_samesite == "strict"
     assert settings.session_cookie_secure is True
     assert settings.database_scheme == "postgresql+asyncpg"

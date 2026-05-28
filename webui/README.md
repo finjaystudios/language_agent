@@ -1,4 +1,4 @@
-## Chainlit Web UI
+# Chainlit Web UI
 
 The Web UI lives in `webui/` as a separate Chainlit application. It communicates
 with FastAPI over HTTP and is deployable separately from the backend.
@@ -30,7 +30,11 @@ $env:SESSION_COOKIE_SECURE = "false"
 $env:AUTH_MAX_FAILED_ATTEMPTS = "5"
 $env:AUTH_LOCKOUT_SECONDS = "300"
 $env:AUTH_RATE_LIMIT_WINDOW_SECONDS = "300"
+$env:AUTH_MIN_PASSWORD_LENGTH = "12"
 $env:AUTH_REQUIRE_STRONG_PASSWORD = "true"
+$env:SIGNUP_ENABLED = "true"
+$env:SIGNUP_DEFAULT_ROLE = "user"
+$env:SIGNUP_REQUIRE_ADMIN_APPROVAL = "false"
 $env:CHAINLIT_COOKIE_SAMESITE = "lax"
 $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
@@ -62,7 +66,11 @@ $env:SESSION_COOKIE_SECURE = "false"
 $env:AUTH_MAX_FAILED_ATTEMPTS = "5"
 $env:AUTH_LOCKOUT_SECONDS = "300"
 $env:AUTH_RATE_LIMIT_WINDOW_SECONDS = "300"
+$env:AUTH_MIN_PASSWORD_LENGTH = "12"
 $env:AUTH_REQUIRE_STRONG_PASSWORD = "true"
+$env:SIGNUP_ENABLED = "true"
+$env:SIGNUP_DEFAULT_ROLE = "user"
+$env:SIGNUP_REQUIRE_ADMIN_APPROVAL = "false"
 $env:CHAINLIT_COOKIE_SAMESITE = "lax"
 $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
@@ -102,7 +110,11 @@ docker run --rm -p 8001:8001 `
   -e AUTH_MAX_FAILED_ATTEMPTS=5 `
   -e AUTH_LOCKOUT_SECONDS=300 `
   -e AUTH_RATE_LIMIT_WINDOW_SECONDS=300 `
+  -e AUTH_MIN_PASSWORD_LENGTH=12 `
   -e AUTH_REQUIRE_STRONG_PASSWORD=true `
+  -e SIGNUP_ENABLED=true `
+  -e SIGNUP_DEFAULT_ROLE=user `
+  -e SIGNUP_REQUIRE_ADMIN_APPROVAL=false `
   -e CHAINLIT_COOKIE_SAMESITE=lax `
   -e REDIS_URL=redis://host.docker.internal:6379/0 `
   -e WEBUI_HOST=0.0.0.0 `
@@ -133,7 +145,11 @@ Direct host port:
 ## Scope and Behavior
 
 - the Web UI requires username/password login when `AUTH_ENABLED=true`
-- Chainlit validates credentials against the local `users` table
+- the custom `/login` page posts credentials to Chainlit's built-in `/login`
+  endpoint, which then validates them through the protected FastAPI login route
+- when `SIGNUP_ENABLED=true`, the same login page also exposes a self-service
+  sign-up form that posts to the Web UI server, which then calls the protected
+  FastAPI sign-up route
 - Chainlit persists thread history when the shared database settings point at
   the internal PostgreSQL database and `CHAINLIT_HISTORY_ENABLED=true`
 - the Web UI does not load the GGUF model
@@ -143,6 +159,8 @@ Direct host port:
 - the browser never receives `FASTAPI_API_KEY`
 - the browser never receives database credentials or password hashes
 - repeated failed logins are locked out by username through Redis-backed state
+- new self-service users are active immediately unless
+  `SIGNUP_REQUIRE_ADMIN_APPROVAL=true`
 - resumed chats restore the previous thread and mode selection for the same
   authenticated user
 

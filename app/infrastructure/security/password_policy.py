@@ -21,6 +21,7 @@ def validate_password_strength(
     *,
     username: str | None = None,
     require_strong_password: bool = True,
+    min_password_length: int = MIN_PASSWORD_LENGTH,
 ) -> None:
     if not require_strong_password:
         if not password or not password.strip():
@@ -39,7 +40,7 @@ def validate_password_strength(
     normalized_username = (username or "").strip().casefold()
     if normalized_username and lowered_password == normalized_username:
         raise ValueError("Password must not match the username.")
-    if len(password) < MIN_PASSWORD_LENGTH:
+    if len(password) < min_password_length:
         raise ValueError(
-            f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."
+            f"Password must be at least {min_password_length} characters long."
         )

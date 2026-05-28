@@ -168,6 +168,7 @@ def start_chainlit(
     env.update(
         {
             "AUTH_ENABLED": "true",
+            "AUTH_MIN_PASSWORD_LENGTH": "12",
             "CHAINLIT_AUTH_SECRET": "e2e-chainlit-auth-secret",
             "CHAINLIT_HISTORY_ENABLED": "false",
             "DATABASE_SCHEME": "sqlite+aiosqlite",
@@ -181,6 +182,8 @@ def start_chainlit(
             "REDIS_URL": "",
             "SESSION_COOKIE_SAMESITE": "lax",
             "SESSION_COOKIE_SECURE": "false",
+            "SIGNUP_ENABLED": "true",
+            "SIGNUP_REQUIRE_ADMIN_APPROVAL": "false",
             "WEBUI_REQUEST_TIMEOUT_SECONDS": "5",
             "WEBUI_STREAMING_ENABLED": "true",
         }
@@ -364,15 +367,24 @@ def e2e_credentials() -> dict[str, str]:
 
 
 def _login_to_chainlit(page, username: str, password: str) -> None:
-    username_input = page.get_by_role("textbox", name="Email address")
-    password_input = page.get_by_role("textbox", name="Password")
+    login_form = page.locator("#lla-login-form")
+    username_input = login_form.locator('input[name="username"]')
+    password_input = login_form.locator('input[name="password"]')
     username_input.wait_for(state="visible", timeout=15000)
     password_input.wait_for(state="visible", timeout=15000)
     username_input.fill(username)
     password_input.fill(password)
-    page.get_by_role("button", name="Sign In").click()
+    login_form.get_by_role("button", name="Sign In").click()
 
 
 @pytest.fixture()
 def login_to_chainlit():
     return _login_to_chainlit
+
+
+@pytest.fixture()
+def chat_input():
+    def find(page):
+        return page.locator("textarea").first
+
+    return find

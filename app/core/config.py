@@ -75,7 +75,11 @@ class AppSettings:
     auth_max_failed_attempts: int
     auth_lockout_seconds: int
     auth_rate_limit_window_seconds: int
+    auth_min_password_length: int
     auth_require_strong_password: bool
+    signup_enabled: bool
+    signup_default_role: str
+    signup_require_admin_approval: bool
     fastapi_api_key: str | None
     chainlit_auth_secret: str | None
     session_cookie_secure: bool
@@ -138,9 +142,20 @@ class AppSettings:
             auth_rate_limit_window_seconds=int(
                 os.getenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "300")
             ),
+            auth_min_password_length=int(os.getenv("AUTH_MIN_PASSWORD_LENGTH", "12")),
             auth_require_strong_password=parse_bool(
                 os.getenv("AUTH_REQUIRE_STRONG_PASSWORD", "true"),
                 default=True,
+            ),
+            signup_enabled=parse_bool(
+                os.getenv("SIGNUP_ENABLED", "true"),
+                default=True,
+            ),
+            signup_default_role=os.getenv("SIGNUP_DEFAULT_ROLE", "user").strip()
+            or "user",
+            signup_require_admin_approval=parse_bool(
+                os.getenv("SIGNUP_REQUIRE_ADMIN_APPROVAL", "false"),
+                default=False,
             ),
             fastapi_api_key=os.getenv("FASTAPI_API_KEY"),
             chainlit_auth_secret=os.getenv("CHAINLIT_AUTH_SECRET"),

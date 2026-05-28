@@ -8,10 +8,13 @@ from webui.client import (
     BackendAuthenticationError,
     BackendClientError,
     BackendConfig,
+    BackendConflictError,
+    BackendFeatureDisabledError,
     BackendHTTPError,
     BackendInvalidResponseError,
     BackendTimeoutError,
     BackendUserAuthenticationError,
+    BackendValidationError,
     FastAPIClient,
     build_chat_payload,
     parse_sse_line,
@@ -160,6 +163,125 @@ def test_authenticate_user_invalid_credentials_is_safe():
         assert "wrong-password" not in str(error)
     else:
         raise AssertionError("Expected BackendUserAuthenticationError")
+
+
+def test_signup_user_posts_expected_payload():
+    seen_payload = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal seen_payload
+        seen_payload = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "success": True,
+                "message": "Account created. Please sign in.",
+                "user_id": 99,
+                "username": "new-user",
+                "created_at": "2026-05-28T10:00:00Z",
+            },
+        )
+
+    client = client_with_transport(httpx.MockTransport(handler))
+
+    result = asyncio.run(
+        client.signup_user(
+            username="new-user",
+            password="correct horse battery staple",
+            confirm_password="correct horse battery staple",
+            display_name="New User",
+        )
+    )
+
+    assert seen_payload == {
+        "username": "new-user",
+        "password": "correct horse battery staple",
+        "confirm_password": "correct horse battery staple",
+        "display_name": "New User",
+    }
+    assert result.success is True
+    assert result.username == "new-user"
+
+
+def test_signup_user_maps_duplicate_username_to_safe_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            409,
+            json={
+                "error": "username_unavailable",
+                "message": "That username is unavailable.",
+            },
+        )
+
+    client = client_with_transport(httpx.MockTransport(handler))
+
+    try:
+        asyncio.run(
+            client.signup_user(
+                username="taken-user",
+                password="correct horse battery staple",
+                confirm_password="correct horse battery staple",
+            )
+        )
+    except BackendConflictError as error:
+        assert str(error) == "That username is unavailable."
+        assert error.status_code == 409
+    else:
+        raise AssertionError("Expected BackendConflictError")
+
+
+def test_signup_user_maps_weak_password_to_validation_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            400,
+            json={
+                "error": "invalid_signup",
+                "message": "Password is too weak. Use a longer unique password from a password manager.",
+            },
+        )
+
+    client = client_with_transport(httpx.MockTransport(handler))
+
+    try:
+        asyncio.run(
+            client.signup_user(
+                username="new-user",
+                password="password123",
+                confirm_password="password123",
+            )
+        )
+    except BackendValidationError as error:
+        assert "too weak" in str(error)
+        assert error.status_code == 400
+    else:
+        raise AssertionError("Expected BackendValidationError")
+
+
+def test_signup_user_maps_disabled_signup_to_safe_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            404,
+            json={
+                "error": "signup_disabled",
+                "message": "Account sign-up is not available right now.",
+            },
+        )
+
+    client = client_with_transport(httpx.MockTransport(handler))
+
+    try:
+        asyncio.run(
+            client.signup_user(
+                username="new-user",
+                password="correct horse battery staple",
+                confirm_password="correct horse battery staple",
+            )
+        )
+    except BackendFeatureDisabledError as error:
+        assert str(error) == "Account sign-up is not available right now."
+        assert error.status_code == 404
+    else:
+        raise AssertionError("Expected BackendFeatureDisabledError")
 
 
 def test_missing_api_key_fails_before_protected_request():

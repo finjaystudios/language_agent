@@ -40,8 +40,10 @@ Open:
 - FastAPI health through Caddy: `http://localhost/api/health`
 
 The Web UI now requires a database-backed username/password login before chat
-access. Create a local user with `python scripts/create_user.py --username ...`
-after migrations have been applied.
+access. Self-service sign-up is also available on the Web UI login page when
+`SIGNUP_ENABLED=true`. If you prefer seeded-only access, create a local user
+with `python scripts/create_user.py --username ...` after migrations have been
+applied and set `SIGNUP_ENABLED=false`.
 
 For a host-local development workflow without Docker, see
 [`docs/local-development.md`](docs/local-development.md).
