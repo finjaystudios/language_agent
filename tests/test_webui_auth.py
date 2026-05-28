@@ -116,7 +116,7 @@ def test_invalid_password_fails_without_revealing_password(caplog):
         )
 
     assert authenticated_user is None
-    combined_logs = " ".join(record.getMessage() for record in caplog.records)
+    combined_logs = " ".join(record.message for record in caplog.records)
     assert "outcome=failure" in combined_logs
     assert "wrong-password" not in combined_logs
     assert "$argon2id$" not in combined_logs
@@ -138,7 +138,7 @@ def test_unknown_username_fails_with_generic_credentials_reason(caplog):
         )
 
     assert authenticated_user is None
-    combined_logs = " ".join(record.getMessage() for record in caplog.records)
+    combined_logs = " ".join(record.message for record in caplog.records)
     assert "reason=invalid_credentials" in combined_logs
     assert "reason=user_not_found" not in combined_logs
     assert "secret" not in combined_logs
@@ -203,9 +203,7 @@ def test_repeated_failed_attempts_trigger_lockout_and_expiry(caplog):
         )
 
     assert locked_user is None
-    assert "outcome=locked" in " ".join(
-        record.getMessage() for record in caplog.records
-    )
+    assert "outcome=locked" in " ".join(record.message for record in caplog.records)
 
     clock.advance(31)
 
