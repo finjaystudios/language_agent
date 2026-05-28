@@ -189,6 +189,7 @@ Symptoms:
 - Web UI can load but chat requests fail with auth-related errors
 - previous threads do not appear after login or refresh
 - valid credentials work after waiting, but fail briefly after many bad attempts
+- Playwright login tests fail before reaching chat
 
 Checks:
 
@@ -213,6 +214,11 @@ Checks:
   before retrying with the correct password
 - inspect `docker compose logs -f webui` and confirm auth events do not contain
   plaintext passwords or password hashes
+- for managed Playwright runs, confirm `tests/e2e/conftest.py` can create a
+  temporary SQLite database and seed the `e2e-user` account
+- remember the managed Playwright path intentionally sets
+  `CHAINLIT_HISTORY_ENABLED=false`; chat-history validation belongs to the real
+  PostgreSQL-backed workflow
 
 If login unexpectedly succeeds without a prompt, confirm that the Web UI did not
 start with `AUTH_ENABLED=false`.

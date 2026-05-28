@@ -38,6 +38,7 @@ Useful variants:
 
 ```powershell
 pytest tests/e2e --headed
+pytest tests/e2e/test_chainlit_login.py
 pytest tests/e2e --browser chromium
 pytest tests/e2e --browser firefox
 pytest tests/e2e --browser webkit
@@ -55,6 +56,18 @@ pytest tests/e2e/test_chainlit_smoke.py
 
 See [`../tests/e2e/README.md`](../tests/e2e/README.md) for Playwright-only
 usage details.
+
+The managed E2E path now starts Chainlit with:
+
+- password auth enabled
+- a seeded deterministic test user
+- a temporary SQLite database migrated with Alembic
+- the fake backend instead of the real FastAPI + worker + llama-server path
+
+For that managed no-Docker E2E path, `CHAINLIT_HISTORY_ENABLED=false` is used
+because the official Chainlit data layer requires PostgreSQL/`asyncpg` rather
+than SQLite. Postgres-backed history and resume behavior remain part of the real
+app workflow and unit/integration coverage.
 
 ## Bruno
 
@@ -93,6 +106,19 @@ docker compose logs -f fastapi
 docker compose logs -f llm-worker
 docker compose logs -f redis
 ```
+
+## Manual Integration Checklist
+
+1. Run `alembic upgrade head`.
+2. Create a user with `python scripts/create_user.py --username ...`.
+3. Start the stack with `docker compose up --build`.
+4. Open `http://localhost/` through Caddy.
+5. Confirm the login form appears before chat access.
+6. Confirm invalid credentials are rejected.
+7. Confirm valid credentials open the chat UI.
+8. Confirm chat requests still work and FastAPI API key protection remains in place.
+9. Refresh or reopen the Web UI and confirm chat history resumes if persistence is enabled.
+10. Confirm auth logs do not contain plaintext passwords, hashes, or secrets.
 
 ## Dependency Audit
 

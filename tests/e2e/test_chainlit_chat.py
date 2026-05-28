@@ -33,10 +33,17 @@ def test_definition_starter_sets_mode_and_renders_response(
     requires_fake_backend: None,
     page: Page,
     chainlit_url: str,
+    login_to_chainlit,
+    e2e_credentials,
     reset_fake_backend: None,
     backend_requests,
 ):
     page.goto(chainlit_url)
+    login_to_chainlit(
+        page,
+        e2e_credentials["username"],
+        e2e_credentials["password"],
+    )
 
     expect(
         page.get_by_placeholder("Ask your local language assistant...")
@@ -62,10 +69,17 @@ def test_user_can_send_full_response_message(
     requires_fake_backend: None,
     page: Page,
     chainlit_url: str,
+    login_to_chainlit,
+    e2e_credentials,
     reset_fake_backend: None,
     backend_requests,
 ):
     page.goto(chainlit_url)
+    login_to_chainlit(
+        page,
+        e2e_credentials["username"],
+        e2e_credentials["password"],
+    )
 
     submit_chat_message(page, "Workshop")
 
@@ -86,10 +100,17 @@ def test_settings_response_mode_overrides_next_message(
     requires_fake_backend: None,
     page: Page,
     chainlit_url: str,
+    login_to_chainlit,
+    e2e_credentials,
     reset_fake_backend: None,
     backend_requests,
 ):
     page.goto(chainlit_url)
+    login_to_chainlit(
+        page,
+        e2e_credentials["username"],
+        e2e_credentials["password"],
+    )
 
     select_response_mode(page, "Definition")
     submit_chat_message(page, "Workshop")
@@ -108,10 +129,17 @@ def test_streaming_starter_renders_streamed_response(
     requires_fake_backend: None,
     page: Page,
     chainlit_url: str,
+    login_to_chainlit,
+    e2e_credentials,
     reset_fake_backend: None,
     backend_requests,
 ):
     page.goto(chainlit_url)
+    login_to_chainlit(
+        page,
+        e2e_credentials["username"],
+        e2e_credentials["password"],
+    )
 
     expect(
         page.get_by_placeholder("Ask your local language assistant...")

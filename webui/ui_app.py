@@ -27,6 +27,7 @@ from webui.config import WebUISettings  # noqa: E402
 from webui.modes import starter_mode_for_values  # noqa: E402
 from webui.persistence import (  # noqa: E402
     apply_user_profile_to_session,
+    chainlit_history_enabled,
     get_chainlit_data_layer,
     restore_profile_from_thread,
     thread_belongs_to_user,
@@ -82,6 +83,8 @@ if AUTH_ENABLED:
 
 @cl.data_layer
 def chainlit_data_layer():
+    if not chainlit_history_enabled():
+        return None
     return get_chainlit_data_layer()
 
 
@@ -92,7 +95,7 @@ async def on_app_startup() -> None:
     logger.info(
         "webui_startup auth_enabled=%s persistence_enabled=%s cookie_samesite=%s cookie_secure=%s auth_max_failed_attempts=%s auth_lockout_seconds=%s auth_rate_limit_window_seconds=%s",
         settings.auth_enabled,
-        bool(settings.database_url),
+        chainlit_history_enabled(settings),
         settings.session_cookie_samesite,
         settings.session_cookie_secure,
         settings.auth_max_failed_attempts,
@@ -104,7 +107,7 @@ async def on_app_startup() -> None:
 @cl.on_app_shutdown
 async def on_app_shutdown() -> None:
     settings = WebUISettings.from_env()
-    if settings.database_url:
+    if chainlit_history_enabled(settings):
         await get_chainlit_data_layer().close()
     await close_auth_attempt_store()
 

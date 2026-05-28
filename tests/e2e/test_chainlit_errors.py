@@ -10,6 +10,8 @@ def test_backend_unavailable_message_is_readable(
     page: Page,
     unavailable_backend_url: str,
     chainlit_process_factory,
+    login_to_chainlit,
+    e2e_credentials,
     requires_managed_chainlit: None,
 ):
     url = chainlit_process_factory(
@@ -17,6 +19,11 @@ def test_backend_unavailable_message_is_readable(
         name="chainlit-webui-offline",
     )
     page.goto(url)
+    login_to_chainlit(
+        page,
+        e2e_credentials["username"],
+        e2e_credentials["password"],
+    )
 
     input_box = page.get_by_placeholder("Ask your local language assistant...")
     expect(input_box).to_be_enabled()
@@ -35,6 +42,8 @@ def test_wrong_api_key_message_is_readable(
     page: Page,
     fake_backend: str,
     chainlit_process_factory,
+    login_to_chainlit,
+    e2e_credentials,
     reset_fake_backend: None,
     backend_requests,
     requires_managed_chainlit: None,
@@ -45,6 +54,11 @@ def test_wrong_api_key_message_is_readable(
         api_key="wrong-e2e-key",
     )
     page.goto(url)
+    login_to_chainlit(
+        page,
+        e2e_credentials["username"],
+        e2e_credentials["password"],
+    )
 
     input_box = page.get_by_placeholder("Ask your local language assistant...")
     expect(input_box).to_be_enabled()
@@ -69,6 +83,8 @@ def test_missing_api_key_message_is_readable(
     page: Page,
     fake_backend: str,
     chainlit_process_factory,
+    login_to_chainlit,
+    e2e_credentials,
     reset_fake_backend: None,
     backend_requests,
     requires_managed_chainlit: None,
@@ -79,6 +95,11 @@ def test_missing_api_key_message_is_readable(
         api_key=None,
     )
     page.goto(url)
+    login_to_chainlit(
+        page,
+        e2e_credentials["username"],
+        e2e_credentials["password"],
+    )
 
     input_box = page.get_by_placeholder("Ask your local language assistant...")
     expect(input_box).to_be_enabled()

@@ -161,6 +161,8 @@ Wildcard origins with credentials are not used.
   temporarily published for local development
 - PostgreSQL remains internal-only in Compose and must not be exposed through
   Caddy or Cloudflare
+- the deterministic Playwright login tests use a seeded local test user and do
+  not require public exposure of any internal service
 
 ## Current Limitations
 

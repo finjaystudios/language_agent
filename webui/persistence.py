@@ -20,6 +20,11 @@ SESSION_PROFILE_KEYS = (
 )
 
 
+def chainlit_history_enabled(settings: WebUISettings | None = None) -> bool:
+    resolved_settings = settings or WebUISettings.from_env()
+    return resolved_settings.chainlit_history_enabled
+
+
 @lru_cache(maxsize=1)
 def get_chainlit_data_layer() -> ChainlitDataLayer:
     settings = WebUISettings.from_env()

@@ -24,6 +24,7 @@ $env:DATABASE_NAME = "language_agent"
 $env:DATABASE_USER = "language_agent"
 $env:DATABASE_PASSWORD = "change-me"
 $env:CHAINLIT_AUTH_SECRET = "replace-with-random-secret"
+$env:CHAINLIT_HISTORY_ENABLED = "true"
 $env:SESSION_COOKIE_SAMESITE = "lax"
 $env:SESSION_COOKIE_SECURE = "false"
 $env:AUTH_MAX_FAILED_ATTEMPTS = "5"
@@ -55,6 +56,7 @@ $env:DATABASE_NAME = "language_agent"
 $env:DATABASE_USER = "language_agent"
 $env:DATABASE_PASSWORD = "change-me"
 $env:CHAINLIT_AUTH_SECRET = "replace-with-random-secret"
+$env:CHAINLIT_HISTORY_ENABLED = "true"
 $env:SESSION_COOKIE_SAMESITE = "lax"
 $env:SESSION_COOKIE_SECURE = "false"
 $env:AUTH_MAX_FAILED_ATTEMPTS = "5"
@@ -94,6 +96,7 @@ docker run --rm -p 8001:8001 `
   -e DATABASE_USER=language_agent `
   -e DATABASE_PASSWORD=change-me `
   -e CHAINLIT_AUTH_SECRET=replace-with-random-secret `
+  -e CHAINLIT_HISTORY_ENABLED=true `
   -e SESSION_COOKIE_SAMESITE=lax `
   -e SESSION_COOKIE_SECURE=false `
   -e AUTH_MAX_FAILED_ATTEMPTS=5 `
@@ -132,7 +135,7 @@ Direct host port:
 - the Web UI requires username/password login when `AUTH_ENABLED=true`
 - Chainlit validates credentials against the local `users` table
 - Chainlit persists thread history when the shared database settings point at
-  the internal PostgreSQL database
+  the internal PostgreSQL database and `CHAINLIT_HISTORY_ENABLED=true`
 - the Web UI does not load the GGUF model
 - the Web UI sends `X-API-Key` only from server-side code
 - Translation, Definition, and Learning can stream when
@@ -167,8 +170,11 @@ Run the Playwright suite from the repository root:
 
 ```powershell
 pytest tests/e2e
+pytest tests/e2e/test_chainlit_login.py
 ```
 
 See [`../tests/e2e/README.md`](../tests/e2e/README.md) for Playwright-only
 usage and [`../docs/mobile-ui.md`](../docs/mobile-ui.md) for responsive
-validation notes.
+validation notes. The managed Playwright path uses a seeded test user and a
+temporary SQLite database, so it does not require PostgreSQL, Redis, Docker, or
+the real model stack.

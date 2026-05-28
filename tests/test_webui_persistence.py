@@ -5,6 +5,7 @@ import asyncio
 import chainlit as cl
 from webui.persistence import (
     apply_user_profile_to_session,
+    chainlit_history_enabled,
     restore_profile_from_thread,
     thread_belongs_to_user,
 )
@@ -140,3 +141,9 @@ def test_chat_resume_restores_mode_for_next_message(monkeypatch):
     assert calls == ["definition"]
     assert fake_session.get("preferred_language") == "en"
     assert fake_session.get("ui_theme") == "light"
+
+
+def test_chainlit_history_enabled_reads_env_toggle(monkeypatch):
+    monkeypatch.setenv("CHAINLIT_HISTORY_ENABLED", "false")
+
+    assert chainlit_history_enabled() is False

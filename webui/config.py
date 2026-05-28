@@ -22,6 +22,7 @@ class WebUISettings:
     auth_lockout_seconds: int
     auth_rate_limit_window_seconds: int
     auth_require_strong_password: bool
+    chainlit_history_enabled: bool
     database_scheme: str
     database_host: str
     database_port: int
@@ -63,6 +64,10 @@ class WebUISettings:
             ),
             auth_require_strong_password=parse_bool(
                 os.getenv("AUTH_REQUIRE_STRONG_PASSWORD", "true"),
+                default=True,
+            ),
+            chainlit_history_enabled=parse_bool(
+                os.getenv("CHAINLIT_HISTORY_ENABLED", "true"),
                 default=True,
             ),
             database_scheme=database_scheme,

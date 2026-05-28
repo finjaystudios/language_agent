@@ -30,6 +30,7 @@ For the full local stack with Caddy, Redis, FastAPI, the worker, and Chainlit:
 
 ```powershell
 Copy-Item .env.compose.example .env
+docker compose run --rm fastapi alembic upgrade head
 docker compose up --build
 ```
 
@@ -37,6 +38,10 @@ Open:
 
 - Web UI: `http://localhost/`
 - FastAPI health through Caddy: `http://localhost/api/health`
+
+The Web UI now requires a database-backed username/password login before chat
+access. Create a local user with `python scripts/create_user.py --username ...`
+after migrations have been applied.
 
 For a host-local development workflow without Docker, see
 [`docs/local-development.md`](docs/local-development.md).
@@ -67,6 +72,7 @@ Run the Playwright E2E suite:
 
 ```powershell
 pytest tests/e2e
+pytest tests/e2e/test_chainlit_login.py
 ```
 
 Run the Bruno collection:

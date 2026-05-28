@@ -20,6 +20,9 @@ dedicated `llama-server`, the Chainlit Web UI, and Caddy on one local network.
 keeps the user-profile database off the public interface unless you opt in
 separately.
 
+`webui` depends on healthy `fastapi` and `postgres` services before startup, and
+PostgreSQL uses the named `postgres-data` volume for persistent local state.
+
 `db-migrate` is an optional one-off tools profile that runs `alembic upgrade head`
 against the same internal PostgreSQL service. It does not start automatically.
 
@@ -148,6 +151,9 @@ LAN devices can replace `localhost` with the host machine IP address. If local
 name resolution maps `agent.local` to the Docker host, the same routes can be
 used there as well. In both cases, browser users must authenticate through the
 Web UI login before chat access.
+
+Neither PostgreSQL nor `llama-server` is routed through Caddy. Cloudflare, if
+used later, should continue to point only at the host Caddy entrypoint.
 
 ## Health and Logs
 

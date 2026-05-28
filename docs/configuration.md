@@ -47,6 +47,9 @@ alembic current
 alembic history
 ```
 
+Apply `alembic upgrade head` before creating users or starting the protected Web
+UI if the database has not been initialized yet.
+
 ## Queue and Redis
 
 | Variable | Default | Used by | Purpose |
@@ -126,6 +129,7 @@ The embedded `llama-cpp-python` runtime was removed from the active code path.
 | --- | --- | --- | --- |
 | `FASTAPI_BASE_URL` | `http://localhost:8000` locally, `http://fastapi:8000` in Compose | Web UI | Backend base URL for server-side Chainlit calls |
 | `CHAINLIT_COOKIE_SAMESITE` | `lax` | Web UI | Chainlit native cookie setting; keep aligned with `SESSION_COOKIE_SAMESITE` |
+| `CHAINLIT_HISTORY_ENABLED` | `true` | Web UI | Enables the official Chainlit data layer for persisted thread history; keep `true` for PostgreSQL-backed runs |
 | `WEBUI_HOST` | `0.0.0.0` | Web UI container | Chainlit bind host |
 | `WEBUI_PORT` | `8001` | Web UI container | Chainlit bind port |
 | `WEBUI_REQUEST_TIMEOUT_SECONDS` | `120` | Web UI | Backend request timeout |
