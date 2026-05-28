@@ -129,11 +129,11 @@ Run the Web UI as a separate local process:
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
 $env:CHAINLIT_AUTH_SECRET = "replace-with-random-secret-when-login-is-enabled"
-$env:DATABASE_URL = "postgresql+psycopg://language_agent:change-me@127.0.0.1:5432/language_agent"
+$env:WEBUI_DATABASE_URL = "postgresql+psycopg://language_agent:change-me@127.0.0.1:5432/language_agent"
 $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
 Push-Location webui
-chainlit run app.py --host 127.0.0.1 --port 8001
+chainlit run chainlit_app.py --host 127.0.0.1 --port 8001
 Pop-Location
 ```
 

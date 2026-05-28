@@ -183,9 +183,11 @@ services:
       - "8001:8001"
     environment:
       FASTAPI_BASE_URL: http://fastapi:8000
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
       FASTAPI_API_KEY: ${FASTAPI_API_KEY:-local-dev-change-me}
       CHAINLIT_AUTH_SECRET: ${CHAINLIT_AUTH_SECRET:-replace-with-random-secret-when-login-is-enabled}
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://language_agent:change-me@postgres:5432/language_agent}
+      CHAINLIT_COOKIE_SAMESITE: ${CHAINLIT_COOKIE_SAMESITE:-lax}
+      WEBUI_DATABASE_URL: ${WEBUI_DATABASE_URL:-postgresql+psycopg://language_agent:change-me@postgres:5432/language_agent}
       DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-5}
       DATABASE_ECHO: ${DATABASE_ECHO:-false}
       WEBUI_HOST: 0.0.0.0

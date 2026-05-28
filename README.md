@@ -59,7 +59,7 @@ Run the Web UI:
 
 ```powershell
 Push-Location webui
-chainlit run app.py --host 127.0.0.1 --port 8001
+chainlit run chainlit_app.py --host 127.0.0.1 --port 8001
 Pop-Location
 ```
 

@@ -175,7 +175,7 @@ def start_chainlit(
             "-m",
             "chainlit",
             "run",
-            "app.py",
+            "chainlit_app.py",
             "--host",
             "127.0.0.1",
             "--port",

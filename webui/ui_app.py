@@ -1,12 +1,19 @@
 import asyncio
 import logging
 import os
+import sys
+from pathlib import Path
 
 import chainlit as cl
 from chainlit.input_widget import Select
 from chainlit.server import app as chainlit_app
 
-from client import (
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from webui.auth import authenticate_user  # noqa: E402
+from webui.client import (  # noqa: E402
     BackendClientError,
     BackendConfig,
     BackendInvalidResponseError,
@@ -14,8 +21,9 @@ from client import (
     FastAPIClient,
     format_ui_error,
 )
-from modes import starter_mode_for_values
-from renderer import render_chat_response
+from webui.config import WebUISettings  # noqa: E402
+from webui.modes import starter_mode_for_values  # noqa: E402
+from webui.renderer import render_chat_response  # noqa: E402
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -28,6 +36,7 @@ SESSION_MODE_KEY = "selected_mode"
 LAST_USER_MESSAGE_KEY = "last_user_message"
 STREAM_FLUSH_CHAR_LIMIT = 96
 MODE_AUTO = "auto"
+AUTH_ENABLED = WebUISettings.from_env().auth_enabled
 STREAMING_MODES = {"translation", "definition", "learning"}
 STREAM_STATUS_MESSAGES = {
     "queued": "Your request is queued and waiting for the model worker.",
@@ -54,6 +63,47 @@ FEEDBACK_CATEGORIES = {
     "incorrect": "Incorrect",
     "offensive": "Offensive",
 }
+
+
+if AUTH_ENABLED:
+
+    @cl.password_auth_callback
+    async def password_auth_callback(username: str, password: str) -> cl.User | None:
+        return authenticate_user(username, password)
+
+
+@cl.on_app_startup
+async def on_app_startup() -> None:
+    settings = WebUISettings.from_env()
+    settings.validate_for_auth()
+    logger.info(
+        "webui_startup auth_enabled=%s cookie_samesite=%s cookie_secure=%s",
+        settings.auth_enabled,
+        settings.chainlit_cookie_samesite,
+        settings.session_cookie_secure,
+    )
+
+
+def get_current_user() -> cl.User | None:
+    user = cl.user_session.get("user")
+    if isinstance(user, cl.User):
+        return user
+    return None
+
+
+def current_user_identifier() -> str:
+    user = get_current_user()
+    return user.identifier if user else "anonymous"
+
+
+def current_user_id() -> str:
+    user = get_current_user()
+    metadata = user.metadata if user else {}
+    return str(metadata.get("user_id", "unknown"))
+
+
+def current_session_id() -> str:
+    return str(cl.user_session.get("id", "unknown"))
 
 
 @chainlit_app.get("/webui/backend-status")
@@ -235,7 +285,13 @@ async def set_starters() -> list[cl.Starter]:
 async def on_chat_start() -> None:
     cl.user_session.set(SESSION_MODE_KEY, MODE_AUTO)
     cl.user_session.set(LAST_USER_MESSAGE_KEY, "")
-    logger.info("webui_chat_start default_mode=%s", MODE_AUTO)
+    logger.info(
+        "webui_chat_start default_mode=%s username=%s user_id=%s session_id=%s",
+        MODE_AUTO,
+        current_user_identifier(),
+        current_user_id(),
+        current_session_id(),
+    )
     await send_mode_settings()
 
 
@@ -244,7 +300,13 @@ async def on_settings_update(settings: dict[str, object]) -> None:
     selected_mode = normalize_mode_value(settings.get(SESSION_MODE_KEY, MODE_AUTO))
 
     cl.user_session.set(SESSION_MODE_KEY, selected_mode)
-    logger.info("webui_mode_settings_update mode=%s", selected_mode)
+    logger.info(
+        "webui_mode_settings_update mode=%s username=%s user_id=%s session_id=%s",
+        selected_mode,
+        current_user_identifier(),
+        current_user_id(),
+        current_session_id(),
+    )
     await cl.Message(
         content=(
             f"Response mode set to **{mode_label(selected_mode)}**. "
@@ -258,7 +320,13 @@ async def on_set_mode(action: cl.Action) -> None:
     selected_mode = normalize_mode_value(action.payload.get("mode", MODE_AUTO))
 
     cl.user_session.set(SESSION_MODE_KEY, selected_mode)
-    logger.info("webui_mode_action_update mode=%s", selected_mode)
+    logger.info(
+        "webui_mode_action_update mode=%s username=%s user_id=%s session_id=%s",
+        selected_mode,
+        current_user_identifier(),
+        current_user_id(),
+        current_session_id(),
+    )
     await action.remove()
     await send_mode_settings(selected_mode)
     await cl.Message(
@@ -277,7 +345,13 @@ async def on_retry_response(action: cl.Action) -> None:
         return
 
     cl.user_session.set(SESSION_MODE_KEY, selected_mode)
-    logger.info("webui_retry_response mode=%s", selected_mode)
+    logger.info(
+        "webui_retry_response mode=%s username=%s user_id=%s session_id=%s",
+        selected_mode,
+        current_user_identifier(),
+        current_user_id(),
+        current_session_id(),
+    )
     await action.remove()
     await send_mode_settings(selected_mode)
     await handle_user_text(user_text, echo_user=True)
@@ -287,7 +361,10 @@ async def on_retry_response(action: cl.Action) -> None:
 async def on_feedback_good(action: cl.Action) -> None:
     user_text = str(action.payload.get("message", "")).strip()
     logger.info(
-        "webui_feedback_submitted rating=positive message_length=%d",
+        "webui_feedback_submitted rating=positive username=%s user_id=%s session_id=%s message_length=%d",
+        current_user_identifier(),
+        current_user_id(),
+        current_session_id(),
         len(user_text),
     )
     await action.remove()
@@ -316,8 +393,11 @@ async def on_feedback_needs_category(action: cl.Action) -> None:
     payload = res.get("payload", {})
     category = str(payload.get("category", "uncategorized"))
     logger.info(
-        "webui_feedback_submitted rating=negative category=%s message_length=%d",
+        "webui_feedback_submitted rating=negative category=%s username=%s user_id=%s session_id=%s message_length=%d",
         category,
+        current_user_identifier(),
+        current_user_id(),
+        current_session_id(),
         len(user_text),
     )
     await cl.Message(
@@ -351,7 +431,13 @@ async def handle_user_text(
     if starter_mode:
         cl.user_session.set(SESSION_MODE_KEY, starter_mode)
         await send_mode_settings(starter_mode)
-        logger.info("webui_starter_mode_selected mode=%s", starter_mode)
+        logger.info(
+            "webui_starter_mode_selected mode=%s username=%s user_id=%s session_id=%s",
+            starter_mode,
+            current_user_identifier(),
+            current_user_id(),
+            current_session_id(),
+        )
 
     cl.user_session.set(LAST_USER_MESSAGE_KEY, user_text)
     selected_mode = get_selected_mode()
@@ -359,10 +445,13 @@ async def handle_user_text(
     client = get_backend_client()
     use_streaming = should_stream(api_mode)
     logger.info(
-        "webui_message_received mode=%s api_mode=%s streaming=%s message_length=%d",
+        "webui_message_received mode=%s api_mode=%s streaming=%s username=%s user_id=%s session_id=%s message_length=%d",
         selected_mode,
         api_mode,
         use_streaming,
+        current_user_identifier(),
+        current_user_id(),
+        current_session_id(),
         len(user_text),
     )
 
@@ -386,9 +475,12 @@ async def handle_user_text(
             )
     except BackendClientError as error:
         logger.warning(
-            "webui_message_backend_error category=%s mode=%s",
+            "webui_message_backend_error category=%s mode=%s username=%s user_id=%s session_id=%s",
             error.category,
             api_mode,
+            current_user_identifier(),
+            current_user_id(),
+            current_session_id(),
         )
         status_message.content = format_ui_error(error)
         status_message.actions = response_actions(user_text, selected_mode)
@@ -510,7 +602,13 @@ async def stream_backend_response(
                 done_received = True
     except BackendClientError:
         if received_token:
-            logger.warning("webui_stream_interrupted_after_tokens mode=%s", api_mode)
+            logger.warning(
+                "webui_stream_interrupted_after_tokens mode=%s username=%s user_id=%s session_id=%s",
+                api_mode,
+                current_user_identifier(),
+                current_user_id(),
+                current_session_id(),
+            )
             if token_buffer:
                 await response.stream_token(token_buffer)
             response.content = (

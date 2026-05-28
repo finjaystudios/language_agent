@@ -1,5 +1,3 @@
-import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 from webui.client import (
@@ -8,10 +6,7 @@ from webui.client import (
     format_ui_error,
 )
 from webui.modes import starter_mode_for_values
-
-WEBUI_DIR = Path(__file__).resolve().parents[1] / "webui"
-sys.path.insert(0, str(WEBUI_DIR))
-from webui.app import (  # noqa: E402
+from webui.ui_app import (
     has_unclosed_markdown_fence,
     normalize_mode_value,
     should_flush_stream_buffer,
@@ -130,9 +125,9 @@ def test_stream_backend_response_falls_back_to_full_response_when_empty(monkeypa
         fallback["user_text"] = user_text
         fallback["api_mode"] = api_mode
 
-    monkeypatch.setattr("webui.app.cl.Message", FakeMessage)
+    monkeypatch.setattr("webui.ui_app.cl.Message", FakeMessage)
     monkeypatch.setattr(
-        "webui.app.send_full_backend_response",
+        "webui.ui_app.send_full_backend_response",
         fake_send_full_backend_response,
     )
 

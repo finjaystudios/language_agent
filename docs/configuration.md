@@ -11,9 +11,9 @@ Compose. Use [`.env.example`](../.env.example) for local host runs and
 | `APP_HOST` | `0.0.0.0` | FastAPI container | Uvicorn bind host |
 | `APP_PORT` | `8000` | FastAPI container | Uvicorn bind port |
 | `LOG_LEVEL` | `INFO` | FastAPI, worker, Web UI | Log verbosity |
-| `AUTH_ENABLED` | `true` | FastAPI | Enables API key validation on protected routes |
-| `FASTAPI_API_KEY` | None | FastAPI, Web UI | Shared service-to-service API key |
-| `CHAINLIT_AUTH_SECRET` | unset | Web UI | Reserved session/auth secret for future username/password login wiring |
+| `AUTH_ENABLED` | `true` | FastAPI, Web UI | Enables protected FastAPI routes and Chainlit password login by default |
+| `FASTAPI_API_KEY` | None | FastAPI, Web UI | Shared service-to-service API key used only for Web UI server-to-FastAPI calls |
+| `CHAINLIT_AUTH_SECRET` | unset | Web UI | Required Chainlit session/JWT secret when username/password login is enabled |
 | `PASSWORD_HASH_SCHEME` | `argon2id` | backend auth utilities | Password hashing algorithm for stored user credentials |
 | `CORS_ALLOWED_ORIGINS` | empty in code, example values in env templates | FastAPI | Optional comma-separated origins for future direct browser access |
 
@@ -21,9 +21,9 @@ Compose. Use [`.env.example`](../.env.example) for local host runs and
 
 | Variable | Default | Used by | Purpose |
 | --- | --- | --- | --- |
-| `DATABASE_URL` | `postgresql+psycopg://language_agent:change-me@127.0.0.1:5432/language_agent` locally, `postgresql+psycopg://language_agent:change-me@postgres:5432/language_agent` in Compose examples | FastAPI, worker, Alembic | SQLAlchemy and Alembic database connection string |
-| `DATABASE_POOL_SIZE` | `5` | FastAPI, worker | SQLAlchemy connection pool size for non-SQLite backends |
-| `DATABASE_ECHO` | `false` | FastAPI, worker | Enables SQLAlchemy SQL logging when debugging |
+| `DATABASE_URL` | `postgresql+psycopg://language_agent:change-me@127.0.0.1:5432/language_agent` locally, `postgresql+psycopg://language_agent:change-me@postgres:5432/language_agent` in Compose examples | FastAPI, Alembic | SQLAlchemy and Alembic database connection string |
+| `DATABASE_POOL_SIZE` | `5` | FastAPI, Web UI | SQLAlchemy connection pool size for non-SQLite backends |
+| `DATABASE_ECHO` | `false` | FastAPI, Web UI | Enables SQLAlchemy SQL logging when debugging |
 | `POSTGRES_DB` | `language_agent` | Compose `postgres` service | Internal database name for the bundled PostgreSQL container |
 | `POSTGRES_USER` | `language_agent` | Compose `postgres` service | Internal PostgreSQL username |
 | `POSTGRES_PASSWORD` | placeholder in env examples | Compose `postgres` service | Internal PostgreSQL password; keep in local `.env` only |
@@ -114,6 +114,8 @@ The embedded `llama-cpp-python` runtime was removed from the active code path.
 | Variable | Default | Used by | Purpose |
 | --- | --- | --- | --- |
 | `FASTAPI_BASE_URL` | `http://localhost:8000` locally, `http://fastapi:8000` in Compose | Web UI | Backend base URL for server-side Chainlit calls |
+| `WEBUI_DATABASE_URL` | defaults to `DATABASE_URL` if unset | Web UI | Database connection used for Chainlit username/password auth without enabling Chainlit's own data layer |
+| `CHAINLIT_COOKIE_SAMESITE` | `lax` | Web UI | Chainlit auth-cookie SameSite mode; `none` implies secure cookies |
 | `WEBUI_HOST` | `0.0.0.0` | Web UI container | Chainlit bind host |
 | `WEBUI_PORT` | `8001` | Web UI container | Chainlit bind port |
 | `WEBUI_REQUEST_TIMEOUT_SECONDS` | `120` | Web UI | Backend request timeout |
@@ -125,6 +127,8 @@ The embedded `llama-cpp-python` runtime was removed from the active code path.
 - Keep `FASTAPI_API_KEY` out of browser-visible content.
 - Keep `CHAINLIT_AUTH_SECRET`, `POSTGRES_PASSWORD`, and `DATABASE_URL` credentials
   out of committed files.
+- Keep `CHAINLIT_COOKIE_SAMESITE=lax` or `strict` unless you explicitly need a
+  cross-site deployment that requires `none` with HTTPS.
 - Keep real secrets out of committed files.
 - For Compose, `LLAMA_SERVER_MODEL_PATH` belongs to the `llama-server` service
   and should point at the in-container `/models/...` path.

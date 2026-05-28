@@ -109,7 +109,8 @@ Checks:
 
 - for Compose, confirm the `postgres` service is healthy
 - confirm `DATABASE_URL` points at `postgres:5432` inside Compose and
-  `127.0.0.1:5432` for host-local runs
+  `127.0.0.1:5432` for host-local backend runs
+- confirm `WEBUI_DATABASE_URL` points at the same database for Web UI login
 - confirm `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` match the
   credentials embedded in `DATABASE_URL`
 - run `docker compose logs -f postgres`
@@ -182,14 +183,23 @@ Checks:
 
 Symptoms:
 
+- login is rejected
 - Web UI can load but chat requests fail with auth-related errors
 
 Checks:
 
+- confirm the user exists in the `users` table
+- confirm the stored user is active
+- confirm the login password matches the stored hash
+- confirm `AUTH_ENABLED=true` and `CHAINLIT_AUTH_SECRET` are set for the Web UI
+- confirm `WEBUI_DATABASE_URL` is reachable from the Web UI process or container
 - confirm FastAPI and Web UI use the same `FASTAPI_API_KEY`
 - confirm `AUTH_ENABLED=true` is expected for the current run
 - confirm the browser is talking to Chainlit and Chainlit is calling FastAPI
   server-side
+
+If login unexpectedly succeeds without a prompt, confirm that the Web UI did not
+start with `AUTH_ENABLED=false`.
 
 ## Caddy Routing Failure
 
