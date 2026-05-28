@@ -109,8 +109,9 @@ Checks:
 
 - for Compose, confirm the `postgres` service is healthy
 - confirm `DATABASE_URL` points at `postgres:5432` inside Compose and
-  `127.0.0.1:5432` for host-local backend runs
-- confirm `WEBUI_DATABASE_URL` points at the same database for Web UI login
+  `127.0.0.1:5432` for host-local backend and Chainlit history runs
+- confirm `WEBUI_DATABASE_URL` points at the same database for Web UI login and
+  persistence unless you intentionally override it
 - confirm `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` match the
   credentials embedded in `DATABASE_URL`
 - run `docker compose logs -f postgres`
@@ -121,7 +122,7 @@ Checks:
 Symptoms:
 
 - `alembic upgrade head` exits with import or connection errors
-- the `users` table is missing after startup
+- the `users` table or Chainlit history tables are missing after startup
 
 Checks:
 
@@ -132,6 +133,8 @@ Checks:
   or `docker compose --profile tools run --rm db-migrate`
 - do not assume migrations run automatically; this stack applies them only when
   you invoke the command
+- if login works but chat history does not appear, confirm the Chainlit tables
+  were created by the current Alembic revision
 
 ## Queue Stuck
 
@@ -185,6 +188,7 @@ Symptoms:
 
 - login is rejected
 - Web UI can load but chat requests fail with auth-related errors
+- previous threads do not appear after login or refresh
 
 Checks:
 
@@ -193,10 +197,14 @@ Checks:
 - confirm the login password matches the stored hash
 - confirm `AUTH_ENABLED=true` and `CHAINLIT_AUTH_SECRET` are set for the Web UI
 - confirm `WEBUI_DATABASE_URL` is reachable from the Web UI process or container
+- confirm `DATABASE_URL` is present for the Web UI process when chat history is
+  expected
 - confirm FastAPI and Web UI use the same `FASTAPI_API_KEY`
 - confirm `AUTH_ENABLED=true` is expected for the current run
 - confirm the browser is talking to Chainlit and Chainlit is calling FastAPI
   server-side
+- confirm `alembic upgrade head` ran after pulling changes that added Chainlit
+  persistence tables
 
 If login unexpectedly succeeds without a prompt, confirm that the Web UI did not
 start with `AUTH_ENABLED=false`.

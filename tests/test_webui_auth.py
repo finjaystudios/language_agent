@@ -60,8 +60,12 @@ def test_valid_username_password_authenticates_and_updates_last_login():
     assert authenticated_user.display_name == "Alice"
     assert authenticated_user.metadata == {
         "user_id": str(created.id),
+        "username": "alice",
+        "display_name": "Alice",
         "role": "user",
         "is_admin": True,
+        "preferred_language": None,
+        "ui_theme": None,
     }
     assert refreshed is not None
     assert refreshed.last_login_at is not None

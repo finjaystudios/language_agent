@@ -7,6 +7,7 @@ from pathlib import Path
 import chainlit as cl
 from chainlit.input_widget import Select
 from chainlit.server import app as chainlit_app
+from chainlit.types import ThreadDict
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
@@ -23,6 +24,12 @@ from webui.client import (  # noqa: E402
 )
 from webui.config import WebUISettings  # noqa: E402
 from webui.modes import starter_mode_for_values  # noqa: E402
+from webui.persistence import (  # noqa: E402
+    apply_user_profile_to_session,
+    get_chainlit_data_layer,
+    restore_profile_from_thread,
+    thread_belongs_to_user,
+)
 from webui.renderer import render_chat_response  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -72,16 +79,29 @@ if AUTH_ENABLED:
         return await authenticate_user(username, password)
 
 
+@cl.data_layer
+def chainlit_data_layer():
+    return get_chainlit_data_layer()
+
+
 @cl.on_app_startup
 async def on_app_startup() -> None:
     settings = WebUISettings.from_env()
     settings.validate_for_auth()
     logger.info(
-        "webui_startup auth_enabled=%s cookie_samesite=%s cookie_secure=%s",
+        "webui_startup auth_enabled=%s persistence_enabled=%s cookie_samesite=%s cookie_secure=%s",
         settings.auth_enabled,
+        bool(settings.database_url),
         settings.chainlit_cookie_samesite,
         settings.session_cookie_secure,
     )
+
+
+@cl.on_app_shutdown
+async def on_app_shutdown() -> None:
+    settings = WebUISettings.from_env()
+    if settings.database_url:
+        await get_chainlit_data_layer().close()
 
 
 def get_current_user() -> cl.User | None:
@@ -283,16 +303,49 @@ async def set_starters() -> list[cl.Starter]:
 
 @cl.on_chat_start
 async def on_chat_start() -> None:
+    session_profile = apply_user_profile_to_session(get_current_user())
     cl.user_session.set(SESSION_MODE_KEY, MODE_AUTO)
     cl.user_session.set(LAST_USER_MESSAGE_KEY, "")
     logger.info(
-        "webui_chat_start default_mode=%s username=%s user_id=%s session_id=%s",
+        "webui_chat_start default_mode=%s username=%s user_id=%s preferred_language=%s ui_theme=%s session_id=%s",
         MODE_AUTO,
         current_user_identifier(),
         current_user_id(),
+        session_profile.get("preferred_language"),
+        session_profile.get("ui_theme"),
         current_session_id(),
     )
     await send_mode_settings()
+
+
+@cl.on_chat_resume
+async def on_chat_resume(thread: ThreadDict) -> None:
+    user = get_current_user()
+    if not thread_belongs_to_user(thread, user):
+        logger.warning(
+            "webui_chat_resume_rejected username=%s thread_id=%s reason=thread_owner_mismatch",
+            current_user_identifier(),
+            thread.get("id"),
+        )
+        return
+
+    session_profile = apply_user_profile_to_session(user)
+    restored_profile = restore_profile_from_thread(thread)
+    selected_mode = get_selected_mode()
+    logger.info(
+        "webui_chat_resume thread_id=%s mode=%s username=%s user_id=%s preferred_language=%s ui_theme=%s session_id=%s",
+        thread.get("id"),
+        selected_mode,
+        current_user_identifier(),
+        current_user_id(),
+        restored_profile.get(
+            "preferred_language",
+            session_profile.get("preferred_language"),
+        ),
+        restored_profile.get("ui_theme", session_profile.get("ui_theme")),
+        current_session_id(),
+    )
+    await send_mode_settings(selected_mode)
 
 
 @cl.on_settings_update

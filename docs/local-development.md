@@ -40,7 +40,7 @@ Apply migrations manually:
 alembic upgrade head
 ```
 
-Create a local admin user for later Chainlit login work:
+Create a local admin user for Chainlit login:
 
 ```powershell
 python scripts/create_user.py `
@@ -129,6 +129,7 @@ Run the Web UI as a separate local process:
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
 $env:CHAINLIT_AUTH_SECRET = "replace-with-random-secret-when-login-is-enabled"
+$env:DATABASE_URL = "postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent"
 $env:WEBUI_DATABASE_URL = "postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent"
 $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
@@ -138,6 +139,14 @@ Pop-Location
 ```
 
 Open `http://127.0.0.1:8001`.
+
+Chat history and resume notes:
+
+- `DATABASE_URL` enables Chainlit's persisted thread history.
+- `WEBUI_DATABASE_URL` should point at the same database unless you explicitly
+  need an override.
+- After logging in, start a chat, refresh the page, and confirm the thread can
+  be resumed under the same user.
 
 ## Typical Host-Local Workflow
 

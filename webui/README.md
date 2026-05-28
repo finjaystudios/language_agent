@@ -17,6 +17,7 @@ Example local values:
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
 $env:AUTH_ENABLED = "true"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
+$env:DATABASE_URL = "postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent"
 $env:WEBUI_DATABASE_URL = "postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent"
 $env:CHAINLIT_AUTH_SECRET = "replace-with-random-secret"
 $env:CHAINLIT_COOKIE_SAMESITE = "lax"
@@ -24,8 +25,8 @@ $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
 ```
 
-Keep `FASTAPI_API_KEY`, `WEBUI_DATABASE_URL`, and `CHAINLIT_AUTH_SECRET` in the
-server-side Web UI environment only.
+Keep `FASTAPI_API_KEY`, `DATABASE_URL`, `WEBUI_DATABASE_URL`, and
+`CHAINLIT_AUTH_SECRET` in the server-side Web UI environment only.
 
 ## Run Locally
 
@@ -35,6 +36,7 @@ Run FastAPI separately, then start Chainlit:
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
 $env:AUTH_ENABLED = "true"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
+$env:DATABASE_URL = "postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent"
 $env:WEBUI_DATABASE_URL = "postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent"
 $env:CHAINLIT_AUTH_SECRET = "replace-with-random-secret"
 $env:CHAINLIT_COOKIE_SAMESITE = "lax"
@@ -63,6 +65,7 @@ docker run --rm -p 8001:8001 `
   -e FASTAPI_BASE_URL=http://host.docker.internal:8000 `
   -e AUTH_ENABLED=true `
   -e FASTAPI_API_KEY=local-dev-change-me `
+  -e DATABASE_URL=postgresql+asyncpg://language_agent:change-me@host.docker.internal:5432/language_agent `
   -e WEBUI_DATABASE_URL=postgresql+asyncpg://language_agent:change-me@host.docker.internal:5432/language_agent `
   -e CHAINLIT_AUTH_SECRET=replace-with-random-secret `
   -e CHAINLIT_COOKIE_SAMESITE=lax `
@@ -95,14 +98,18 @@ Direct host port:
 
 - the Web UI requires username/password login when `AUTH_ENABLED=true`
 - Chainlit validates credentials against the local `users` table
-- `WEBUI_DATABASE_URL` is kept separate from Chainlit's optional own data-layer
-  `DATABASE_URL` so login can work without enabling chat-history persistence yet
+- Chainlit persists thread history when `DATABASE_URL` points at the internal
+  PostgreSQL database
+- `WEBUI_DATABASE_URL` remains available as an explicit override for Web UI auth
+  and persistence if needed
 - the Web UI does not load the GGUF model
 - the Web UI sends `X-API-Key` only from server-side code
 - Translation, Definition, and Learning can stream when
   `WEBUI_STREAMING_ENABLED=true`
 - the browser never receives `FASTAPI_API_KEY`
 - the browser never receives database credentials or password hashes
+- resumed chats restore the previous thread and mode selection for the same
+  authenticated user
 
 ## Assets and Customization
 

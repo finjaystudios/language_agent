@@ -13,7 +13,8 @@ The current security model does not add:
 
 This change set enables Chainlit username/password login against the local
 `users` table while preserving the separate service-to-service API key between
-the Web UI server and FastAPI.
+the Web UI server and FastAPI. It also enables Chainlit thread persistence in
+the same internal PostgreSQL database.
 
 ## Boundary
 
@@ -66,7 +67,7 @@ Recommended handling:
   same-site deployments
 - do not log password material or password hashes
 - run `alembic upgrade head` before any code path that depends on the `users`
-  table
+  table or Chainlit thread history tables
 - use `scripts/create_user.py` or an equivalent admin path that hashes the
   password before storage; never insert plaintext passwords manually
 
@@ -116,8 +117,19 @@ Wildcard origins with credentials are not used.
 - browser users authenticate to Chainlit with username and password
 - Chainlit verifies credentials against the `users` table
 - successful login creates a Chainlit session signed with `CHAINLIT_AUTH_SECRET`
+- Chainlit persists thread history against its own internal tables keyed to the
+  authenticated user's database-backed identifier
 - the browser still does not receive `FASTAPI_API_KEY`
 - FastAPI still authenticates only the Web UI server, not the browser user
+
+## Chat History Boundaries
+
+- Chainlit thread history is scoped to the authenticated Chainlit user.
+- The Web UI stores safe profile fields such as `display_name`,
+  `preferred_language`, and `ui_theme` in session/thread metadata for resume.
+- Passwords, password hashes, `FASTAPI_API_KEY`, `DATABASE_URL`, and
+  `CHAINLIT_AUTH_SECRET` must never appear in Chainlit user metadata or thread
+  metadata.
 
 ## Current Limitations
 

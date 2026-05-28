@@ -109,7 +109,11 @@ def to_chainlit_user(user: UserProfile) -> cl.User:
         display_name=user.display_name or user.username,
         metadata={
             "user_id": str(user.id),
+            "username": user.username,
+            "display_name": user.display_name or user.username,
             "role": user.role,
             "is_admin": user.is_admin,
+            "preferred_language": user.preferred_language,
+            "ui_theme": user.ui_theme,
         },
     )
