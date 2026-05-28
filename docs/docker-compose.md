@@ -48,8 +48,8 @@ Set database secrets in that local `.env`, especially:
 
 ```text
 POSTGRES_PASSWORD=replace-me
-DATABASE_URL=postgresql+psycopg://language_agent:replace-me@postgres:5432/language_agent
-WEBUI_DATABASE_URL=postgresql+psycopg://language_agent:replace-me@postgres:5432/language_agent
+DATABASE_URL=postgresql+asyncpg://language_agent:replace-me@postgres:5432/language_agent
+WEBUI_DATABASE_URL=postgresql+asyncpg://language_agent:replace-me@postgres:5432/language_agent
 CHAINLIT_AUTH_SECRET=replace-with-random-secret
 ```
 

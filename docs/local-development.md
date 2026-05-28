@@ -29,7 +29,7 @@ docker run --rm --name language-agent-postgres `
 Set host-local database settings before using Alembic or the user script:
 
 ```powershell
-$env:DATABASE_URL = "postgresql+psycopg://language_agent:change-me@127.0.0.1:5432/language_agent"
+$env:DATABASE_URL = "postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent"
 $env:DATABASE_POOL_SIZE = "5"
 $env:DATABASE_ECHO = "false"
 ```
@@ -129,7 +129,7 @@ Run the Web UI as a separate local process:
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
 $env:CHAINLIT_AUTH_SECRET = "replace-with-random-secret-when-login-is-enabled"
-$env:WEBUI_DATABASE_URL = "postgresql+psycopg://language_agent:change-me@127.0.0.1:5432/language_agent"
+$env:WEBUI_DATABASE_URL = "postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent"
 $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
 Push-Location webui

@@ -39,7 +39,7 @@ def test_app_settings_default_llama_server_config(monkeypatch):
     assert settings.chainlit_auth_secret is None
     assert (
         settings.database_url
-        == "postgresql+psycopg://language_agent:change-me@127.0.0.1:5432/language_agent"
+        == "postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent"
     )
     assert settings.database_pool_size == 5
     assert settings.database_echo is False
@@ -50,7 +50,7 @@ def test_app_settings_reads_llama_server_env(monkeypatch):
     monkeypatch.setenv("CHAINLIT_AUTH_SECRET", "session-secret")
     monkeypatch.setenv(
         "DATABASE_URL",
-        "postgresql+psycopg://user:pass@db:5432/appdb",
+        "postgresql+asyncpg://user:pass@db:5432/appdb",
     )
     monkeypatch.setenv("DATABASE_POOL_SIZE", "9")
     monkeypatch.setenv("DATABASE_ECHO", "true")
@@ -75,7 +75,7 @@ def test_app_settings_reads_llama_server_env(monkeypatch):
     assert settings.llama_server_health_path == "/v1/models"
     assert settings.model_profiles_path == "config/custom-model-profiles.yml"
     assert settings.chainlit_auth_secret == "session-secret"
-    assert settings.database_url == "postgresql+psycopg://user:pass@db:5432/appdb"
+    assert settings.database_url == "postgresql+asyncpg://user:pass@db:5432/appdb"
     assert settings.database_pool_size == 9
     assert settings.database_echo is True
     assert settings.password_hash_scheme == "bcrypt"

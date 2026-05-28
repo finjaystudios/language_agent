@@ -7,7 +7,7 @@ from app.application.intent_router import IntentRouter
 from app.core.config import AppSettings
 from app.core.errors import LLMServiceError
 from app.infrastructure.database.repositories import SQLAlchemyUserRepository
-from app.infrastructure.database.session import get_session_factory
+from app.infrastructure.database.session import get_async_session_factory
 from app.infrastructure.redis.job_store import RedisJobStore
 from app.infrastructure.redis.queue_service import create_queue_service
 from app.infrastructure.redis.queued_gateway import QueuedLLMService
@@ -67,4 +67,4 @@ def get_agent_service() -> AgentService:
 
 @lru_cache(maxsize=1)
 def get_user_repository() -> UserRepository:
-    return SQLAlchemyUserRepository(get_session_factory())
+    return SQLAlchemyUserRepository(get_async_session_factory())

@@ -21,7 +21,7 @@ Compose. Use [`.env.example`](../.env.example) for local host runs and
 
 | Variable | Default | Used by | Purpose |
 | --- | --- | --- | --- |
-| `DATABASE_URL` | `postgresql+psycopg://language_agent:change-me@127.0.0.1:5432/language_agent` locally, `postgresql+psycopg://language_agent:change-me@postgres:5432/language_agent` in Compose examples | FastAPI, Alembic | SQLAlchemy and Alembic database connection string |
+| `DATABASE_URL` | `postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent` locally, `postgresql+asyncpg://language_agent:change-me@postgres:5432/language_agent` in Compose examples | FastAPI, Alembic | SQLAlchemy and Alembic database connection string |
 | `DATABASE_POOL_SIZE` | `5` | FastAPI, Web UI | SQLAlchemy connection pool size for non-SQLite backends |
 | `DATABASE_ECHO` | `false` | FastAPI, Web UI | Enables SQLAlchemy SQL logging when debugging |
 | `POSTGRES_DB` | `language_agent` | Compose `postgres` service | Internal database name for the bundled PostgreSQL container |

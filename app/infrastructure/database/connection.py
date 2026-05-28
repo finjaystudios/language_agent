@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from sqlalchemy import Engine, create_engine
 from sqlalchemy.engine import URL, make_url
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from app.core.config import AppSettings
@@ -16,11 +16,10 @@ def _build_connect_args(url: URL) -> Mapping[str, Any]:
     return {}
 
 
-def build_engine(settings: AppSettings) -> Engine:
+def build_async_engine(settings: AppSettings) -> AsyncEngine:
     url = make_url(settings.database_url)
     engine_kwargs: dict[str, Any] = {
         "echo": settings.database_echo,
-        "future": True,
         "connect_args": dict(_build_connect_args(url)),
     }
 
@@ -30,4 +29,4 @@ def build_engine(settings: AppSettings) -> Engine:
     else:
         engine_kwargs["pool_size"] = settings.database_pool_size
 
-    return create_engine(url, **engine_kwargs)
+    return create_async_engine(url, **engine_kwargs)

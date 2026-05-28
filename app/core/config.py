@@ -56,7 +56,7 @@ class AppSettings:
             cors_allowed_origins=parse_csv_env(os.getenv("CORS_ALLOWED_ORIGINS", "")),
             database_url=os.getenv(
                 "DATABASE_URL",
-                "postgresql+psycopg://language_agent:change-me@127.0.0.1:5432/language_agent",
+                "postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent",
             ),
             database_pool_size=int(os.getenv("DATABASE_POOL_SIZE", "5")),
             database_echo=parse_bool(

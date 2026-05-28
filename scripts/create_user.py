@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import sys
 from pathlib import Path
 
@@ -24,17 +25,17 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> int:
+async def run() -> int:
     from app.domain.user_profile import UsernameAlreadyExistsError
     from app.infrastructure.database.repositories import SQLAlchemyUserRepository
-    from app.infrastructure.database.session import get_session_factory
+    from app.infrastructure.database.session import get_async_session_factory
     from app.infrastructure.security.passwords import hash_password
 
     args = build_parser().parse_args()
-    repository = SQLAlchemyUserRepository(get_session_factory())
+    repository = SQLAlchemyUserRepository(get_async_session_factory())
 
     try:
-        created = repository.create_user(
+        created = await repository.create_user(
             username=args.username,
             password_hash=hash_password(args.password),
             display_name=args.display_name,
@@ -57,6 +58,10 @@ def main() -> int:
         f"admin={created.is_admin} active={created.is_active}"
     )
     return 0
+
+
+def main() -> int:
+    return asyncio.run(run())
 
 
 if __name__ == "__main__":

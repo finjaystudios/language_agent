@@ -1,11 +1,12 @@
+aiosqlite==0.21.0
 alembic==1.17.2
 argon2-cffi==25.1.0
+asyncpg==0.30.0
 bcrypt==5.0.0
 diskcache>=5.6.3
 fastapi==0.124.0
 Jinja2==3.1.6
 numpy==2.4.6
-psycopg[binary]==3.2.12
 pydantic==2.13.4
 PyYAML==6.0.2
 rich==14.2.0

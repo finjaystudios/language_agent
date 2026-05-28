@@ -126,7 +126,7 @@ Symptoms:
 Checks:
 
 - confirm the active Python environment has `alembic`, `SQLAlchemy`, and
-  `psycopg` installed
+  `asyncpg` installed
 - confirm you are running commands from the repository root
 - for Compose, run either `docker compose run --rm fastapi alembic upgrade head`
   or `docker compose --profile tools run --rm db-migrate`

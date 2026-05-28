@@ -26,7 +26,7 @@ services:
       dockerfile: Dockerfile
     command: ["alembic", "upgrade", "head"]
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://language_agent:change-me@postgres:5432/language_agent}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://language_agent:change-me@postgres:5432/language_agent}
     depends_on:
       postgres:
         condition: service_healthy
@@ -97,7 +97,7 @@ services:
       FASTAPI_API_KEY: ${FASTAPI_API_KEY:-local-dev-change-me}
       CHAINLIT_AUTH_SECRET: ${CHAINLIT_AUTH_SECRET:-replace-with-random-secret-when-login-is-enabled}
       PASSWORD_HASH_SCHEME: ${PASSWORD_HASH_SCHEME:-argon2id}
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://language_agent:change-me@postgres:5432/language_agent}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://language_agent:change-me@postgres:5432/language_agent}
       DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-5}
       DATABASE_ECHO: ${DATABASE_ECHO:-false}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8001,http://127.0.0.1:8001}
@@ -187,7 +187,7 @@ services:
       FASTAPI_API_KEY: ${FASTAPI_API_KEY:-local-dev-change-me}
       CHAINLIT_AUTH_SECRET: ${CHAINLIT_AUTH_SECRET:-replace-with-random-secret-when-login-is-enabled}
       CHAINLIT_COOKIE_SAMESITE: ${CHAINLIT_COOKIE_SAMESITE:-lax}
-      WEBUI_DATABASE_URL: ${WEBUI_DATABASE_URL:-postgresql+psycopg://language_agent:change-me@postgres:5432/language_agent}
+      WEBUI_DATABASE_URL: ${WEBUI_DATABASE_URL:-postgresql+asyncpg://language_agent:change-me@postgres:5432/language_agent}
       DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-5}
       DATABASE_ECHO: ${DATABASE_ECHO:-false}
       WEBUI_HOST: 0.0.0.0

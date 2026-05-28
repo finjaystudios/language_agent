@@ -1,39 +1,59 @@
+from __future__ import annotations
+
+import asyncio
+
 from app.infrastructure.database.models import Base
 from app.infrastructure.database.repositories import SQLAlchemyUserRepository
 from app.infrastructure.security.passwords import hash_password
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.pool import StaticPool
 from webui.auth import authenticate_user
 
 
 def create_repository() -> SQLAlchemyUserRepository:
-    engine = create_engine(
-        "sqlite+pysqlite:///:memory:",
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
+    asyncio.run(_create_schema(engine))
+    factory = async_sessionmaker(
+        bind=engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
     return SQLAlchemyUserRepository(factory)
+
+
+async def _create_schema(engine) -> None:
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
 
 
 def test_valid_username_password_authenticates_and_updates_last_login():
     repository = create_repository()
-    created = repository.create_user(
-        username="alice",
-        password_hash=hash_password("correct horse battery staple"),
-        display_name="Alice",
-        is_admin=True,
+    created = asyncio.run(
+        repository.create_user(
+            username="alice",
+            password_hash=hash_password("correct horse battery staple"),
+            display_name="Alice",
+            is_admin=True,
+        )
     )
 
-    authenticated_user = authenticate_user(
-        "alice",
-        "correct horse battery staple",
-        repository=repository,
+    authenticated_user = asyncio.run(
+        authenticate_user(
+            "alice",
+            "correct horse battery staple",
+            repository=repository,
+        )
     )
 
-    refreshed = repository.get_by_id(created.id)
+    refreshed = asyncio.run(repository.get_by_id(created.id))
 
     assert authenticated_user is not None
     assert authenticated_user.identifier == "alice"
@@ -49,15 +69,19 @@ def test_valid_username_password_authenticates_and_updates_last_login():
 
 def test_invalid_password_fails():
     repository = create_repository()
-    repository.create_user(
-        username="alice",
-        password_hash=hash_password("correct-password"),
+    asyncio.run(
+        repository.create_user(
+            username="alice",
+            password_hash=hash_password("correct-password"),
+        )
     )
 
-    authenticated_user = authenticate_user(
-        "alice",
-        "wrong-password",
-        repository=repository,
+    authenticated_user = asyncio.run(
+        authenticate_user(
+            "alice",
+            "wrong-password",
+            repository=repository,
+        )
     )
 
     assert authenticated_user is None
@@ -66,10 +90,12 @@ def test_invalid_password_fails():
 def test_unknown_username_fails():
     repository = create_repository()
 
-    authenticated_user = authenticate_user(
-        "unknown-user",
-        "secret",
-        repository=repository,
+    authenticated_user = asyncio.run(
+        authenticate_user(
+            "unknown-user",
+            "secret",
+            repository=repository,
+        )
     )
 
     assert authenticated_user is None
@@ -77,18 +103,22 @@ def test_unknown_username_fails():
 
 def test_inactive_user_fails():
     repository = create_repository()
-    created = repository.create_user(
-        username="disabled",
-        password_hash=hash_password("disabled-password"),
-        is_active=False,
+    created = asyncio.run(
+        repository.create_user(
+            username="disabled",
+            password_hash=hash_password("disabled-password"),
+            is_active=False,
+        )
     )
 
-    authenticated_user = authenticate_user(
-        "disabled",
-        "disabled-password",
-        repository=repository,
+    authenticated_user = asyncio.run(
+        authenticate_user(
+            "disabled",
+            "disabled-password",
+            repository=repository,
+        )
     )
-    refreshed = repository.get_by_id(created.id)
+    refreshed = asyncio.run(repository.get_by_id(created.id))
 
     assert authenticated_user is None
     assert refreshed is not None
@@ -97,15 +127,19 @@ def test_inactive_user_fails():
 
 def test_password_is_never_returned_from_auth_response():
     repository = create_repository()
-    repository.create_user(
-        username="alice",
-        password_hash=hash_password("correct-password"),
+    asyncio.run(
+        repository.create_user(
+            username="alice",
+            password_hash=hash_password("correct-password"),
+        )
     )
 
-    authenticated_user = authenticate_user(
-        "alice",
-        "correct-password",
-        repository=repository,
+    authenticated_user = asyncio.run(
+        authenticate_user(
+            "alice",
+            "correct-password",
+            repository=repository,
+        )
     )
 
     assert authenticated_user is not None

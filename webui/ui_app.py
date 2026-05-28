@@ -69,7 +69,7 @@ if AUTH_ENABLED:
 
     @cl.password_auth_callback
     async def password_auth_callback(username: str, password: str) -> cl.User | None:
-        return authenticate_user(username, password)
+        return await authenticate_user(username, password)
 
 
 @cl.on_app_startup
