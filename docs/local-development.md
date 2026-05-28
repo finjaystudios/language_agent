@@ -9,8 +9,46 @@ Compose.
 - Local GGUF model file under `models/` or another reachable path
 - NVIDIA GPU support for model-backed flows
 - Redis available locally for FastAPI queue-backed requests
+- PostgreSQL available locally for user-profile persistence and migrations
 
 Use [`.env.example`](../.env.example) as the host-local configuration template.
+
+## PostgreSQL
+
+Start PostgreSQL locally:
+
+```powershell
+docker run --rm --name language-agent-postgres `
+  -e POSTGRES_DB=language_agent `
+  -e POSTGRES_USER=language_agent `
+  -e POSTGRES_PASSWORD=change-me `
+  -p 5432:5432 `
+  postgres:17-alpine
+```
+
+Set host-local database settings before using Alembic or the user script:
+
+```powershell
+$env:DATABASE_URL = "postgresql+psycopg://language_agent:change-me@127.0.0.1:5432/language_agent"
+$env:DATABASE_POOL_SIZE = "5"
+$env:DATABASE_ECHO = "false"
+```
+
+Apply migrations manually:
+
+```powershell
+alembic upgrade head
+```
+
+Create a local admin user for later Chainlit login work:
+
+```powershell
+python scripts/create_user.py `
+  --username admin `
+  --password change-me-now `
+  --display-name "Local Admin" `
+  --admin
+```
 
 ## Redis
 
@@ -63,6 +101,7 @@ The API enqueues LLM work into Redis + RQ and does not load the model itself.
 ```powershell
 $env:AUTH_ENABLED = "true"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
+$env:CHAINLIT_AUTH_SECRET = "replace-with-random-secret-when-login-is-enabled"
 $env:REDIS_URL = "redis://127.0.0.1:6379/0"
 $env:LLM_STREAM_CHANNEL_PREFIX = "llm-stream"
 python -m uvicorn app.interfaces.api.main:app --reload --host 127.0.0.1 --port 8000
@@ -89,6 +128,8 @@ Run the Web UI as a separate local process:
 ```powershell
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
+$env:CHAINLIT_AUTH_SECRET = "replace-with-random-secret-when-login-is-enabled"
+$env:DATABASE_URL = "postgresql+psycopg://language_agent:change-me@127.0.0.1:5432/language_agent"
 $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
 Push-Location webui
@@ -100,11 +141,13 @@ Open `http://127.0.0.1:8001`.
 
 ## Typical Host-Local Workflow
 
-1. Start Redis.
-2. Start `llama-server`.
-3. Start the worker.
-4. Start FastAPI.
-5. Start Chainlit.
+1. Start PostgreSQL.
+2. Run `alembic upgrade head`.
+3. Start Redis.
+4. Start `llama-server`.
+5. Start the worker.
+6. Start FastAPI.
+7. Start Chainlit.
 
 At that point:
 

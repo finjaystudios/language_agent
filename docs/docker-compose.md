@@ -8,6 +8,7 @@ dedicated `llama-server`, the Chainlit Web UI, and Caddy on one local network.
 `compose.yml` defines:
 
 - `postgres`
+- `db-migrate`
 - `redis`
 - `llama-server`
 - `fastapi`
@@ -18,6 +19,9 @@ dedicated `llama-server`, the Chainlit Web UI, and Caddy on one local network.
 `postgres` is internal-only by default and does not publish a host port, which
 keeps the user-profile database off the public interface unless you opt in
 separately.
+
+`db-migrate` is an optional one-off tools profile that runs `alembic upgrade head`
+against the same internal PostgreSQL service. It does not start automatically.
 
 Only `llama-server` mounts `./models` and requests GPU access. The worker does
 not mount the model directory in the default Compose path. The Web UI does not
@@ -76,6 +80,12 @@ Apply migrations after PostgreSQL becomes healthy:
 docker compose run --rm fastapi alembic upgrade head
 ```
 
+Or use the one-off migration service:
+
+```powershell
+docker compose --profile tools run --rm db-migrate
+```
+
 Build and start the stack:
 
 ```powershell
@@ -93,6 +103,16 @@ Start only the queue path and model server while debugging:
 
 ```powershell
 docker compose up -d postgres redis llama-server llm-worker
+```
+
+Create a local admin user after migrations:
+
+```powershell
+docker compose run --rm fastapi python scripts/create_user.py `
+  --username admin `
+  --password change-me-now `
+  --display-name "Local Admin" `
+  --admin
 ```
 
 ## URLs
@@ -165,7 +185,7 @@ docker compose down
 
 Manual validation checklist:
 
-1. `docker compose up -d redis llama-server llm-worker`
+1. `docker compose up -d postgres redis llama-server llm-worker`
 2. `docker compose run --rm fastapi alembic upgrade head`
 3. `curl http://127.0.0.1:8080/health`
 4. `docker compose up -d fastapi webui caddy`

@@ -97,6 +97,41 @@ Checks:
 - for Compose, confirm the `redis` service is healthy
 - confirm `REDIS_URL` matches the current environment
 
+## PostgreSQL Unavailable
+
+Symptoms:
+
+- `alembic upgrade head` fails before applying migrations
+- `scripts/create_user.py` fails to connect
+- Web UI or future auth work fails when opening database-backed features
+
+Checks:
+
+- for Compose, confirm the `postgres` service is healthy
+- confirm `DATABASE_URL` points at `postgres:5432` inside Compose and
+  `127.0.0.1:5432` for host-local runs
+- confirm `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` match the
+  credentials embedded in `DATABASE_URL`
+- run `docker compose logs -f postgres`
+- validate readiness with `docker compose exec postgres pg_isready -U language_agent -d language_agent`
+
+## Migration Failure
+
+Symptoms:
+
+- `alembic upgrade head` exits with import or connection errors
+- the `users` table is missing after startup
+
+Checks:
+
+- confirm the active Python environment has `alembic`, `SQLAlchemy`, and
+  `psycopg` installed
+- confirm you are running commands from the repository root
+- for Compose, run either `docker compose run --rm fastapi alembic upgrade head`
+  or `docker compose --profile tools run --rm db-migrate`
+- do not assume migrations run automatically; this stack applies them only when
+  you invoke the command
+
 ## Queue Stuck
 
 Symptoms:

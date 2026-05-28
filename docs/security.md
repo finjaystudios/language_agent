@@ -65,6 +65,8 @@ Recommended handling:
 - do not log password material or password hashes
 - run `alembic upgrade head` before any code path that depends on the `users`
   table
+- use `scripts/create_user.py` or an equivalent admin path that hashes the
+  password before storage; never insert plaintext passwords manually
 
 ## CORS
 
@@ -88,6 +90,7 @@ Wildcard origins with credentials are not used.
   secret management.
 - Keep `DATABASE_URL`, `POSTGRES_PASSWORD`, and `CHAINLIT_AUTH_SECRET` in `.env`,
   shell environment, or deployment-specific secret management.
+- Keep PostgreSQL internal-only unless you have an explicit reason to publish it.
 - Do not expose the API key in browser-visible content, logs, URLs, or public
   assets.
 - Do not bake real secrets into Dockerfiles or images.
