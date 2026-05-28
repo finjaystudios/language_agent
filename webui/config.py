@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from app.core.config import build_database_url
+from app.core.config import build_chainlit_database_url, build_database_url
 
 
 def parse_bool(value: str, *, default: bool) -> bool:
@@ -30,6 +30,7 @@ class WebUISettings:
     database_user: str
     database_password: str
     database_url: str
+    chainlit_database_url: str
     redis_url: str
     chainlit_auth_secret: str | None
     chainlit_cookie_samesite: str
@@ -77,6 +78,14 @@ class WebUISettings:
             database_user=database_user,
             database_password=database_password,
             database_url=build_database_url(
+                scheme=database_scheme,
+                host=database_host,
+                port=database_port,
+                name=database_name,
+                username=database_user,
+                password=database_password,
+            ),
+            chainlit_database_url=build_chainlit_database_url(
                 scheme=database_scheme,
                 host=database_host,
                 port=database_port,

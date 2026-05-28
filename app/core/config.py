@@ -44,6 +44,31 @@ def build_database_url(
     )
 
 
+def build_chainlit_database_url(
+    *,
+    scheme: str,
+    host: str | None,
+    port: int | None,
+    name: str,
+    username: str | None,
+    password: str | None,
+) -> str:
+    normalized_scheme = scheme.strip()
+    if normalized_scheme.startswith("postgresql+"):
+        normalized_scheme = "postgresql"
+    elif normalized_scheme.startswith("postgres+"):
+        normalized_scheme = "postgres"
+
+    return build_database_url(
+        scheme=normalized_scheme,
+        host=host,
+        port=port,
+        name=name,
+        username=username,
+        password=password,
+    )
+
+
 @dataclass(frozen=True)
 class AppSettings:
     auth_enabled: bool

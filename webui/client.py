@@ -42,6 +42,10 @@ class BackendAuthenticationError(BackendHTTPError):
     category = "backend_authentication"
 
 
+class BackendUserAuthenticationError(BackendHTTPError):
+    category = "backend_user_authentication"
+
+
 class BackendAuthConfigurationError(BackendClientError):
     category = "backend_auth_configuration"
 
@@ -52,6 +56,17 @@ class BackendInvalidResponseError(BackendClientError):
 
 class BackendStreamError(BackendClientError):
     category = "backend_stream_error"
+
+
+@dataclass(frozen=True)
+class AuthenticatedBackendUser:
+    user_id: int
+    username: str
+    display_name: str | None
+    role: str
+    is_admin: bool
+    preferred_language: str | None
+    ui_theme: str | None
 
 
 @dataclass(frozen=True)
@@ -130,6 +145,65 @@ class FastAPIClient:
         data = self._json_response(response)
         logger.info("webui_backend_health_check_complete status=%s", data.get("status"))
         return data
+
+    async def authenticate_user(
+        self,
+        username: str,
+        password: str,
+    ) -> AuthenticatedBackendUser:
+        payload = {
+            "username": username,
+            "password": password,
+        }
+        logger.info(
+            "webui_auth_request_start base_url=%s username=%s",
+            self.config.base_url,
+            username,
+        )
+        try:
+            async with self._client() as client:
+                response = await client.post(
+                    "/api/internal/auth/login",
+                    json=payload,
+                    headers=self._auth_headers(),
+                )
+        except httpx.TimeoutException as error:
+            logger.warning("webui_auth_timeout username=%s", username)
+            raise BackendTimeoutError(
+                "The FastAPI backend timed out while authenticating the user."
+            ) from error
+        except httpx.RequestError as error:
+            logger.warning(
+                "webui_auth_unavailable username=%s error_type=%s",
+                username,
+                type(error).__name__,
+            )
+            raise BackendUnavailableError(format_request_error(error)) from error
+
+        data = self._json_response(
+            response,
+            invalid_user_status_codes={403},
+        )
+        logger.info(
+            "webui_auth_request_complete username=%s user_id=%s",
+            username,
+            data.get("user_id"),
+        )
+        return AuthenticatedBackendUser(
+            user_id=int(data["user_id"]),
+            username=str(data["username"]),
+            display_name=str(data["display_name"])
+            if data.get("display_name") is not None
+            else None,
+            role=str(data["role"]),
+            is_admin=bool(data["is_admin"]),
+            preferred_language=str(data["preferred_language"])
+            if data.get("preferred_language") is not None
+            else None,
+            ui_theme=str(data["ui_theme"])
+            if data.get("ui_theme") is not None
+            else None,
+        )
 
     async def chat_full(self, message: str, mode: str | None) -> dict[str, Any]:
         payload = build_chat_payload(message, mode)
@@ -220,8 +294,16 @@ class FastAPIClient:
             )
         return {API_KEY_HEADER_NAME: self.config.api_key}
 
-    def _json_response(self, response: httpx.Response) -> dict[str, Any]:
-        self._raise_for_error(response)
+    def _json_response(
+        self,
+        response: httpx.Response,
+        *,
+        invalid_user_status_codes: set[int] | None = None,
+    ) -> dict[str, Any]:
+        self._raise_for_error(
+            response,
+            invalid_user_status_codes=invalid_user_status_codes,
+        )
         try:
             data = response.json()
         except ValueError as error:
@@ -234,11 +316,26 @@ class FastAPIClient:
             )
         return data
 
-    def _raise_for_error(self, response: httpx.Response) -> None:
+    def _raise_for_error(
+        self,
+        response: httpx.Response,
+        *,
+        invalid_user_status_codes: set[int] | None = None,
+    ) -> None:
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as error:
             message, error_code = format_backend_error(error.response)
+            if (
+                invalid_user_status_codes
+                and error.response.status_code in invalid_user_status_codes
+                and error_code == "invalid_credentials"
+            ):
+                raise BackendUserAuthenticationError(
+                    "Invalid username or password.",
+                    status_code=error.response.status_code,
+                    error_code=error_code,
+                ) from error
             if error.response.status_code == 401:
                 raise BackendAuthenticationError(
                     "The Web UI could not authenticate with the backend.",

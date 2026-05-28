@@ -28,7 +28,7 @@ def chainlit_history_enabled(settings: WebUISettings | None = None) -> bool:
 @lru_cache(maxsize=1)
 def get_chainlit_data_layer() -> ChainlitDataLayer:
     settings = WebUISettings.from_env()
-    return ChainlitDataLayer(database_url=settings.database_url)
+    return ChainlitDataLayer(database_url=settings.chainlit_database_url)
 
 
 def apply_user_profile_to_session(user: cl.User | None) -> dict[str, object]:

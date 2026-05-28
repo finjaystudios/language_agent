@@ -11,6 +11,7 @@ from webui.client import (
     BackendHTTPError,
     BackendInvalidResponseError,
     BackendTimeoutError,
+    BackendUserAuthenticationError,
     FastAPIClient,
     build_chat_payload,
     parse_sse_line,
@@ -111,6 +112,54 @@ def test_health_does_not_send_api_key():
     client = client_with_transport(httpx.MockTransport(handler))
 
     assert asyncio.run(client.health()) == {"status": "ok"}
+
+
+def test_authenticate_user_posts_internal_login_payload(
+    backend_user_payload: dict[str, object],
+):
+    seen_payload = {}
+    seen_api_key = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal seen_api_key, seen_payload
+        seen_payload = json.loads(request.content)
+        seen_api_key = request.headers.get(API_KEY_HEADER_NAME)
+        return httpx.Response(200, json=backend_user_payload)
+
+    client = client_with_transport(httpx.MockTransport(handler))
+
+    result = asyncio.run(client.authenticate_user("alice", "correct-password"))
+
+    assert seen_payload == {
+        "username": "alice",
+        "password": "correct-password",
+    }
+    assert seen_api_key == "test-secret"
+    assert result.username == "alice"
+    assert result.user_id == 42
+
+
+def test_authenticate_user_invalid_credentials_is_safe():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            403,
+            json={
+                "error": "invalid_credentials",
+                "message": "Invalid username or password.",
+            },
+        )
+
+    client = client_with_transport(httpx.MockTransport(handler))
+
+    try:
+        asyncio.run(client.authenticate_user("alice", "wrong-password"))
+    except BackendUserAuthenticationError as error:
+        assert str(error) == "Invalid username or password."
+        assert error.status_code == 403
+        assert error.error_code == "invalid_credentials"
+        assert "wrong-password" not in str(error)
+    else:
+        raise AssertionError("Expected BackendUserAuthenticationError")
 
 
 def test_missing_api_key_fails_before_protected_request():

@@ -9,6 +9,7 @@ from app.infrastructure.database.repositories import SQLAlchemyUserRepository
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 from webui.auth_rate_limit import AuthRateLimitSettings, InMemoryAuthAttemptStore
+from webui.client import AuthenticatedBackendUser, BackendUserAuthenticationError
 
 
 class FakeClock:
@@ -20,6 +21,34 @@ class FakeClock:
 
     def advance(self, seconds: float) -> None:
         self.value += seconds
+
+
+class FakeBackendAuthClient:
+    def __init__(
+        self,
+        *,
+        user: AuthenticatedBackendUser | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.user = user
+        self.error = error
+        self.calls: list[tuple[str, str]] = []
+
+    async def authenticate_user(
+        self,
+        username: str,
+        password: str,
+    ) -> AuthenticatedBackendUser:
+        self.calls.append((username, password))
+        if self.error is not None:
+            raise self.error
+        if self.user is None:
+            raise BackendUserAuthenticationError(
+                "Invalid username or password.",
+                status_code=403,
+                error_code="invalid_credentials",
+            )
+        return self.user
 
 
 async def _create_schema(engine) -> None:
@@ -79,3 +108,42 @@ def webui_auth_logger():
     logger.setLevel(original_level)
     logger.propagate = original_propagate
     logger.disabled = original_disabled
+
+
+@pytest.fixture
+def backend_user_payload() -> dict[str, object]:
+    return {
+        "user_id": 42,
+        "username": "alice",
+        "display_name": "Alice",
+        "role": "user",
+        "is_admin": True,
+        "preferred_language": None,
+        "ui_theme": None,
+    }
+
+
+@pytest.fixture
+def authenticated_backend_user(
+    backend_user_payload: dict[str, object],
+) -> AuthenticatedBackendUser:
+    return AuthenticatedBackendUser(**backend_user_payload)
+
+
+@pytest.fixture
+def fake_backend_auth_client(
+    authenticated_backend_user: AuthenticatedBackendUser,
+) -> FakeBackendAuthClient:
+    return FakeBackendAuthClient(user=authenticated_backend_user)
+
+
+@pytest.fixture
+def backend_auth_client_factory():
+    def factory(
+        *,
+        user: AuthenticatedBackendUser | None = None,
+        error: Exception | None = None,
+    ) -> FakeBackendAuthClient:
+        return FakeBackendAuthClient(user=user, error=error)
+
+    return factory

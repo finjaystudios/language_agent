@@ -9,24 +9,30 @@ from app.application.agent_service import AgentService
 from app.application.models import ChatCommand, RequestMetadata
 from app.core.config import AppSettings
 from app.infrastructure.redis.queue_service import LLMQueueService
+from app.infrastructure.security.passwords import verify_password
 from app.interfaces.api.auth import require_api_key
 from app.interfaces.api.dependencies import (
     get_agent_service,
     get_job_store,
     get_queue_client,
     get_settings,
+    get_user_repository,
 )
 from app.interfaces.api.models import (
+    AuthenticatedUserResponse,
     ChatRequest,
     ChatResponse,
     ErrorResponse,
     LLMJobStatusResponse,
     QueueStatusResponse,
     StreamChatRequest,
+    UserPasswordLoginRequest,
+    authenticated_user_response_from_profile,
     chat_response_from_result,
 )
 from app.ports.job_store import JobStore
 from app.ports.queue_client import QueueClient
+from app.ports.user_repository import UserRepository
 
 router = APIRouter(
     prefix="/api", tags=["chat"], dependencies=[Depends(require_api_key)]
@@ -35,6 +41,7 @@ logger = logging.getLogger(__name__)
 SETTINGS_DEP = Depends(get_settings)
 QUEUE_CLIENT_DEP = Depends(get_queue_client)
 JOB_STORE_DEP = Depends(get_job_store)
+USER_REPOSITORY_DEP = Depends(get_user_repository)
 
 
 async def get_job_status(
@@ -76,6 +83,76 @@ async def get_queue_status(
         queue_client or get_queue_client(),
         job_store or get_job_store(),
     ).get_queue_status()
+
+
+@router.post(
+    "/internal/auth/login",
+    response_model=AuthenticatedUserResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid API key."},
+        403: {
+            "model": ErrorResponse,
+            "description": "Invalid username/password credentials.",
+        },
+    },
+    summary="Authenticate a Web UI user over the internal API boundary",
+)
+async def internal_user_login(
+    request: UserPasswordLoginRequest,
+    user_repository: UserRepository = USER_REPOSITORY_DEP,
+) -> AuthenticatedUserResponse:
+    normalized_username = request.username.strip()
+    user = await user_repository.get_by_username(normalized_username)
+    if user is None:
+        logger.warning(
+            "api_internal_auth_login_failed username=%s reason=invalid_credentials",
+            normalized_username,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "invalid_credentials",
+                "message": "Invalid username or password.",
+            },
+        )
+
+    if not user.is_active:
+        logger.warning(
+            "api_internal_auth_login_failed username=%s user_id=%s reason=inactive_user",
+            normalized_username,
+            user.id,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "invalid_credentials",
+                "message": "Invalid username or password.",
+            },
+        )
+
+    if not verify_password(request.password, user.password_hash):
+        logger.warning(
+            "api_internal_auth_login_failed username=%s user_id=%s reason=invalid_credentials",
+            normalized_username,
+            user.id,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "invalid_credentials",
+                "message": "Invalid username or password.",
+            },
+        )
+
+    authenticated_user = await user_repository.update_last_login(user.id) or user
+    logger.info(
+        "api_internal_auth_login_success username=%s user_id=%s role=%s admin=%s",
+        authenticated_user.username,
+        authenticated_user.id,
+        authenticated_user.role,
+        authenticated_user.is_admin,
+    )
+    return authenticated_user_response_from_profile(authenticated_user)
 
 
 @router.post(

@@ -60,12 +60,20 @@ async def api_error_handler(request: Request, exc: APIError) -> JSONResponse:
 
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    message = exc.detail if isinstance(exc.detail, str) else "HTTP request failed."
+    if isinstance(exc.detail, dict):
+        error = str(exc.detail.get("error", "http_error"))
+        message = str(exc.detail.get("message", "HTTP request failed."))
+        details = exc.detail.get("details")
+    else:
+        error = "http_error"
+        message = exc.detail if isinstance(exc.detail, str) else "HTTP request failed."
+        details = None
     logger.warning("http_error status_code=%d message=%s", exc.status_code, message)
     return error_response(
         status_code=exc.status_code,
-        error="http_error",
+        error=error,
         message=message,
+        details=details if isinstance(details, dict) or details is None else None,
     )
 
 

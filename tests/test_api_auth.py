@@ -1,7 +1,10 @@
+import asyncio
 from collections.abc import AsyncIterator
 
 from app.application.models import ChatResult, ResponseMetadata
-from app.interfaces.api.dependencies import get_agent_service
+from app.infrastructure.database.repositories import SQLAlchemyUserRepository
+from app.infrastructure.security.passwords import hash_password
+from app.interfaces.api.dependencies import get_agent_service, get_user_repository
 from app.interfaces.api.main import create_app
 from fastapi.testclient import TestClient
 
@@ -180,3 +183,98 @@ def test_openapi_marks_chat_routes_as_api_key_protected():
     assert schema["paths"]["/api/chat/stream"]["post"]["security"] == [
         {"APIKeyHeader": []}
     ]
+
+
+def test_internal_login_accepts_valid_credentials_and_updates_last_login(
+    monkeypatch,
+    user_repository: SQLAlchemyUserRepository,
+):
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    created = asyncio.run(
+        user_repository.create_user(
+            username="alice",
+            password_hash=hash_password("correct-password"),
+            display_name="Alice",
+            is_admin=True,
+        )
+    )
+    app = create_app()
+    app.dependency_overrides[get_user_repository] = lambda: user_repository
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/internal/auth/login",
+        headers={"X-API-Key": "test-secret"},
+        json={"username": "alice", "password": "correct-password"},
+    )
+    refreshed = asyncio.run(user_repository.get_by_id(created.id))
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "user_id": created.id,
+        "username": "alice",
+        "display_name": "Alice",
+        "role": "user",
+        "is_admin": True,
+        "preferred_language": None,
+        "ui_theme": None,
+    }
+    assert "password_hash" not in response.text
+    assert refreshed is not None
+    assert refreshed.last_login_at is not None
+
+
+def test_internal_login_rejects_unknown_username_without_leaking_existence(
+    monkeypatch,
+    user_repository: SQLAlchemyUserRepository,
+):
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    app = create_app()
+    app.dependency_overrides[get_user_repository] = lambda: user_repository
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/internal/auth/login",
+        headers={"X-API-Key": "test-secret"},
+        json={"username": "unknown-user", "password": "wrong-password"},
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "error": "invalid_credentials",
+        "message": "Invalid username or password.",
+        "details": None,
+    }
+
+
+def test_internal_login_rejects_inactive_user(
+    monkeypatch,
+    user_repository: SQLAlchemyUserRepository,
+):
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("FASTAPI_API_KEY", "test-secret")
+    asyncio.run(
+        user_repository.create_user(
+            username="disabled",
+            password_hash=hash_password("disabled-password"),
+            is_active=False,
+        )
+    )
+    app = create_app()
+    app.dependency_overrides[get_user_repository] = lambda: user_repository
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/internal/auth/login",
+        headers={"X-API-Key": "test-secret"},
+        json={"username": "disabled", "password": "disabled-password"},
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "error": "invalid_credentials",
+        "message": "Invalid username or password.",
+        "details": None,
+    }

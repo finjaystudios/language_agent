@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 
 import chainlit as cl
+from webui.config import WebUISettings
 from webui.persistence import (
     apply_user_profile_to_session,
     chainlit_history_enabled,
@@ -147,3 +148,17 @@ def test_chainlit_history_enabled_reads_env_toggle(monkeypatch):
     monkeypatch.setenv("CHAINLIT_HISTORY_ENABLED", "false")
 
     assert chainlit_history_enabled() is False
+
+
+def test_chainlit_database_url_uses_driverless_postgres_scheme(monkeypatch):
+    monkeypatch.setenv("DATABASE_SCHEME", "postgresql+asyncpg")
+    monkeypatch.setenv("DATABASE_HOST", "postgres")
+    monkeypatch.setenv("DATABASE_PORT", "5432")
+    monkeypatch.setenv("DATABASE_NAME", "language_agent")
+    monkeypatch.setenv("DATABASE_USER", "language_agent")
+    monkeypatch.setenv("DATABASE_PASSWORD", "change-me")
+
+    settings = WebUISettings.from_env()
+
+    assert settings.database_url.startswith("postgresql+asyncpg://")
+    assert settings.chainlit_database_url.startswith("postgresql://")
