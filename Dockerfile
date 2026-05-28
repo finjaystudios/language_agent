@@ -26,6 +26,8 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
 
 COPY app ./app
 COPY config ./config
+COPY alembic.ini ./alembic.ini
+COPY alembic ./alembic
 
 EXPOSE 8000
 
