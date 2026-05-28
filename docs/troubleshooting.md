@@ -108,12 +108,11 @@ Symptoms:
 Checks:
 
 - for Compose, confirm the `postgres` service is healthy
-- confirm `DATABASE_URL` points at `postgres:5432` inside Compose and
-  `127.0.0.1:5432` for host-local backend and Chainlit history runs
-- confirm `WEBUI_DATABASE_URL` points at the same database for Web UI login and
-  persistence unless you intentionally override it
-- confirm `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` match the
-  credentials embedded in `DATABASE_URL`
+- confirm `DATABASE_HOST=postgres` and `DATABASE_PORT=5432` inside Compose
+- confirm `DATABASE_HOST=127.0.0.1` and `DATABASE_PORT=5432` for host-local
+  backend and Chainlit history runs
+- confirm `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` match
+  `DATABASE_NAME`, `DATABASE_USER`, and `DATABASE_PASSWORD`
 - run `docker compose logs -f postgres`
 - validate readiness with `docker compose exec postgres pg_isready -U language_agent -d language_agent`
 
@@ -196,9 +195,9 @@ Checks:
 - confirm the stored user is active
 - confirm the login password matches the stored hash
 - confirm `AUTH_ENABLED=true` and `CHAINLIT_AUTH_SECRET` are set for the Web UI
-- confirm `WEBUI_DATABASE_URL` is reachable from the Web UI process or container
-- confirm `DATABASE_URL` is present for the Web UI process when chat history is
-  expected
+- confirm `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`,
+  and `DATABASE_PASSWORD` are reachable and correct for the Web UI process when
+  chat history is expected
 - confirm FastAPI and Web UI use the same `FASTAPI_API_KEY`
 - confirm `AUTH_ENABLED=true` is expected for the current run
 - confirm the browser is talking to Chainlit and Chainlit is calling FastAPI

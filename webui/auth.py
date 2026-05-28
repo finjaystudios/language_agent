@@ -38,9 +38,6 @@ def get_user_repository() -> UserRepository:
 @lru_cache(maxsize=1)
 def get_async_engine() -> AsyncEngine:
     database_url = WebUISettings.from_env().database_url
-    if not database_url:
-        raise RuntimeError("Web UI database URL is not configured.")
-
     url = make_url(database_url)
     engine_kwargs: dict[str, object] = {}
     if url.get_backend_name() == "sqlite":

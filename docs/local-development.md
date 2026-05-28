@@ -29,7 +29,12 @@ docker run --rm --name language-agent-postgres `
 Set host-local database settings before using Alembic or the user script:
 
 ```powershell
-$env:DATABASE_URL = "postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent"
+$env:DATABASE_SCHEME = "postgresql+asyncpg"
+$env:DATABASE_HOST = "127.0.0.1"
+$env:DATABASE_PORT = "5432"
+$env:DATABASE_NAME = "language_agent"
+$env:DATABASE_USER = "language_agent"
+$env:DATABASE_PASSWORD = "change-me"
 $env:DATABASE_POOL_SIZE = "5"
 $env:DATABASE_ECHO = "false"
 ```
@@ -129,8 +134,12 @@ Run the Web UI as a separate local process:
 $env:FASTAPI_BASE_URL = "http://127.0.0.1:8000"
 $env:FASTAPI_API_KEY = "local-dev-change-me"
 $env:CHAINLIT_AUTH_SECRET = "replace-with-random-secret-when-login-is-enabled"
-$env:DATABASE_URL = "postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent"
-$env:WEBUI_DATABASE_URL = "postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent"
+$env:DATABASE_SCHEME = "postgresql+asyncpg"
+$env:DATABASE_HOST = "127.0.0.1"
+$env:DATABASE_PORT = "5432"
+$env:DATABASE_NAME = "language_agent"
+$env:DATABASE_USER = "language_agent"
+$env:DATABASE_PASSWORD = "change-me"
 $env:WEBUI_REQUEST_TIMEOUT_SECONDS = "120"
 $env:WEBUI_STREAMING_ENABLED = "true"
 Push-Location webui
@@ -142,9 +151,9 @@ Open `http://127.0.0.1:8001`.
 
 Chat history and resume notes:
 
-- `DATABASE_URL` enables Chainlit's persisted thread history.
-- `WEBUI_DATABASE_URL` should point at the same database unless you explicitly
-  need an override.
+- `DATABASE_SCHEME`, `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`,
+  `DATABASE_USER`, and `DATABASE_PASSWORD` together enable Chainlit's persisted
+  thread history.
 - After logging in, start a chat, refresh the page, and confirm the thread can
   be resumed under the same user.
 

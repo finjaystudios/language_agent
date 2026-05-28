@@ -23,10 +23,6 @@ SESSION_PROFILE_KEYS = (
 @lru_cache(maxsize=1)
 def get_chainlit_data_layer() -> ChainlitDataLayer:
     settings = WebUISettings.from_env()
-    if not settings.database_url:
-        raise RuntimeError(
-            "WEBUI_DATABASE_URL or DATABASE_URL must be configured when Chainlit persistence is enabled."
-        )
     return ChainlitDataLayer(database_url=settings.database_url)
 
 

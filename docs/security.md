@@ -61,7 +61,8 @@ Web UI users are stored in PostgreSQL with a password hash only:
 
 Recommended handling:
 
-- keep `DATABASE_URL`, `WEBUI_DATABASE_URL`, `POSTGRES_PASSWORD`, and
+- keep `DATABASE_HOST`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`,
+  `POSTGRES_PASSWORD`, and
   `CHAINLIT_AUTH_SECRET` in local `.env` files or deployment secret stores
 - keep `CHAINLIT_COOKIE_SAMESITE` at `lax` or `strict` for ordinary local and
   same-site deployments
@@ -91,15 +92,15 @@ Wildcard origins with credentials are not used.
 - Do not commit real database credentials or session secrets.
 - Keep `FASTAPI_API_KEY` in `.env`, shell environment, or deployment-specific
   secret management.
-- Keep `DATABASE_URL`, `WEBUI_DATABASE_URL`, `POSTGRES_PASSWORD`, and
+- Keep `DATABASE_HOST`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`,
+  `POSTGRES_PASSWORD`, and
   `CHAINLIT_AUTH_SECRET` in `.env`, shell environment, or deployment-specific
   secret management.
 - Keep PostgreSQL internal-only unless you have an explicit reason to publish it.
 - Do not expose the API key in browser-visible content, logs, URLs, or public
   assets.
-- Do not expose `DATABASE_URL`, `WEBUI_DATABASE_URL`, `CHAINLIT_AUTH_SECRET`,
-  or password hashes in Chainlit user metadata, messages, or browser-visible
-  responses.
+- Do not expose `DATABASE_PASSWORD`, `CHAINLIT_AUTH_SECRET`, or password hashes
+  in Chainlit user metadata, messages, or browser-visible responses.
 - Do not bake real secrets into Dockerfiles or images.
 
 ## Local and Docker Behavior
@@ -127,7 +128,7 @@ Wildcard origins with credentials are not used.
 - Chainlit thread history is scoped to the authenticated Chainlit user.
 - The Web UI stores safe profile fields such as `display_name`,
   `preferred_language`, and `ui_theme` in session/thread metadata for resume.
-- Passwords, password hashes, `FASTAPI_API_KEY`, `DATABASE_URL`, and
+- Passwords, password hashes, `FASTAPI_API_KEY`, `DATABASE_PASSWORD`, and
   `CHAINLIT_AUTH_SECRET` must never appear in Chainlit user metadata or thread
   metadata.
 

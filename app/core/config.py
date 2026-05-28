@@ -1,6 +1,8 @@
 import os
 from dataclasses import dataclass
 
+from sqlalchemy.engine import URL
+
 
 def parse_bool(value: str, *, default: bool) -> bool:
     normalized = value.strip().lower()
@@ -15,12 +17,45 @@ def parse_csv_env(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def build_database_url(
+    *,
+    scheme: str,
+    host: str | None,
+    port: int | None,
+    name: str,
+    username: str | None,
+    password: str | None,
+) -> str:
+    normalized_scheme = scheme.strip()
+    if normalized_scheme.startswith("sqlite"):
+        if name == ":memory:":
+            return f"{normalized_scheme}:///{name}"
+        return f"{normalized_scheme}:///{name.lstrip('/')}"
+
+    return str(
+        URL.create(
+            drivername=normalized_scheme,
+            username=username or None,
+            password=password or None,
+            host=host or None,
+            port=port,
+            database=name,
+        ).render_as_string(hide_password=False)
+    )
+
+
 @dataclass(frozen=True)
 class AppSettings:
     auth_enabled: bool
     fastapi_api_key: str | None
     chainlit_auth_secret: str | None
     cors_allowed_origins: list[str]
+    database_scheme: str
+    database_host: str
+    database_port: int
+    database_name: str
+    database_user: str
+    database_password: str
     database_url: str
     database_pool_size: int
     database_echo: bool
@@ -49,14 +84,30 @@ class AppSettings:
     @classmethod
     def from_env(cls) -> "AppSettings":
         queue_timeout = int(os.getenv("LLM_QUEUE_TIMEOUT_SECONDS", "180"))
+        database_scheme = os.getenv("DATABASE_SCHEME", "postgresql+asyncpg")
+        database_host = os.getenv("DATABASE_HOST", "127.0.0.1")
+        database_port = int(os.getenv("DATABASE_PORT", "5432"))
+        database_name = os.getenv("DATABASE_NAME", "language_agent")
+        database_user = os.getenv("DATABASE_USER", "language_agent")
+        database_password = os.getenv("DATABASE_PASSWORD", "change-me")
         return cls(
             auth_enabled=parse_bool(os.getenv("AUTH_ENABLED", "true"), default=True),
             fastapi_api_key=os.getenv("FASTAPI_API_KEY"),
             chainlit_auth_secret=os.getenv("CHAINLIT_AUTH_SECRET"),
             cors_allowed_origins=parse_csv_env(os.getenv("CORS_ALLOWED_ORIGINS", "")),
-            database_url=os.getenv(
-                "DATABASE_URL",
-                "postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent",
+            database_scheme=database_scheme,
+            database_host=database_host,
+            database_port=database_port,
+            database_name=database_name,
+            database_user=database_user,
+            database_password=database_password,
+            database_url=build_database_url(
+                scheme=database_scheme,
+                host=database_host,
+                port=database_port,
+                name=database_name,
+                username=database_user,
+                password=database_password,
             ),
             database_pool_size=int(os.getenv("DATABASE_POOL_SIZE", "5")),
             database_echo=parse_bool(

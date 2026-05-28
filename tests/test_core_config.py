@@ -11,7 +11,12 @@ from app.core.config import AppSettings  # noqa: E402
 def test_app_settings_default_llama_server_config(monkeypatch):
     for key in (
         "CHAINLIT_AUTH_SECRET",
-        "DATABASE_URL",
+        "DATABASE_SCHEME",
+        "DATABASE_HOST",
+        "DATABASE_PORT",
+        "DATABASE_NAME",
+        "DATABASE_USER",
+        "DATABASE_PASSWORD",
         "DATABASE_POOL_SIZE",
         "DATABASE_ECHO",
         "LLM_BACKEND",
@@ -37,6 +42,12 @@ def test_app_settings_default_llama_server_config(monkeypatch):
     assert settings.llama_server_health_path == "/health"
     assert settings.model_profiles_path == "config/model_profiles.yml"
     assert settings.chainlit_auth_secret is None
+    assert settings.database_scheme == "postgresql+asyncpg"
+    assert settings.database_host == "127.0.0.1"
+    assert settings.database_port == 5432
+    assert settings.database_name == "language_agent"
+    assert settings.database_user == "language_agent"
+    assert settings.database_password == "change-me"
     assert (
         settings.database_url
         == "postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent"
@@ -48,10 +59,12 @@ def test_app_settings_default_llama_server_config(monkeypatch):
 
 def test_app_settings_reads_llama_server_env(monkeypatch):
     monkeypatch.setenv("CHAINLIT_AUTH_SECRET", "session-secret")
-    monkeypatch.setenv(
-        "DATABASE_URL",
-        "postgresql+asyncpg://user:pass@db:5432/appdb",
-    )
+    monkeypatch.setenv("DATABASE_SCHEME", "postgresql+asyncpg")
+    monkeypatch.setenv("DATABASE_HOST", "db")
+    monkeypatch.setenv("DATABASE_PORT", "5432")
+    monkeypatch.setenv("DATABASE_NAME", "appdb")
+    monkeypatch.setenv("DATABASE_USER", "user")
+    monkeypatch.setenv("DATABASE_PASSWORD", "pass")
     monkeypatch.setenv("DATABASE_POOL_SIZE", "9")
     monkeypatch.setenv("DATABASE_ECHO", "true")
     monkeypatch.setenv("LLM_BACKEND", "llama_server")
@@ -75,6 +88,12 @@ def test_app_settings_reads_llama_server_env(monkeypatch):
     assert settings.llama_server_health_path == "/v1/models"
     assert settings.model_profiles_path == "config/custom-model-profiles.yml"
     assert settings.chainlit_auth_secret == "session-secret"
+    assert settings.database_scheme == "postgresql+asyncpg"
+    assert settings.database_host == "db"
+    assert settings.database_port == 5432
+    assert settings.database_name == "appdb"
+    assert settings.database_user == "user"
+    assert settings.database_password == "pass"
     assert settings.database_url == "postgresql+asyncpg://user:pass@db:5432/appdb"
     assert settings.database_pool_size == 9
     assert settings.database_echo is True

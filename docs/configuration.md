@@ -21,7 +21,12 @@ Compose. Use [`.env.example`](../.env.example) for local host runs and
 
 | Variable | Default | Used by | Purpose |
 | --- | --- | --- | --- |
-| `DATABASE_URL` | `postgresql+asyncpg://language_agent:change-me@127.0.0.1:5432/language_agent` locally, `postgresql+asyncpg://language_agent:change-me@postgres:5432/language_agent` in Compose examples | FastAPI, Alembic, Web UI | Backend ORM database URL and Chainlit chat-history persistence database URL |
+| `DATABASE_SCHEME` | `postgresql+asyncpg` | FastAPI, Alembic, Web UI | SQLAlchemy driver/dialect used to build the runtime database URL |
+| `DATABASE_HOST` | `127.0.0.1` locally, `postgres` in Compose examples | FastAPI, Alembic, Web UI | Database host used to build the runtime database URL |
+| `DATABASE_PORT` | `5432` | FastAPI, Alembic, Web UI | Database port used to build the runtime database URL |
+| `DATABASE_NAME` | `language_agent` | FastAPI, Alembic, Web UI | Database name used to build the runtime database URL |
+| `DATABASE_USER` | `language_agent` | FastAPI, Alembic, Web UI | Database username used to build the runtime database URL |
+| `DATABASE_PASSWORD` | placeholder in env examples | FastAPI, Alembic, Web UI | Database password used to build the runtime database URL |
 | `DATABASE_POOL_SIZE` | `5` | FastAPI, Web UI | SQLAlchemy connection pool size for non-SQLite backends |
 | `DATABASE_ECHO` | `false` | FastAPI, Web UI | Enables SQLAlchemy SQL logging when debugging |
 | `POSTGRES_DB` | `language_agent` | Compose `postgres` service | Internal database name for the bundled PostgreSQL container |
@@ -114,7 +119,6 @@ The embedded `llama-cpp-python` runtime was removed from the active code path.
 | Variable | Default | Used by | Purpose |
 | --- | --- | --- | --- |
 | `FASTAPI_BASE_URL` | `http://localhost:8000` locally, `http://fastapi:8000` in Compose | Web UI | Backend base URL for server-side Chainlit calls |
-| `WEBUI_DATABASE_URL` | defaults to `DATABASE_URL` if unset | Web UI | Optional explicit override for Web UI auth and Chainlit persistence; keep aligned with `DATABASE_URL` unless you need a separate setting |
 | `CHAINLIT_COOKIE_SAMESITE` | `lax` | Web UI | Chainlit auth-cookie SameSite mode; `none` implies secure cookies |
 | `WEBUI_HOST` | `0.0.0.0` | Web UI container | Chainlit bind host |
 | `WEBUI_PORT` | `8001` | Web UI container | Chainlit bind port |
@@ -125,7 +129,8 @@ The embedded `llama-cpp-python` runtime was removed from the active code path.
 ## Configuration Notes
 
 - Keep `FASTAPI_API_KEY` out of browser-visible content.
-- Keep `CHAINLIT_AUTH_SECRET`, `POSTGRES_PASSWORD`, and `DATABASE_URL` credentials
+- Keep `CHAINLIT_AUTH_SECRET`, `POSTGRES_PASSWORD`, and `DATABASE_PASSWORD`
+  credentials
   out of committed files.
 - `alembic upgrade head` now creates both the app `users` table and Chainlit's
   persistence tables for thread history and resume support.
