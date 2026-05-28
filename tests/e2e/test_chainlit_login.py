@@ -38,6 +38,13 @@ def test_invalid_login_is_rejected(
 
     expect(page.get_by_role("textbox", name="Password")).to_be_visible(timeout=15000)
     expect(
+        page.get_by_text(
+            "Sign-in failed. Check your username and password, then try again."
+        )
+    ).to_be_visible(
+        timeout=15000,
+    )
+    expect(
         page.get_by_placeholder("Ask your local language assistant...")
     ).not_to_be_visible()
 

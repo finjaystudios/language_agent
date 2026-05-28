@@ -1,6 +1,20 @@
 (function () {
   const STATUS_ID = "lla-backend-status";
   const COMPOSER_PLACEHOLDER = "Ask your local language assistant...";
+  const AUTH_ERROR_MESSAGES = new Map([
+    [
+      "credentialssignin",
+      "Sign-in failed. Check your username and password, then try again.",
+    ],
+    [
+      "signin",
+      "Sign-in failed. Check your username and password, then try again.",
+    ],
+    [
+      "sessionrequired",
+      "Please sign in to continue.",
+    ],
+  ]);
   const CONVERSATION_START_LABELS = new Set([
     "translate",
     "define",
@@ -13,6 +27,7 @@
   let latestStatusData = null;
   let conversationStarted = false;
   let composerEnhancementEnabled = false;
+  let authBannerMessage = "";
 
   function hasConversationMessages() {
     return conversationStarted;
@@ -126,6 +141,87 @@
     });
   }
 
+  function isLoginPage() {
+    return Boolean(
+      document.querySelector('input[type="password"]') &&
+      document.querySelector('input[type="text"], input[type="email"]')
+    );
+  }
+
+  function findLoginForm() {
+    const passwordInput = document.querySelector('input[type="password"]');
+    if (!passwordInput) return null;
+    return passwordInput.closest("form");
+  }
+
+  function createAuthBanner() {
+    const form = findLoginForm();
+    if (!form) return null;
+
+    let banner = document.getElementById("lla-auth-error");
+    if (banner) return banner;
+
+    banner = document.createElement("div");
+    banner.id = "lla-auth-error";
+    banner.className = "lla-auth-error";
+    banner.hidden = true;
+    banner.setAttribute("role", "alert");
+    banner.setAttribute("aria-live", "polite");
+    form.appendChild(banner);
+    return banner;
+  }
+
+  function showFriendlyAuthError(message) {
+    authBannerMessage = message;
+    const banner = createAuthBanner();
+    if (banner) {
+      banner.textContent = message;
+      banner.hidden = false;
+    }
+  }
+
+  function hideFriendlyAuthError() {
+    authBannerMessage = "";
+    const banner = document.getElementById("lla-auth-error");
+    if (banner) banner.hidden = true;
+  }
+
+  function normalizeAuthErrorText(text) {
+    const normalized = String(text || "").trim();
+    if (!normalized) return "";
+    return AUTH_ERROR_MESSAGES.get(normalized.toLowerCase()) || "";
+  }
+
+  function shouldTreatAsAuthError(nodeText) {
+    return Boolean(normalizeAuthErrorText(nodeText));
+  }
+
+  function enhanceAuthErrors() {
+    if (!isLoginPage()) return;
+
+    document
+      .querySelectorAll('[role="alert"], [data-sonner-toast], [data-toast], .toast')
+      .forEach((node) => {
+        const friendlyMessage = normalizeAuthErrorText(node.textContent);
+        if (!friendlyMessage) return;
+
+        node.textContent = friendlyMessage;
+        node.setAttribute("data-lla-auth-error", "true");
+        showFriendlyAuthError(friendlyMessage);
+      });
+
+    const form = findLoginForm();
+    if (!form) return;
+
+    form.querySelectorAll('input[type="text"], input[type="email"], input[type="password"]').forEach((input) => {
+      if (input.dataset.llaAuthErrorBound === "true") return;
+      input.dataset.llaAuthErrorBound = "true";
+      input.addEventListener("input", () => {
+        if (authBannerMessage) hideFriendlyAuthError();
+      });
+    });
+  }
+
   function updateStatusCard(data) {
     latestStatusData = data;
     const card = createStatusCard();
@@ -180,9 +276,11 @@
     refreshStatus();
     syncVisibility();
     enhanceAccessibility();
+    enhanceAuthErrors();
     window.setTimeout(() => {
       composerEnhancementEnabled = true;
       enhanceAccessibility();
+      enhanceAuthErrors();
     }, 3000);
     document.addEventListener("submit", markConversationStarted, true);
     document.addEventListener("click", (event) => {
@@ -209,6 +307,7 @@
     new MutationObserver(() => {
       syncVisibility();
       enhanceAccessibility();
+      enhanceAuthErrors();
     }).observe(document.body, {
       childList: true,
       subtree: true,

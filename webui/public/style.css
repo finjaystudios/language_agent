@@ -274,6 +274,35 @@ button[aria-label*="Needs improvement"] {
     transform 120ms ease;
 }
 
+#lla-auth-error {
+  background:
+    linear-gradient(180deg, hsl(var(--destructive) / 0.18), hsl(var(--destructive) / 0.12));
+  border: 1px solid hsl(var(--destructive) / 0.46);
+  border-radius: calc(var(--radius) * 1.15);
+  color: hsl(var(--foreground));
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin-top: 0.9rem;
+  padding: 0.85rem 0.95rem;
+  width: 100%;
+}
+
+#lla-auth-error::before {
+  color: hsl(var(--destructive-foreground));
+  content: "Sign-in issue";
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.3rem;
+  text-transform: uppercase;
+}
+
+[data-lla-auth-error="true"] {
+  max-width: min(34rem, calc(100vw - 32px)) !important;
+  white-space: normal !important;
+}
+
 .lla-status-refresh:hover:not(:disabled) {
   background: hsl(var(--foreground) / 0.06);
   border-color: var(--lla-border);
